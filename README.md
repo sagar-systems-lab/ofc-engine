@@ -14,6 +14,8 @@ A pre-execution cultural decision layer for autonomous agents. **This repository
   evidence, preserve untouched decisions, and require new dependent rechecks.
 - Revision-bound before/after repair traces for a proof inspector, with explicitly
   PENDING / BLOCKED / STRUCTURAL_PASS recheck outcomes (never a release permit).
+- Deterministic fixture-backed evaluation, bounded orchestration, dependent rechecks
+  and same-baseline evidence OFF/ON comparison (not live Qloo causality).
 - Unit/negative tests and fast CI.
 
 No Qloo credential, API requests, trusted agent orchestration, persisted evidence, external execution, or live causal results are present. `PASS/REPAIR/UNCERTAIN` in model definitions are contract enums, not currently running policy.
@@ -31,6 +33,7 @@ To inspect a deterministic, **entirely synthetic** three-city tour walkthrough:
 
 ```bash
 python examples/synthetic_three_city_trace.py
+python examples/synthetic_engine_run.py
 ```
 
 The JSON includes baseline and revised plan digests, exact candidate changes,
@@ -42,8 +45,8 @@ Python >= 3.11. Provider-specific semantics require live API observations before
 
 ## Architecture boundary
 
-`src/ofc_engine/contracts.py`: schema ownership; `revisions.py`: pure revision operations; `store.py`: non-durable reference store; `proof.py`: provider-neutral evidence/review integrity checks; `repair.py`: simulation-only bounded repair previews and recheck tracking; `trace.py`: revision-bound proof-inspector trace construction. Future work replaces the store with a transactional backend and adds provider/evaluation/runtime/HTTP/frontend behind explicit contracts.
+`src/ofc_engine/contracts.py`: schema ownership; `revisions.py`: pure revision operations; `store.py`: non-durable reference store; `proof.py`: provider-neutral evidence/review integrity checks; `repair.py`: simulation-only bounded repair previews and recheck tracking; `trace.py`: revision-bound proof-inspector trace construction; `workflow.py`: synthetic-only evaluator, orchestration and fixed-baseline comparison. Future work replaces the store with a transactional backend and adds provider/evaluation/runtime/HTTP/frontend behind explicit contracts.
 
 ## Limitations
 
-A valid synthetic graph does not imply cultural fit. The preliminary schema and Python digest format have not been approved for cross-language parity. Releasing a real action is out of scope. The in-memory reference store does not guarantee durability across process restarts and must never be exposed as a production decision authority. Review integrity is **not** a cultural fitness verdict, provider authenticity attestation or release authorization: a future trusted Qloo adapter must prove evidence origin and a qualified evaluator must produce the verdicts. A changed plan requires a new exact-revision review; safe carry-forward of unchanged decisions is not implemented. Repair attempt ledgers are also **non-durable** and cannot enforce production budgets. The repair preview requires caller-submitted verdicts; it does not choose a candidate or establish Qloo authenticity. No external action is executed.
+A valid synthetic graph does not imply cultural fit. The preliminary schema and Python digest format have not been approved for cross-language parity. Releasing a real action is out of scope. The in-memory reference store does not guarantee durability across process restarts and must never be exposed as a production decision authority. Review integrity is **not** a cultural fitness verdict, provider authenticity attestation or release authorization: a future trusted Qloo adapter must prove evidence origin and a qualified evaluator must produce the verdicts. A changed plan requires a new exact-revision review; safe carry-forward of unchanged decisions is not implemented. Repair attempt ledgers are also **non-durable** and cannot enforce production budgets. The repair preview requires caller-submitted verdicts; it does not choose a candidate or establish Qloo authenticity. `workflow.py` chooses candidates only in strictly labeled synthetic fixtures; real-world evaluation requires qualified Qloo evidence and a separately approved policy. No external action is executed.
