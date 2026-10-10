@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75,<82", "wheel>=0.45,<1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ofc-engine"
+version = "0.0.1"
+description = "Pre-execution cultural decision layer — key-independent contracts foundation"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2.10,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
