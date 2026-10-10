@@ -12,6 +12,8 @@ A pre-execution cultural decision layer for autonomous agents. **This repository
   response references, freshness, source labels and unresolved verdict detection.
 - Pure bounded repair previews that require a REPAIR verdict and bound replacement
   evidence, preserve untouched decisions, and require new dependent rechecks.
+- Revision-bound before/after repair traces for a proof inspector, with explicitly
+  PENDING / BLOCKED / STRUCTURAL_PASS recheck outcomes (never a release permit).
 - Unit/negative tests and fast CI.
 
 No Qloo credential, API requests, trusted agent orchestration, persisted evidence, external execution, or live causal results are present. `PASS/REPAIR/UNCERTAIN` in model definitions are contract enums, not currently running policy.
@@ -25,11 +27,22 @@ python -m pip install -e '.[dev]'
 python -m pytest
 ```
 
+To inspect a deterministic, **entirely synthetic** three-city tour walkthrough:
+
+```bash
+python examples/synthetic_three_city_trace.py
+```
+
+The JSON includes baseline and revised plan digests, exact candidate changes,
+which dependent decisions need rechecking, evidence IDs/reason codes and the
+integrity-only post-repair state. `STRUCTURAL_PASS` is **not** a Qloo-authenticated
+cultural approval, provider certificate, booking, or external action.
+
 Python >= 3.11. Provider-specific semantics require live API observations before adapter and policy calibration.
 
 ## Architecture boundary
 
-`src/ofc_engine/contracts.py`: schema ownership; `revisions.py`: pure revision operations; `store.py`: non-durable reference store; `proof.py`: provider-neutral evidence/review integrity checks; `repair.py`: simulation-only bounded repair previews and recheck tracking. Future work replaces the store with a transactional backend and adds provider/evaluation/runtime/HTTP/frontend behind explicit contracts.
+`src/ofc_engine/contracts.py`: schema ownership; `revisions.py`: pure revision operations; `store.py`: non-durable reference store; `proof.py`: provider-neutral evidence/review integrity checks; `repair.py`: simulation-only bounded repair previews and recheck tracking; `trace.py`: revision-bound proof-inspector trace construction. Future work replaces the store with a transactional backend and adds provider/evaluation/runtime/HTTP/frontend behind explicit contracts.
 
 ## Limitations
 
