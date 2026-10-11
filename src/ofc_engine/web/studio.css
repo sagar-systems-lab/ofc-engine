@@ -748,3 +748,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible 
     scroll-behavior:auto!important;
   }
 }
+
+[hidden] { display: none !important; }
+.preflight-button { width: 100%; margin-top: 20px; }
+.preflight-state { font-size: 13px; font-weight: 800; color: #986120; margin: 14px 0 8px; }
+.preflight-description { font-size: 12px; color: #5d7285; line-height: 1.65; }
+.preflight-decisions { padding-left: 18px; margin: 12px 0; display: grid; gap: 8px; }
+.preflight-record { font-size: 12px; color: #385368; }
+.preflight-record strong, .preflight-record span { display: block; }
+.preflight-record span { font-size: 10px; color: #8b6b34; margin-top: 3px; }
