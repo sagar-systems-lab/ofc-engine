@@ -35,3 +35,26 @@ def test_visual_feedback_follows_snapshot_not_simulated_time():
     assert "VERIFIED_LIVE" not in interaction
     assert '_ASSETS' not in interaction
     assert _ASSETS["/experience.js"][0] == "experience.js"
+
+
+def test_plan_authoring_is_distinct_from_synthetic_proof():
+    from ofc_engine.webdemo import _ASSETS
+    html = (ROOT / "studio.html").read_text(encoding="utf-8")
+    source = (ROOT / "studio.js").read_text(encoding="utf-8")
+    for marker in (
+        'id="objective"', 'id="budget"', 'id="cities"', 'id="audience"',
+        'id="decision-list"', 'id="new-draft"', 'id="draft-search"',
+        'id="save-draft"', 'id="validate"', 'id="import-file"',
+        'id="export-proposal"', 'PROVIDER PENDING', 'href="/proof"',
+    ):
+        assert marker in html
+    assert _ASSETS["/"][0] == "studio.html"
+    assert _ASSETS["/proof"][0] == "index.html"
+    assert _ASSETS["/studio.js"][0] == "studio.js"
+    assert _ASSETS["/studio.css"][0] == "studio.css"
+    assert "localStorage" in source
+    assert 'schema_version:"0.1.0"' in source
+    assert 'release_authorized' not in source
+    assert 'fetch(' not in source
+    assert 'innerHTML' not in source
+    assert 'eval(' not in source

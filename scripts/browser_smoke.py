@@ -28,6 +28,23 @@ def run_browser(origin: str) -> dict:
                 page.on("request", lambda request: outside.append(request.url) if not request.url.startswith(origin + "/") else None)
                 try:
                     page.goto(origin + "/", wait_until="domcontentloaded", timeout=90_000)
+                    page.locator("#objective").wait_for(state="visible", timeout=40_000)
+                    if not page.get_by_text("PROVIDER PENDING").is_visible():
+                        raise BrowserFailure("provider boundary missing from writable workspace")
+                    page.locator("#validate").click()
+                    if page.locator("#proposal-state").inner_text() != "Contract valid":
+                        raise BrowserFailure("default typed proposal cannot be validated")
+                    if page.locator("#export-proposal").is_disabled():
+                        raise BrowserFailure("validated proposal cannot be exported")
+                    page.locator("#objective").fill("Custom cultural decision proposal")
+                    if not page.locator("#export-proposal").is_disabled():
+                        raise BrowserFailure("changed proposal reused stale validation")
+                    page.locator("#save-draft").click()
+                    page.reload(wait_until="domcontentloaded")
+                    page.locator("#draft-search").fill("Custom cultural")
+                    if page.locator("#draft-list .draft-item").count() != 1:
+                        raise BrowserFailure("draft save/search failed")
+                    page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#run-status").wait_for(state="visible", timeout=40_000)
                     if page.locator("#run-status").inner_text().strip() != "INTEGRITY ONLY":
                         raise BrowserFailure("initial fixture check not visible")

@@ -28,7 +28,7 @@ def qualify(origin: str) -> dict:
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 try:
-                    page.goto(origin + "/", wait_until="domcontentloaded", timeout=90_000)
+                    page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#run-status").wait_for(state="visible", timeout=40_000)
                     if page.get_by_role("main").count() != 1:
                         raise AccessibilityFailure("main landmark missing")

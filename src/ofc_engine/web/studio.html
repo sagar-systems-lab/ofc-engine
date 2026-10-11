@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f4f7fa">
+<title>OFC Engine · Plan Workspace</title>
+<link rel="stylesheet" href="/studio.css">
+<script defer src="/studio.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to plan workspace</a>
+<div class="shell">
+<aside class="sidebar" aria-label="Workspace navigation">
+  <a class="brand" href="/" aria-label="OFC Engine home"><span class="brand-icon" aria-hidden="true">◫</span><span>OFC <span>ENGINE</span></span></a>
+  <div class="sidebar-group">
+    <div class="group-label">WORKSPACE</div>
+    <button id="new-draft" class="nav-new" type="button">＋ New plan</button>
+    <a class="nav-link current" href="/" aria-current="page">◈ &nbsp; Plan editor</a>
+    <a class="nav-link" href="/proof">▧ &nbsp; Fixture proof lab <span class="tag-small">Demo</span></a>
+  </div>
+  <div class="history-head"><span class="group-label">SAVED DRAFTS</span><span id="draft-count">0</span></div>
+  <label class="search-wrap"><span class="visually-hidden">Search saved drafts</span><span aria-hidden="true">⌕</span><input id="draft-search" type="search" maxlength="100" autocomplete="off" placeholder="Search drafts…"></label>
+  <div id="draft-list" class="draft-list" aria-label="Saved drafts"></div>
+  <div class="sidebar-bottom"><strong>◉ Browser-local drafts</strong><p>Saved on this device only. Nothing is sent to OFC or Qloo.</p><button id="clear-drafts" type="button" class="text-action">Delete all saved drafts</button></div>
+</aside>
+<main id="main" class="main">
+  <header class="topbar"><div class="crumb"><strong>Workspace</strong><span>/</span> New cultural preflight</div><div class="top-right"><span class="status-label">● &nbsp; PROVIDER PENDING</span><a class="top-proof" href="/proof">View proof lab ↗</a></div></header>
+  <div class="main-scroll">
+  <section class="intro" aria-labelledby="headline"><div class="eyebrow">PRE-EXECUTION INTELLIGENCE &nbsp; / &nbsp; PLAN BUILDER</div><h1 id="headline">Give your agent a <em>second opinion.</em></h1><p>Define the action, lock candidate choices, and prepare a typed proposal for cultural preflight. No synthetic intelligence is presented as live evidence.</p></section>
+  <section class="state-strip" aria-label="Preflight progress"><div class="state-item active"><span>01</span><strong>Prepare plan</strong><small>EDITABLE</small></div><div class="state-item"><span>02</span><strong>OFC check</strong><small>AWAITING QLOO</small></div><div class="state-item"><span>03</span><strong>Review &amp; act</strong><small>LOCKED</small></div></section>
+  <div class="columns">
+    <section class="editor-panel" aria-labelledby="draft-title">
+    <div class="section-head"><div><div class="eyebrow subtle">01 / ACTION INTENT</div><h2 id="draft-title">What is your agent planning?</h2><p>Your plan is written here, not auto-generated.</p></div><span class="pill">DRAFT</span></div>
+    <div class="field"><label for="objective">Objective *</label><textarea id="objective" maxlength="2048" rows="3" placeholder="What should the agent accomplish?" required></textarea><div class="field-hint">Your intended action, in plain language. This field alone is not a full agent plan.</div></div>
+    <div class="grid-fields"><div class="field"><label for="budget">Budget (USD)</label><input id="budget" type="number" inputmode="numeric" min="0" max="1000000000000" step="1"></div><div class="field"><label for="audience">Audience / taste context</label><input id="audience" type="text" maxlength="240" placeholder="Who is this for?"></div></div>
+    <div class="field"><label for="cities">Target cities *</label><input id="cities" type="text" maxlength="400" placeholder="Chicago, Austin, Seattle"><div class="field-hint">Comma-separated user constraints, not verified provider locations.</div></div>
+    <div class="section-divider"></div>
+    <div class="decisions-heading"><div><div class="eyebrow subtle">02 / FROZEN CANDIDATES</div><h2>Decision candidates</h2><p>Only choices within a frozen candidate pool are eligible for selective repair.</p></div><button id="add-decision" type="button" class="secondary small">＋ Add decision</button></div>
+    <div id="decision-list" class="decisions" aria-label="Plan decisions"></div>
+    <div class="editor-actions"><button id="validate" type="button" class="primary">Validate proposal →</button><button id="save-draft" type="button" class="secondary">Save draft</button><label class="secondary import-label" for="import-file">Import JSON<input id="import-file" type="file" accept="application/json,.json" hidden></label></div>
+    <div id="editor-message" class="editor-message" role="status" aria-live="polite">Edits stay in this browser. Validation does not run a cultural evaluation.</div>
+    </section>
+    <aside class="review-column" aria-label="Plan review">
+      <section class="summary-panel"><div class="eyebrow subtle">PROPOSAL READINESS</div><h2>Ready for a real check?</h2><div class="big-state"><div class="state-icon">◌</div><div><strong id="proposal-state">Not validated</strong><small id="proposal-detail">Edit a plan to begin.</small></div></div><div class="summary-row"><span>Decision count</span><strong id="decision-count">0</strong></div><div class="summary-row"><span>Mutable choices</span><strong id="mutable-count">0</strong></div><div class="summary-row"><span>Provider evidence</span><strong class="warning">Unavailable</strong></div><div class="summary-row"><span>Action release</span><strong class="warning">Blocked</strong></div><button id="export-proposal" type="button" class="export-button" disabled>Export proposal JSON ↗</button><p class="small-note">A validated draft exports the typed format accepted by the local agent intake. Export does not freeze, execute or approve an action.</p></section>
+      <section class="boundary-panel"><div class="boundary-icon">!</div><div><strong>No fake AI responses</strong><p>Trusted Qloo evidence, cultural verdicts and automatic repair are not available yet. Explore the existing <a href="/proof">synthetic proof lab</a> separately.</p></div></section>
+      <section class="reference-panel"><div class="eyebrow subtle">ENGINE CONTRACT</div><div class="mini-flow">PROPOSE → CHECK → REPAIR → VERIFY</div><p>Your agent proposes an action. OFC checks decision-level evidence before any external action can be authorized.</p></section>
+    </aside>
+  </div>
+  <footer class="footer"><span>OFC Engine / Cultural preflight</span><span>Local authoring · No provider calls · No external execution</span></footer>
+  </div>
+</main>
+</div>
+</body>
+</html>
