@@ -20,13 +20,18 @@ function drawDecisions(data) {
     const row = make("div", "decision-row");
     const left = make("div");
     left.append(make("span", "decision-name", choice.label), make("span", "decision-domain", choice.id.toUpperCase()));
-    row.append(left, make("span", "decision-choice", choice.before));
+    const right = make("div");
+    right.append(make("span", "decision-choice", choice.before));
+    if (!choice.changed && choice.initial_verdict === "PASS") {
+      right.append(make("span", "preserved-marker", "PRESERVED"));
+    }
+    row.append(left, right);
     baseline.append(row);
 
     const verdictRow = make("div", "decision-row verdict-row");
     const verdictLeft = make("div");
     verdictLeft.append(make("span", "decision-name", choice.label));
-    const detail = choice.reason_codes.join(", ") || "No qualified evidence";
+    const detail = choice.initial_reason_codes.join(", ") || "No qualified evidence";
     verdictLeft.append(make("span", "verdict-meta", detail.replaceAll("_", " ")));
     verdictRow.append(verdictLeft, badge(choice.initial_verdict));
     verdicts.append(verdictRow);
@@ -49,7 +54,7 @@ function drawRepair(data) {
     entry.append(make("strong", null, choice.label));
     const diff = make("div", "repair-change");
     diff.append(make("span", "old", choice.before), make("span", "arrow", "→"), make("span", "new", choice.after));
-    entry.append(diff, make("small", null, "Plan revision updated. Original constraints preserved."));
+    entry.append(diff, make("small", null, choice.pending_recheck ? "Recheck still pending · no approval" : "Rechecked at current revision · structural only"));
     area.append(entry);
   });
   const dep = data.decisions.filter((d) => d.rechecked && !d.changed);
@@ -64,8 +69,27 @@ function drawComparison(data) {
   const c = data.comparison;
   setText($("arm-off"), c.without_evidence.replaceAll("_", " "));
   setText($("arm-on"), c.with_fixture_evidence.replaceAll("_", " "));
-  setText($("arm-effect"), c.changed_decisions + " plan choice(s) changed. No actual outcomes measured.");
-  setText($("compare-validity"), c.identical_baseline ? "✓ Same frozen plan and constraints in both arms · Structural comparison only" : "⚠ Comparison invalid: baselines differ");
+  if (!c.identical_baseline || c.baseline_digest !== data.baseline_digest || c.real_causal_proof !== false) {
+    setText($("arm-off"), "INVALID PAIR");
+    setText($("arm-on"), "INVALID PAIR");
+    setText($("arm-effect"), "Comparison withheld");
+    setText($("compare-validity"), "Comparison blocked: mismatched baseline or unsupported outcome claim.");
+    return;
+  }
+  setText($("arm-effect"), c.changed_decisions + " plan choice(s) changed. No business outcomes measured.");
+  setText($("compare-validity"), "Same frozen plan · fixture comparison only · no real causal proof");
+}
+
+function drawTimeline(data) {
+  const parent = $("timeline-list");
+  parent.replaceChildren();
+  data.timeline.forEach((event) => {
+    const entry = make("li", "timeline-entry");
+    entry.append(make("span", "timeline-sequence", "EVENT " + String(event.sequence).padStart(2, "0")));
+    entry.append(make("strong", null, event.state.replaceAll("_", " ")));
+    entry.append(make("small", null, "Plan revision r" + event.revision));
+    parent.append(entry);
+  });
 }
 
 function inspectorRecord(data) {
@@ -126,12 +150,15 @@ function render(data) {
   setText($("current-revision"), "r" + data.current_revision);
   drawDecisions(data);
   drawRepair(data);
+  drawTimeline(data);
   drawComparison(data);
   drawInspector(data);
   setText($("status"), data.run_status === "INTEGRITY_ONLY" ? "Synthetic structural checks complete. External release remains blocked." : "Review required: " + data.reason_codes.join(", ").replaceAll("_", " "));
 }
 
+let latestRun = 0;
 async function run() {
+  const runId = ++latestRun;
   const runButton = $("run");
   const scenario = $("scenario").value;
   runButton.disabled = true;
@@ -140,14 +167,27 @@ async function run() {
     const response = await fetch("/api/demo?scenario=" + encodeURIComponent(scenario), {cache: "no-store"});
     if (!response.ok) throw new Error("HTTP " + response.status);
     const data = await response.json();
-    if (data.demo_mode !== "SYNTHETIC" || data.release_authorized !== false || data.external_action_executed !== false || data.source_mode !== "SYNTHETIC") throw new Error("Invalid demo provenance");
+    if (runId !== latestRun) return;
+    if (!validSnapshot(data)) throw new Error("Invalid demo snapshot");
     render(data);
   } catch (error) {
+    if (runId !== latestRun) return;
     $("result").hidden = true;
     setText($("status"), "Unable to load the demo run. Nothing has been approved or executed.");
   } finally {
-    runButton.disabled = false;
+    if (runId === latestRun) runButton.disabled = false;
   }
+}
+
+function validSnapshot(data) {
+  if (!data || data.demo_mode !== "SYNTHETIC" || data.source_mode !== "SYNTHETIC") return false;
+  if (data.release_authorized !== false || data.external_action_executed !== false || data.provider_authenticated !== false) return false;
+  if (!Number.isInteger(data.current_revision) || data.current_revision < 0) return false;
+  if (!Number.isInteger(data.last_event_sequence) || !Array.isArray(data.timeline) || !Array.isArray(data.decisions)) return false;
+  if (!data.timeline.length || data.timeline.at(-1).sequence !== data.last_event_sequence) return false;
+  if (data.timeline.some((e, i) => e.sequence !== i || !Number.isInteger(e.revision) || e.revision > data.current_revision)) return false;
+  if (!data.comparison || !Array.isArray(data.evidence) || !Array.isArray(data.traces)) return false;
+  return true;
 }
 
 $("run").addEventListener("click", run);

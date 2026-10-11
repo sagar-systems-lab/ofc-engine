@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0c111c">
+  <meta name="theme-color" content="#f4f7fa">
   <title>OFC Engine — Decision preflight</title>
   <link rel="stylesheet" href="/styles.css">
   <script defer src="/app.js"></script>
@@ -22,10 +22,10 @@
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
           <div class="eyebrow"><span class="eyebrow-line"></span> THE PREFLIGHT LAYER</div>
-          <h1 id="page-title">Before an agent acts,<br><em>make its decisions count.</em></h1>
+          <h1 id="page-title">Decision preflight. <em>Proof before action.</em></h1>
           <p>Evaluate the plan, isolate the weak choice, and trace every repair. One decision at a time. Nothing executes here.</p>
         </div>
-        <div class="hero-orbit" aria-hidden="true"><div class="orbit-ring orbit-outer"></div><div class="orbit-ring orbit-inner"></div><div class="orbit-center">O<span>F</span>C</div><div class="orbit-satellite satellite-one"></div><div class="orbit-satellite satellite-two"></div></div>
+        
       </section>
 
       <section class="control-panel" aria-label="Demo controls">
@@ -33,7 +33,7 @@
         <div class="control-actions"><label for="scenario">Scenario</label><select id="scenario"><option value="repair">Evidence-backed repair</option><option value="outage">Provider unavailable</option><option value="dependent_missing">Missing dependent evidence</option><option value="budget_exhausted">Repair budget exhausted</option></select><button id="run" type="button"><span class="run-icon" aria-hidden="true">↗</span> Run synthetic check</button></div>
       </section>
 
-      <section class="trust-banner" aria-label="Provenance notice"><span class="trust-icon" aria-hidden="true">◇</span><p><strong>Illustrative environment.</strong> All rankings and decisions are synthetic. No Qloo API calls, external actions, real cultural-fit claims, or release authorization.</p><span class="banner-label">NO LIVE EVIDENCE</span></section>
+      <section class="trust-banner" aria-label="Provenance notice"><span class="trust-icon" aria-hidden="true">◇</span><p><strong>Illustrative environment.</strong> All rankings and decisions are synthetic. No Qloo API calls, external actions, cultural-fit forecasts, or release authorization.</p><span class="banner-label">NO LIVE EVIDENCE</span></section>
 
       <section id="status" class="status-strip" aria-live="polite" aria-atomic="true"><span class="loading-mark"></span> Select a scenario and run the synthetic preflight.</section>
 
@@ -51,9 +51,11 @@
           <div class="panel patch-panel"><div class="panel-top"><span class="panel-index">03 / REPAIR & VERIFY</span><span class="small-pill">BOUNDED</span></div><div class="panel-heading"><div><h2>Selective repair</h2><p>Only the affected part of the plan changes.</p></div><span class="heading-symbol" aria-hidden="true">↗</span></div><div id="repair-list" class="repair-list"></div><div id="recheck-panel" class="recheck-panel"></div><div class="panel-foot"><span>CURRENT REVISION</span><code id="current-revision">—</code></div></div>
         </section>
 
+        <section class="panel timeline-panel" aria-labelledby="timeline-title"><div class="panel-top"><span class="panel-index">04 / RUN LIFECYCLE</span><span class="small-pill">COMPLETED EVENTS ONLY</span></div><h2 id="timeline-title">Revision timeline</h2><p class="subheading">Derived from completed fixture revisions; no simulated progress.</p><ol id="timeline-list" class="timeline-list"></ol></section>
+
         <section class="lower-grid" aria-label="Evidence and comparison">
-          <article class="panel compare-panel"><div class="panel-top"><span class="panel-index">04 / CAUSALITY CHECK</span><span class="small-pill">SAME BASELINE</span></div><h2>What changed with evidence?</h2><p class="subheading">An identical starting plan. Two different evidence conditions.</p><div class="compare-arms"><div class="arm"><span class="arm-title">EVIDENCE <strong>OFF</strong></span><div class="arm-value" id="arm-off">—</div><p>Missing evidence cannot be treated as approval.</p></div><div class="compare-arrow" aria-hidden="true">→</div><div class="arm"><span class="arm-title">FIXTURE EVIDENCE <strong>ON</strong></span><div class="arm-value" id="arm-on">—</div><p id="arm-effect">—</p></div></div><div id="compare-validity" class="compare-validity"></div></article>
-          <article class="panel inspect-panel"><div class="panel-top"><span class="panel-index">05 / OBSERVABLE PROOF</span><span class="small-pill">INSPECTABLE</span></div><h2>Evidence inspector</h2><p class="subheading">Follow the exact revision, query fingerprint, and repair lineage.</p><div class="inspect-top"><span id="evidence-count">— evidence records</span><button id="inspect-toggle" aria-expanded="false" aria-controls="inspector-details" type="button">Open inspector <span aria-hidden="true">↗</span></button></div><div id="inspector-details" class="inspector-details" hidden><div id="inspector-data"></div></div><div class="no-execution"><span aria-hidden="true">⛨</span><div><strong>Execution blocked by design</strong><p>A structural check never grants real action permission.</p></div></div></article>
+          <article class="panel compare-panel"><div class="panel-top"><span class="panel-index">05 / CAUSALITY CHECK</span><span class="small-pill">SAME BASELINE</span></div><h2>What changed with evidence?</h2><p class="subheading">An identical starting plan. Two different evidence conditions.</p><div class="compare-arms"><div class="arm"><span class="arm-title">EVIDENCE <strong>OFF</strong></span><div class="arm-value" id="arm-off">—</div><p>Missing evidence cannot be treated as approval.</p></div><div class="compare-arrow" aria-hidden="true">→</div><div class="arm"><span class="arm-title">FIXTURE EVIDENCE <strong>ON</strong></span><div class="arm-value" id="arm-on">—</div><p id="arm-effect">—</p></div></div><div id="compare-validity" class="compare-validity"></div></article>
+          <article class="panel inspect-panel"><div class="panel-top"><span class="panel-index">06 / OBSERVABLE PROOF</span><span class="small-pill">INSPECTABLE</span></div><h2>Evidence inspector</h2><p class="subheading">Follow the exact revision, query fingerprint, and repair lineage.</p><div class="inspect-top"><span id="evidence-count">— evidence records</span><button id="inspect-toggle" aria-expanded="false" aria-controls="inspector-details" type="button">Open inspector <span aria-hidden="true">↗</span></button></div><div id="inspector-details" class="inspector-details" hidden><div id="inspector-data"></div></div><div class="no-execution"><span aria-hidden="true">⛨</span><div><strong>Execution blocked by design</strong><p>A structural check never grants real action permission.</p></div></div></article>
         </section>
       </div>
     </main>

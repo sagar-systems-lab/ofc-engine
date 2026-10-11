@@ -30,6 +30,16 @@ def test_single_baseline_and_structural_repair():
     assert afterparty["rechecked"] and not afterparty["changed"]
     assert snapshot["pending_rechecks"] == []
     assert snapshot["traces"][0]["recheck_state"] == "STRUCTURAL_PASS"
+    assert snapshot["last_event_sequence"] == len(snapshot["timeline"]) - 1
+    assert [e["state"] for e in snapshot["timeline"]] == [
+        "BASELINE_FROZEN", "EVALUATED", "PATCH_APPLIED", "INTEGRITY_ONLY",
+    ]
+    assert [e["revision"] for e in snapshot["timeline"]] == [0, 0, 1, 1]
+    brand = next(d for d in snapshot["decisions"] if d["id"] == "brand")
+    assert brand["initial_verdict"] == "REPAIR"
+    assert brand["latest_verdict"] == "PASS"
+    assert brand["initial_reason_codes"] != brand["reason_codes"]
+    assert brand["initial_evidence_ids"] != brand["evidence_ids"]
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
@@ -43,6 +53,10 @@ def test_every_scenario_is_non_authoritative(scenario):
     assert snap["comparison"]["business_outcomes_measured"] is False
     assert snap["comparison"]["real_causal_proof"] is False
     assert len(snap["decisions"]) == 6
+    assert snap["timeline"][0] == {"sequence": 0, "state": "BASELINE_FROZEN", "revision": 0}
+    assert snap["last_event_sequence"] == len(snap["timeline"]) - 1
+    assert [e["sequence"] for e in snap["timeline"]] == list(range(len(snap["timeline"])))
+    assert all(e["revision"] <= snap["current_revision"] for e in snap["timeline"])
     assert len(json.dumps(snap)) < 120000
 
 
@@ -112,4 +126,13 @@ def test_ui_assets_do_not_import_remote_scripts():
     assert "textContent" in script
     assert "innerHTML" not in script
     assert "aria-expanded" in html or "aria-expanded" in script
-    assert "prefers-reduced-motion" in (root / "styles.css").read_text(encoding="utf-8")
+    styles = (root / "styles.css").read_text(encoding="utf-8")
+    assert "prefers-reduced-motion" in styles
+    assert "--canvas: #f4f7fa" in styles
+    assert "--teal: #007b80" in styles
+    assert "--pass: #126f51" in styles
+    assert "--repair: #a94842" in styles
+    assert "timeline-list" in html
+    assert "initial_reason_codes" in script
+    assert "validSnapshot" in script
+    assert "innerHTML" not in script
