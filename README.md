@@ -254,3 +254,21 @@ Use `outage`, `dependent_missing`, or `budget_exhausted` to inspect failure path
 No Qloo requests or real external actions occur. A fixture repair is a
 simulation, not a committed plan revision, verified live decision or release
 authorization. The hosted read-only preview is unchanged.
+
+
+## Local preview measurement
+
+For an observed baseline of the **synthetic**, stateless HTTP preview,
+start the local server and run:
+
+```bash
+python -m ofc_engine.hosted_preview --port 18080
+python scripts/bench_preview.py --base-url http://127.0.0.1:18080 \
+  --samples 64 --workers 4 --warmup 8
+```
+
+The benchmark uses bounded loopback-only requests, validates all four
+synthetic outcomes, detects changing response bodies and records observed
+p50/p95/p99 and throughput. Results depend on the host, concurrency,
+runtime and sample window. They are **not** Qloo latency measurements,
+production SLOs or public Render capacity qualifications.
