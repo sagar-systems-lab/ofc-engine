@@ -105,7 +105,7 @@ def test_http_exposes_only_read_only_fixture_and_static_assets():
             assert response.headers["Cache-Control"] == "no-store"
             assert response.headers["X-Content-Type-Options"] == "nosniff"
             assert "default-src 'none'" in response.headers["Content-Security-Policy"]
-        for path in ("/", "/index.html", "/styles.css", "/app.js"):
+        for path in ("/", "/proof", "/index.html", "/styles.css", "/app.js", "/studio.js", "/studio.css"):
             with urlopen(base + path, timeout=5) as response:
                 assert response.status == 200
                 assert len(response.read()) > 300
