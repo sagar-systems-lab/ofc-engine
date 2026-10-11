@@ -151,8 +151,9 @@ def test_canonical_example_is_the_exact_frozen_fixture_baseline():
     frozen, _ = freeze_proposal(proposal)
     assert proposal == canonical_proposal()
     assert frozen == baseline_plan()
-    assert frozen.baseline_digest == example["baseline_digest"]
+    from ofc_engine.revisions import plan_digest
+    assert plan_digest(frozen) == example["baseline_digest"]
     assert [d.decision_id for d in frozen.decisions] == [
         "brand", "opener", "venue-1", "venue-2", "venue-3", "afterparty"
     ]
-    assert demo_snapshot("repair")["baseline_digest"] == frozen.baseline_digest
+    assert demo_snapshot("repair")["baseline_digest"] == plan_digest(frozen)
