@@ -107,3 +107,16 @@ def test_blueprint_free_plan_and_manual_deploy():
     assert 'python scripts/smoke_hosted.py' in workflow
     assert 'python scripts/browser_smoke.py' in workflow
     assert 'playwright install --with-deps chromium' in workflow
+
+
+def test_local_and_hosted_browser_gates_are_separate():
+    local = (ROOT / '.github/workflows/preview-browser.yml').read_text()
+    hosted = (ROOT / '.github/workflows/hosted-qualification.yml').read_text()
+
+    assert 'hosted_https:' not in local
+    assert 'ofc-fixture-preview.onrender.com' not in local
+    assert 'python scripts/accessibility_smoke.py' in local
+    assert 'workflow_dispatch:' in hosted
+    assert 'python scripts/smoke_hosted.py' in hosted
+    assert 'python scripts/browser_smoke.py --base-url "$DEPLOY_URL"' in hosted
+    assert 'python scripts/accessibility_smoke.py --base-url "$DEPLOY_URL"' in hosted
