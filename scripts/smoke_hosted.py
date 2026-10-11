@@ -176,6 +176,10 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
     if (observed.get("repair") != "INTEGRITY_ONLY" or observed.get("outage") != "USER_REVIEW" or
         observed.get("dependent_missing") != "USER_REVIEW" or observed.get("budget_exhausted") != "REPAIR_EXHAUSTED"):
         raise SmokeFailure("scenario fail-closed outcomes incorrect")
+    if client.get("/api/proposals").status != 404:
+        raise SmokeFailure("private agent proposal API publicly readable")
+    if client.options("/api/proposals").status != 405:
+        raise SmokeFailure("private agent proposal API publicly writable")
     if client.get("/api/runs").status != 404:
         raise SmokeFailure("private run store publicly readable")
     if client.options("/api/runs").status != 405:
