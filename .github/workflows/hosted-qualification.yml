@@ -50,5 +50,7 @@ jobs:
         run: |
           python -m pip install playwright==1.55.0
           python -m playwright install --with-deps chromium
-      - name: Verify desktop and mobile journey
-        run: python scripts/browser_smoke.py --base-url "$DEPLOY_URL"
+      - name: Verify desktop, mobile, keyboard, and reduced-motion journeys
+        run: |
+          python scripts/browser_smoke.py --base-url "$DEPLOY_URL"
+          python scripts/accessibility_smoke.py --base-url "$DEPLOY_URL"
