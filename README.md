@@ -137,3 +137,34 @@ persistence. Both modes use synthetic evidence only; they provide no
 authenticated multi-user hosting, Qloo verification, real action release,
 or production run state. The SQLite file requires a persistent local disk,
 is intentionally excluded from Git, and must be protected by the operator.
+
+
+## Public synthetic preview container
+
+The fixture-only proof console can be deployed as a read-only demonstration
+without Qloo credentials or a writable database:
+
+```bash
+docker build -t ofc-fixture-preview .
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  -p 127.0.0.1:8000:8000 ofc-fixture-preview
+```
+
+Open `http://127.0.0.1:8000`. For a managed HTTP deployment, publish port
+`8000` through a platform-provided **HTTPS reverse proxy** and set `PORT` to
+the assigned container port when necessary. The process binds to all container
+interfaces only in this dedicated, stateless preview mode. Verify the host's
+network controls, request limits and public availability before sharing a URL.
+Set `OFC_BUILD_SHA` to a 7–40 character lowercase hexadecimal commit SHA to
+expose a non-sensitive version marker in `GET /healthz` and `GET /readyz`.
+
+This endpoint serves only packaged web assets and four precomputed **synthetic**
+`GET /api/demo?scenario=...` responses. Writes, saved-run URLs and any action
+release routes are unavailable. The server bounds request targets, concurrent
+connections and idle read time. For local operator run recovery, continue using
+`ofc_engine.runtime_web` on loopback with a protected SQLite file.
+
+A container build is not equivalent to a deployed, monitored service. The
+public preview contains no Qloo verification, authenticated live data, user
+sessions, real-world actions or qualified cross-host persistence. Do not mount
+secrets or attach production data to this container.

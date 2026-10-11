@@ -16,3 +16,30 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -e '.[dev]'
       - run: python -m pytest
+  fixture_container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag ofc-fixture-preview:ci .
+      - name: Smoke-test read-only container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name ofc-preview-ci \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            -p 127.0.0.1:18080:8000 ofc-fixture-preview:ci
+          trap 'docker rm -f ofc-preview-ci >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for attempt in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:18080/readyz -o /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          curl --fail --silent 'http://127.0.0.1:18080/api/demo?scenario=repair' \
+            | python -c 'import json,sys; p=json.load(sys.stdin); assert p["demo_mode"]=="SYNTHETIC" and p["release_authorized"] is False and p["provider_authenticated"] is False'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -X POST http://127.0.0.1:18080/api/runs)" = "405"
