@@ -143,7 +143,7 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
     _headers(proof)
     if b'SANDBOX / SYNTHETIC' not in proof.content:
         raise SmokeFailure("fixture provenance missing")
-    for asset, expected_type in (("/app.js", "javascript"), ("/experience.js", "javascript"), ("/styles.css", "text/css"), ("/studio.js", "javascript"), ("/studio.css", "text/css"), ("/product.js", "javascript"), ("/proof-premium.css", "text/css")):
+    for asset, expected_type in (("/app.js", "javascript"), ("/experience.js", "javascript"), ("/styles.css", "text/css"), ("/studio.js", "javascript"), ("/studio.css", "text/css"), ("/product.js", "javascript"), ("/proof-premium.css", "text/css"), ("/optical.css", "text/css")):
         response = client.get(asset)
         if response.status != 200 or expected_type not in response.headers.get_content_type():
             raise SmokeFailure("web asset missing")

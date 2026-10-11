@@ -213,6 +213,7 @@ _ASSETS = {
     "/studio.js": ("studio.js", "text/javascript; charset=utf-8"),
     "/product.js": ("product.js", "text/javascript; charset=utf-8"),
     "/proof-premium.css": ("proof-premium.css", "text/css; charset=utf-8"),
+    "/optical.css": ("optical.css", "text/css; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),

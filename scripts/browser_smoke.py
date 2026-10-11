@@ -32,12 +32,26 @@ def run_browser(origin: str) -> dict:
                     page.locator("#home-title").wait_for(state="visible", timeout=40_000)
                     if not page.locator(".status-label").is_visible():
                         raise BrowserFailure("provider boundary missing from premium shell")
+                    if page.request.get(origin + "/optical.css").status != 200:
+                        raise BrowserFailure("optical depth stylesheet not served")
+                    optical = page.locator(".topbar").evaluate("""el => ({
+                        shadow: getComputedStyle(el).boxShadow,
+                        border: getComputedStyle(el).borderBottomColor
+                    })""")
+                    if optical["shadow"] == "none":
+                        raise BrowserFailure("glass header lost visual depth")
                     if page.locator("#objective").is_visible():
                         raise BrowserFailure("home should open before the plan editor")
                     page.locator("#home-create").click()
                     page.locator("#objective").wait_for(state="visible", timeout=40_000)
                     if page.locator("#check-preflight").is_enabled():
                         raise BrowserFailure("unvalidated plan allowed preflight")
+                    card_style = page.locator(".editor-panel").evaluate("""el => ({
+                        shadow: getComputedStyle(el).boxShadow,
+                        textColor: getComputedStyle(el.querySelector('.section-head h2')).color
+                    })""")
+                    if card_style["shadow"] == "none" or card_style["textColor"] == "rgb(0, 0, 0)":
+                        raise BrowserFailure("editor optical contrast or depth missing")
                     page.locator('[data-view-link="home"]').click()
                     page.locator("#home-example").click()
                     page.locator("#decision-list .decision-card").nth(5).wait_for(state="attached", timeout=30_000)
@@ -110,8 +124,9 @@ def run_browser(origin: str) -> dict:
                         "name": "unsupported.json", "mimeType": "application/json",
                         "buffer": json.dumps(imported).encode("utf-8"),
                     })
-                    if "Unsupported imported fields" not in page.locator("#editor-message").inner_text():
-                        raise BrowserFailure("unsupported proposal fields were silently discarded")
+                    page.locator("#editor-message").filter(
+                        has_text="Unsupported imported fields"
+                    ).wait_for(state="visible", timeout=12_000)
                     if page.locator("#taste-locality").input_value() != "three cities":
                         raise BrowserFailure("failed import replaced the existing draft")
                     page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
