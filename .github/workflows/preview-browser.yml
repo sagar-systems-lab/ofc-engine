@@ -4,6 +4,7 @@ on:
     paths:
       - ".github/workflows/preview-browser.yml"
       - "scripts/browser_smoke.py"
+      - "scripts/accessibility_smoke.py"
       - "scripts/bench_preview.py"
       - "scripts/smoke_hosted.py"
       - "src/ofc_engine/hosted_preview.py"
@@ -45,6 +46,7 @@ jobs:
           test "$ready" -eq 1
           python scripts/smoke_hosted.py --base-url http://127.0.0.1:18080 --expected-sha abc123d
           python scripts/browser_smoke.py --base-url http://127.0.0.1:18080
+          python scripts/accessibility_smoke.py --base-url http://127.0.0.1:18080
           python scripts/bench_preview.py --base-url http://127.0.0.1:18080 --samples 64 --workers 4 --warmup 8
   hosted_https:
     runs-on: ubuntu-latest
@@ -64,3 +66,4 @@ jobs:
         run: |
           python scripts/smoke_hosted.py --base-url "$DEPLOY_URL" --wait-seconds 150
           python scripts/browser_smoke.py --base-url "$DEPLOY_URL"
+          python scripts/accessibility_smoke.py --base-url "$DEPLOY_URL"
