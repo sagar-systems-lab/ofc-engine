@@ -183,3 +183,25 @@ def test_build_identity_prefers_actual_render_revision(environment, expected):
 def test_invalid_or_conflicting_render_identity_fails_closed(environment):
     with pytest.raises(ValueError):
         hosted_preview._source_revision(environment)
+
+
+
+def test_example_route_matches_synthetic_plan_and_denies_mutations():
+    from ofc_engine.intake import AgentProposal, freeze_proposal
+    from ofc_engine.webdemo import baseline_plan
+    with running_server() as (base, _):
+        status, headers, data = get(base + "/api/example")
+        example = json.loads(data)
+        assert status == 200
+        assert headers["Cache-Control"] == "no-store"
+        assert example["source_mode"] == "SYNTHETIC"
+        assert example["provider_authenticated"] is False
+        assert example["release_authorized"] is False
+        assert example["external_action_executed"] is False
+        assert example["real_qloo_requests"] == 0
+        plan, _ = freeze_proposal(AgentProposal.model_validate_json(json.dumps(example["example"])))
+        assert plan == baseline_plan()
+        from ofc_engine.revisions import plan_digest
+        assert plan_digest(plan) == example["baseline_digest"]
+        assert error_code(base + "/api/example?anything=1") == 400
+        assert error_code(base + "/api/example", method="POST", body=b"{}") == 405

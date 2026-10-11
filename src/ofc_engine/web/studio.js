@@ -11,17 +11,39 @@
   const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
   const uuid = (prefix) => prefix + "-" + crypto.randomUUID();
   const split = (s) => String(s || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const seed = () => ({
-    objective: "Choose partners and experiences for an emerging artist's three-city tour.",
-    budget: "60000", cities: "Chicago, Austin, Seattle", audience: "Indie music audiences",
-    decisions: [
-      {decision_id:"brand",domain:"partner",candidate_id:"brand-a",candidate_pool:"brand-a, brand-b",depends_on:"",locality_ref:"Chicago",mutable:true,required:true},
-      {decision_id:"afterparty",domain:"experience",candidate_id:"experience-a",candidate_pool:"experience-a, experience-b",depends_on:"brand",locality_ref:"Chicago",mutable:true,required:true},
-      {decision_id:"opener",domain:"performer",candidate_id:"opener-a",candidate_pool:"opener-a, opener-b",depends_on:"",locality_ref:"Austin",mutable:true,required:true},
-    ]
+  const seed = () => ({objective:"",budget:"",cities:"",audience:"",tasteLocality:"",decisions:[]});
+  const proposalForm = (data) => {
+    const i = data.intent, c = i.constraints || {};
+    return {
+      objective:i.objective, budget:String(c.budget_usd ?? ""),
+      cities:Array.isArray(c.cities) ? c.cities.join(", ") : "",
+      audience:typeof i.taste_context?.audience === "string" ? i.taste_context.audience : "",
+      tasteLocality:typeof i.taste_context?.locality === "string" ? i.taste_context.locality : "",
+      decisions:data.decisions.map((d) => ({
+        decision_id:d.decision_id, domain:d.domain,
+        candidate_id:d.candidate_id,
+        candidate_pool:Array.isArray(d.candidate_pool) ? d.candidate_pool.join(", ") : "",
+        depends_on:Array.isArray(d.depends_on) ? d.depends_on.join(", ") : "",
+        locality_ref:d.locality_ref || "",
+        mutable:Array.isArray(d.mutable_fields) && d.mutable_fields.includes("candidate_id"),
+        required:d.required !== false
+      }))
+    };
+  };
+  function stableJson(value) {
+    if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
+    if (value !== null && typeof value === "object")
+      return "{" + Object.keys(value).sort().map((k) =>
+        JSON.stringify(k) + ":" + stableJson(value[k])).join(",") + "}";
+    return JSON.stringify(value);
+  }
+  const comparable = (value) => JSON.stringify({
+    ...value, intent:{...value.intent, run_id:"example", client_request_id:"example"}
   });
+
   let draftId = uuid("draft"), runId = uuid("run"), requestId = uuid("request"), validated = null;
   let drafts = readDrafts();
+  let canonicalExample = null;
 
   function readDrafts() {
     try {
@@ -37,6 +59,7 @@
     return {
       objective: $("objective").value.trim(), budget: $("budget").value.trim(),
       audience: $("audience").value.trim(), cities: $("cities").value.trim(),
+      tasteLocality: $("taste-locality").value.trim(),
       decisions: Array.from($("decision-list").children, (card) => {
         const item = {};
         card.querySelectorAll("[data-key]").forEach((input) => {
@@ -49,6 +72,9 @@
   function invalidate() {
     validated = null;
     $("export-proposal").disabled = true;
+    $("check-preflight").disabled = true;
+    $("preflight-panel").hidden = true;
+    $("open-fixture").hidden = true;
     $("proposal-state").textContent = "Not validated";
     $("proposal-detail").textContent = "Changes need a fresh local contract check.";
     const values = formValue().decisions;
@@ -100,7 +126,9 @@
     });
   }
   function populate(form) {
-    ["objective","budget","cities","audience"].forEach((id)=>{$(id).value=form[id]||"";});
+    ["objective","budget","cities","audience","taste-locality"].forEach((id)=>{
+      $(id).value=id==="taste-locality" ? form.tasteLocality||"" : form[id]||"";
+    });
     $("decision-list").replaceChildren();
     (form.decisions || []).slice(0,64).forEach(addDecision);
     invalidate();
@@ -143,7 +171,7 @@
     decisions.forEach((d)=>check(d.decision_id));
     const proposal={intent:{schema_version:"0.1.0",run_id:id,client_request_id:request,
       objective:form.objective,constraints:{budget_usd:Number(form.budget),cities},
-      taste_context:{audience:form.audience,locality:cities.join(", ")}},decisions};
+      taste_context:{audience:form.audience,locality:form.tasteLocality||cities.join(", ")}},decisions};
     if(JSON.stringify(proposal).length>96*1024)throw Error("Proposal exceeds 96 KiB limit.");
     return proposal;
   }
@@ -151,6 +179,7 @@
     try {
       validated=build(formValue());
       $("export-proposal").disabled=false;
+      $("check-preflight").disabled=false;
       $("proposal-state").textContent="Contract valid";
       $("proposal-detail").textContent="Input shape checked. Provider evidence still unavailable.";
       message("Proposal structure validated in this browser. Export for the authenticated local intake; no cultural evaluation ran.","ok");
@@ -161,6 +190,66 @@
       message(error.message,"error");
     }
   }
+  function checkPreflight() {
+    if (!validated) return;
+    const isCanonical = canonicalExample
+      && comparable(validated) === comparable(canonicalExample.example);
+    const box = $("preflight-panel");
+    box.hidden = false;
+    $("preflight-decisions").replaceChildren();
+    if (isCanonical) {
+      $("preflight-state").textContent = "SYNTHETIC FIXTURE READY";
+      $("preflight-description").textContent =
+        "This proposal exactly matches the frozen six-decision tour fixture. Open the isolated proof lab to see the synthetic OFF/ON comparison. This is not live Qloo evidence.";
+      $("open-fixture").hidden = false;
+      const p = make("li", "preflight-record");
+      p.append(make("strong", null, "Baseline"), make("span", null, canonicalExample.baseline_digest.slice(0, 20) + "… · six decisions"));
+      $("preflight-decisions").append(p);
+    } else {
+      $("preflight-state").textContent = "USER REVIEW — NO EVIDENCE";
+      $("preflight-description").textContent =
+        "Proposal structure is valid, but no Qloo evidence is available. No cultural ranking, repair or execution authorization was performed. The canonical fixture cannot be used for this plan.";
+      for (const d of validated.decisions) {
+        const item = make("li", "preflight-record");
+        item.append(make("strong", null, d.decision_id + " · " + d.candidate_id),
+          make("span", null, "UNCERTAIN / EVIDENCE UNAVAILABLE"));
+        $("preflight-decisions").append(item);
+      }
+    }
+    message(isCanonical
+      ? "Same frozen canonical example identified. Synthetic proof is now available below."
+      : "Preflight stopped at the unavailable-provider boundary. All decisions require trusted evidence.",
+      isCanonical ? "ok" : "");
+    box.scrollIntoView({block:"nearest",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"instant":"smooth"});
+  }
+
+  async function loadExample() {
+    try {
+      const response = await fetch("/api/example", {cache:"no-store"});
+      if (!response.ok) throw Error("Canonical example unavailable");
+      const data = await response.json();
+      if (data.source_mode !== "SYNTHETIC" || data.release_authorized !== false
+        || data.external_action_executed !== false || data.provider_authenticated !== false
+        || data.real_qloo_requests !== 0
+        || !/^[a-f0-9]{64}$/.test(data.baseline_digest)
+        || !data.example || !Array.isArray(data.example.decisions) || data.example.decisions.length !== 6)
+        throw Error("Canonical example provenance invalid");
+      const form = proposalForm(data.example);
+      build(form, data.example.intent.run_id, data.example.intent.client_request_id);
+      canonicalExample = data;
+      draftId = uuid("draft");
+      runId = data.example.intent.run_id;
+      requestId = data.example.intent.client_request_id;
+      populate(form);
+      displayDrafts();
+      message("Canonical tour fixture loaded from OFC. Validate, run preflight, then inspect the synthetic proof.", "ok");
+      $("objective").focus();
+    } catch (_) {
+      canonicalExample = null;
+      message("Canonical fixture unavailable. Your current plan was not replaced.", "error");
+    }
+  }
+
   function displayDrafts() {
     const list=$("draft-list"),q=$("draft-search").value.trim().toLowerCase();
     list.replaceChildren();$("draft-count").textContent=drafts.length;
@@ -180,15 +269,16 @@
   function fresh() {
     draftId=uuid("draft");runId=uuid("run");requestId=uuid("request");
     populate(seed());displayDrafts();
-    message("Editable example loaded. Choices are operator-provided placeholders, not Qloo evidence.");
+    message("New plan ready. Add an objective, constraints and candidate decisions, or load the canonical example.");
   }
   function save() {
     const form=formValue();
     if(!form.objective&&!form.decisions.length){message("Add an objective or decision before saving.","error");return;}
-    drafts=[{id:draftId,runId,requestId,form,savedAt:new Date().toISOString()},
+    const next=[{id:draftId,runId,requestId,form,savedAt:new Date().toISOString()},
       ...drafts.filter((v)=>v.id!==draftId)].slice(0,20);
     try {
-      localStorage.setItem(KEY,JSON.stringify(drafts));
+      localStorage.setItem(KEY,JSON.stringify(next));
+      drafts=next;
       displayDrafts();message("Draft saved in this browser only. Nothing was sent to the server.","ok");
     } catch (_) {message("Browser storage unavailable or full; export the validated JSON instead.","error");}
   }
@@ -206,24 +296,21 @@
       if(!data||!data.intent||!Array.isArray(data.decisions)||data.intent.schema_version!=="0.1.0"||
           !ID.test(data.intent.run_id||"")||!ID.test(data.intent.client_request_id||""))
         throw Error("Expected a typed OFC agent proposal.");
-      const i=data.intent,c=i.constraints||{};
-      const form={objective:i.objective,budget:String(c.budget_usd??""),
-        cities:Array.isArray(c.cities)?c.cities.join(", "):"",
-        audience:typeof i.taste_context?.audience==="string"?i.taste_context.audience:"",
-        decisions:data.decisions.map((d)=>({decision_id:d.decision_id,domain:d.domain,
-          candidate_id:d.candidate_id,candidate_pool:Array.isArray(d.candidate_pool)?d.candidate_pool.join(", "):"",
-          depends_on:Array.isArray(d.depends_on)?d.depends_on.join(", "):"",
-          locality_ref:d.locality_ref||"",mutable:Array.isArray(d.mutable_fields)&&d.mutable_fields.includes("candidate_id"),
-          required:d.required!==false}))};
-      build(form,i.run_id,i.client_request_id);
+      const i=data.intent;
+      const form=proposalForm(data);
+      const regenerated=build(form,i.run_id,i.client_request_id);
+      if (stableJson(regenerated) !== stableJson(data))
+        throw Error("Unsupported imported fields or values; proposal not modified.");
       draftId=uuid("draft");runId=i.run_id;requestId=i.client_request_id;populate(form);
       message("Proposal imported. Validate before saving or exporting.","ok");
     } catch(error){message(error.message||"Invalid import.","error");}
   }
-  ["objective","budget","cities","audience"].forEach((id)=>$(id).addEventListener("input",invalidate));
+  ["objective","budget","cities","audience","taste-locality"].forEach((id)=>$(id).addEventListener("input",invalidate));
   $("new-draft").addEventListener("click",()=>{fresh();$("objective").focus();});
+  $("load-example").addEventListener("click",loadExample);
   $("add-decision").addEventListener("click",()=>addDecision());
   $("validate").addEventListener("click",validate);
+  $("check-preflight").addEventListener("click",checkPreflight);
   $("save-draft").addEventListener("click",save);
   $("export-proposal").addEventListener("click",exportFile);
   $("draft-search").addEventListener("input",displayDrafts);

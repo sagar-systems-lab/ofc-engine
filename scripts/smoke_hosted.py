@@ -148,6 +148,16 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
         if response.status != 200 or expected_type not in response.headers.get_content_type():
             raise SmokeFailure("web asset missing")
         _headers(response)
+    example_response = client.get("/api/example")
+    _headers(example_response)
+    example = _json(example_response)
+    if (example.get("source_mode") != "SYNTHETIC"
+        or example.get("release_authorized") is not False
+        or example.get("external_action_executed") is not False
+        or example.get("provider_authenticated") is not False
+        or example.get("real_qloo_requests") != 0
+        or len(example.get("example", {}).get("decisions", [])) != 6):
+        raise SmokeFailure("unsafe or incomplete canonical example")
     baseline = None
     observed = {}
     for scenario in _SCENARIOS:
@@ -170,6 +180,8 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
             raise SmokeFailure("run event sequence discontinuity")
         if baseline is None:
             baseline = item["baseline_digest"]
+            if baseline != example.get("baseline_digest"):
+                raise SmokeFailure("canonical example is not the proof baseline")
         elif item["baseline_digest"] != baseline:
             raise SmokeFailure("scenario baseline drift")
         observed[scenario] = item.get("run_status")

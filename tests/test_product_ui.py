@@ -44,7 +44,7 @@ def test_plan_authoring_is_distinct_from_synthetic_proof():
     for marker in (
         'id="objective"', 'id="budget"', 'id="cities"', 'id="audience"',
         'id="decision-list"', 'id="new-draft"', 'id="draft-search"',
-        'id="save-draft"', 'id="validate"', 'id="import-file"',
+        'id="save-draft"', 'id="validate"', 'id="import-file"', 'id="taste-locality"',
         'id="export-proposal"', 'PROVIDER PENDING', 'href="/proof"',
     ):
         assert marker in html
@@ -54,7 +54,23 @@ def test_plan_authoring_is_distinct_from_synthetic_proof():
     assert _ASSETS["/studio.css"][0] == "studio.css"
     assert "localStorage" in source
     assert 'schema_version:"0.1.0"' in source
-    assert 'release_authorized' not in source
-    assert 'fetch(' not in source
+    assert 'data.release_authorized !== false' in source
+    assert 'fetch("/api/example"' in source
     assert 'innerHTML' not in source
     assert 'eval(' not in source
+    assert 'stableJson(regenerated) !== stableJson(data)' in source
+
+
+
+def test_connected_preflight_keys_and_strict_fixture_boundary():
+    html = (ROOT / "studio.html").read_text(encoding="utf-8")
+    js = (ROOT / "studio.js").read_text(encoding="utf-8")
+    for marker in ('id="load-example"', 'id="check-preflight"', 'id="preflight-panel"',
+                   'id="preflight-decisions"', 'id="open-fixture"'):
+        assert marker in html
+    assert '"/api/example"' in js
+    assert 'comparable(validated) === comparable(canonicalExample.example)' in js
+    assert 'USER REVIEW — NO EVIDENCE' in js
+    assert 'UNCERTAIN / EVIDENCE UNAVAILABLE' in js
+    assert 'data.release_authorized !== false' in js
+    assert 'innerHTML' not in js

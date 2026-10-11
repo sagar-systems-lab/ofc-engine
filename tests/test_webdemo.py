@@ -137,3 +137,23 @@ def test_ui_assets_do_not_import_remote_scripts():
     assert "initial_reason_codes" in script
     assert "validSnapshot" in script
     assert "innerHTML" not in script
+
+
+
+def test_canonical_example_is_the_exact_frozen_fixture_baseline():
+    from ofc_engine.intake import AgentProposal, freeze_proposal
+    from ofc_engine.webdemo import canonical_proposal, example_payload
+    example = example_payload()
+    assert example["source_mode"] == "SYNTHETIC"
+    assert example["release_authorized"] is False
+    assert example["external_action_executed"] is False
+    proposal = AgentProposal.model_validate_json(json.dumps(example["example"]))
+    frozen, _ = freeze_proposal(proposal)
+    assert proposal == canonical_proposal()
+    assert frozen == baseline_plan()
+    from ofc_engine.revisions import plan_digest
+    assert plan_digest(frozen) == example["baseline_digest"]
+    assert [d.decision_id for d in frozen.decisions] == [
+        "brand", "opener", "venue-1", "venue-2", "venue-3", "afterparty"
+    ]
+    assert demo_snapshot("repair")["baseline_digest"] == plan_digest(frozen)

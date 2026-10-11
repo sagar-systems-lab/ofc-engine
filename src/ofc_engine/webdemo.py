@@ -8,9 +8,10 @@ from importlib.resources import files
 import json
 from urllib.parse import parse_qs, urlsplit
 
-from .contracts import Decision, EvidenceQuerySpec, EvidenceStatus, PlanSnapshot, QlooEvidence, SourceMode
+from .contracts import ActionIntent, Decision, EvidenceQuerySpec, EvidenceStatus, PlanSnapshot, QlooEvidence, SourceMode
+from .intake import AgentProposal, freeze_proposal
 from .proof import EvidenceBinding
-from .revisions import digest_obj
+from .revisions import digest_obj, plan_digest
 from .workflow import compare_fixture_arms
 
 AS_OF = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
@@ -25,11 +26,14 @@ _NAMES = {
 }
 
 
-def baseline_plan() -> PlanSnapshot:
-    return PlanSnapshot(
-        plan_id="tour-demo", revision=0,
-        baseline_digest=digest_obj({"scenario": "three-city-tour", "version": 1}),
-        constraints_digest=digest_obj({"budget_usd": 60000, "city_count": 3}),
+def canonical_proposal() -> AgentProposal:
+    return AgentProposal(
+        intent=ActionIntent(
+            run_id="tour-demo", client_request_id="tour-fixture",
+            objective="Select culturally suitable partners and experiences for an emerging artist's three-city tour.",
+            constraints={"budget_usd": 60000, "cities": ["Chicago", "Austin", "Seattle"]},
+            taste_context={"audience": "Indie music audiences", "locality": "Chicago, Austin, Seattle"},
+        ),
         decisions=(
             Decision(decision_id="brand", domain="partner", candidate_id="brand-a",
                      candidate_pool=("brand-a", "brand-b"), mutable_fields=("candidate_id",)),
@@ -45,6 +49,22 @@ def baseline_plan() -> PlanSnapshot:
                      candidate_pool=("experience-a",), depends_on=("brand",)),
         ),
     )
+
+
+def baseline_plan() -> PlanSnapshot:
+    return freeze_proposal(canonical_proposal())[0]
+
+
+def example_payload() -> dict:
+    return {
+        "source_mode": "SYNTHETIC",
+        "release_authorized": False,
+        "external_action_executed": False,
+        "provider_authenticated": False,
+        "real_qloo_requests": 0,
+        "baseline_digest": plan_digest(baseline_plan()),
+        "example": canonical_proposal().model_dump(mode="json"),
+    }
 
 
 class DemoEvidence:
@@ -150,7 +170,7 @@ def demo_snapshot(scenario: str) -> dict:
         "scenario": scenario,
         "demo_mode": "SYNTHETIC",
         "source_mode": "SYNTHETIC",
-        "run_id": "fixture-tour-001",
+        "run_id": baseline.plan_id,
         "objective": "Select culturally suitable partners and experiences for an emerging artist's three-city tour.",
         "budget_usd": 60000,
         "cities": ["Chicago", "Austin", "Seattle"],
@@ -201,6 +221,13 @@ _ASSETS = {
 class DemoHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parts = urlsplit(self.path)
+        if parts.path == "/api/example":
+            if parts.query:
+                self._send(400, b'{"error":"INVALID_QUERY"}', "application/json")
+                return
+            body = json.dumps(example_payload(), separators=(",", ":"), allow_nan=False).encode("utf-8")
+            self._send(200, body, "application/json")
+            return
         if parts.path == "/api/demo":
             query = parse_qs(parts.query, keep_blank_values=True)
             if set(query) != {"scenario"} or len(query["scenario"]) != 1:
