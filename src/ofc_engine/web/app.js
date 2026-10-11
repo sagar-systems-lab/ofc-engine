@@ -157,25 +157,82 @@ function render(data) {
 }
 
 let latestRun = 0;
-async function run() {
-  const runId = ++latestRun;
-  const runButton = $("run");
+
+function runFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("run")) return null;
+  if ([...params.keys()].some((key) => key !== "run") || params.getAll("run").length !== 1) {
+    throw new Error("Invalid saved run URL");
+  }
+  const runId = params.get("run");
+  if (!/^[0-9a-f]{32}$/.test(runId)) throw new Error("Invalid saved run ID");
+  return runId;
+}
+
+async function readSavedRun(runId) {
+  const response = await fetch("/api/runs/" + runId, {cache: "no-store"});
+  if (!response.ok) throw new Error("Saved run unavailable");
+  const body = await response.json();
+  if (body.run_id !== runId || body.source_mode !== "SYNTHETIC" || !validSnapshot(body.snapshot)) {
+    throw new Error("Saved run provenance invalid");
+  }
+  const cursor = await fetch("/api/runs/" + runId + "/events?after_sequence=-1", {cache: "no-store"});
+  if (!cursor.ok) throw new Error("Run history unavailable");
+  const eventView = await cursor.json();
+  if (eventView.run_id !== runId || eventView.source_mode !== "SYNTHETIC" || eventView.release_authorized !== false
+      || eventView.last_event_sequence !== body.snapshot.last_event_sequence
+      || JSON.stringify(eventView.events) !== JSON.stringify(body.snapshot.timeline)) {
+    throw new Error("Run history mismatch");
+  }
+  return {...body.snapshot, run_id: runId};
+}
+
+async function createOrPreview(scenario) {
+  const requestId = window.crypto.randomUUID().replaceAll("-", "");
+  const created = await fetch("/api/runs", {
+    method: "POST", cache: "no-store",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({scenario, request_id: requestId}),
+  });
+  if (created.status === 405) {
+    // Compatibility with the original read-only fixture viewer.
+    const preview = await fetch("/api/demo?scenario=" + encodeURIComponent(scenario), {cache: "no-store"});
+    if (!preview.ok) throw new Error("Preview unavailable");
+    return {snapshot: await preview.json(), runId: null};
+  }
+  if (!created.ok) throw new Error("Could not save the run");
+  const value = await created.json();
+  if (!/^[0-9a-f]{32}$/.test(value.run_id) || value.source_mode !== "SYNTHETIC") {
+    throw new Error("Invalid saved run ID");
+  }
+  return {snapshot: {...value.snapshot, run_id: value.run_id}, runId: value.run_id};
+}
+
+async function run(restore = false) {
+  const token = ++latestRun;
+  const button = $("run");
   const scenario = $("scenario").value;
-  runButton.disabled = true;
-  setText($("status"), "Running local synthetic decision preflight…");
+  button.disabled = true;
+  setText($("status"), restore ? "Restoring saved synthetic run…" : "Running local synthetic decision preflight…");
   try {
-    const response = await fetch("/api/demo?scenario=" + encodeURIComponent(scenario), {cache: "no-store"});
-    if (!response.ok) throw new Error("HTTP " + response.status);
-    const data = await response.json();
-    if (runId !== latestRun) return;
-    if (!validSnapshot(data)) throw new Error("Invalid demo snapshot");
-    render(data);
+    const savedId = restore ? runFromUrl() : null;
+    const output = savedId
+      ? {snapshot: await readSavedRun(savedId), runId: savedId}
+      : await createOrPreview(scenario);
+    if (token !== latestRun) return;
+    if (!validSnapshot(output.snapshot)) throw new Error("Invalid demo snapshot");
+    $("scenario").value = output.snapshot.scenario;
+    render(output.snapshot);
+    if (!savedId) {
+      const url = output.runId ? "?run=" + output.runId : window.location.pathname;
+      window.history.replaceState(null, "", url);
+    }
   } catch (error) {
-    if (runId !== latestRun) return;
+    if (token !== latestRun) return;
     $("result").hidden = true;
-    setText($("status"), "Unable to load the demo run. Nothing has been approved or executed.");
+    setText($("status"), "Saved run unavailable or incomplete. No release or external action has been authorized.");
   } finally {
-    if (runId === latestRun) runButton.disabled = false;
+    if (token === latestRun) button.disabled = false;
   }
 }
 
@@ -190,11 +247,11 @@ function validSnapshot(data) {
   return true;
 }
 
-$("run").addEventListener("click", run);
+$("run").addEventListener("click", () => run(false));
 $("inspect-toggle").addEventListener("click", () => {
   const open = $("inspector-details").hidden;
   $("inspector-details").hidden = !open;
   $("inspect-toggle").setAttribute("aria-expanded", String(open));
   $("inspect-toggle").firstChild.textContent = open ? "Close inspector " : "Open inspector ";
 });
-run();
+run(true);

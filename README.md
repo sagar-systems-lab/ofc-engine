@@ -114,3 +114,26 @@ a provider outage, missing dependent evidence and repair-budget exhaustion.
 This local viewer binds to loopback only. It provides no authentication,
 Qloo-backed decision authority, external action execution or deployable
 production API. Results remain explicitly marked synthetic and release-blocked.
+
+
+### Saved synthetic runs
+
+For a local demonstration where the browser can reload a previously completed
+synthetic run without recalculating it, start the SQLite-backed viewer:
+
+```bash
+python -m ofc_engine.runtime_web --database ./ofc-runs.sqlite3 --port 8765
+```
+
+The viewer stores completed immutable snapshots and their ordered event
+timelines in a local SQLite file. A successful request returns a unique run
+URL; reloading that URL retrieves the saved snapshot and verifies the event
+cursor. The API supports idempotent run creation and
+`GET /api/runs/{run_id}/events?after_sequence=N` for safe replay. A missing or
+corrupt saved run is shown as unavailable rather than silently recomputed.
+
+The original `ofc_engine.webdemo` command remains available without
+persistence. Both modes use synthetic evidence only; they provide no
+authenticated multi-user hosting, Qloo verification, real action release,
+or production run state. The SQLite file requires a persistent local disk,
+is intentionally excluded from Git, and must be protected by the operator.
