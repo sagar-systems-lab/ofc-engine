@@ -31,19 +31,41 @@ def run_browser(origin: str) -> dict:
                     page.locator("#objective").wait_for(state="visible", timeout=40_000)
                     if not page.get_by_text("PROVIDER PENDING").is_visible():
                         raise BrowserFailure("provider boundary missing from writable workspace")
+                    if page.locator("#check-preflight").is_enabled():
+                        raise BrowserFailure("unvalidated plan allowed preflight")
+                    page.locator("#load-example").click()
+                    page.wait_for_function("document.querySelector('#decision-list').children.length === 6", timeout=30_000)
                     page.locator("#validate").click()
                     if page.locator("#proposal-state").inner_text() != "Contract valid":
-                        raise BrowserFailure("default typed proposal cannot be validated")
+                        raise BrowserFailure("canonical typed proposal cannot be validated")
                     if page.locator("#export-proposal").is_disabled():
                         raise BrowserFailure("validated proposal cannot be exported")
+                    page.locator("#check-preflight").click()
+                    if page.locator("#preflight-state").inner_text() != "SYNTHETIC FIXTURE READY":
+                        raise BrowserFailure("same canonical plan did not unlock synthetic fixture")
+                    if not page.locator("#open-fixture").is_visible():
+                        raise BrowserFailure("canonical proof link unavailable")
                     page.locator("#objective").fill("Custom cultural decision proposal")
                     if not page.locator("#export-proposal").is_disabled():
                         raise BrowserFailure("changed proposal reused stale validation")
+                    if not page.locator("#preflight-panel").is_hidden():
+                        raise BrowserFailure("stale result remained after edit")
+                    page.locator("#validate").click()
+                    page.locator("#check-preflight").click()
+                    if page.locator("#preflight-state").inner_text() != "USER REVIEW — NO EVIDENCE":
+                        raise BrowserFailure("custom proposal received synthetic verdict")
+                    if not page.locator("#open-fixture").is_hidden():
+                        raise BrowserFailure("custom proposal linked to unrelated fixture")
+                    if page.locator("#preflight-decisions li").count() != 6:
+                        raise BrowserFailure("custom review did not account for every decision")
                     page.locator("#save-draft").click()
                     page.reload(wait_until="domcontentloaded")
                     page.locator("#draft-search").fill("Custom cultural")
                     if page.locator("#draft-list .draft-item").count() != 1:
                         raise BrowserFailure("draft save/search failed")
+                    page.locator("#draft-list .draft-item").first.click()
+                    if page.locator("#objective").input_value() != "Custom cultural decision proposal":
+                        raise BrowserFailure("reopening saved draft lost user input")
                     page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#run-status").wait_for(state="visible", timeout=40_000)
                     if page.locator("#run-status").inner_text().strip() != "INTEGRITY ONLY":
