@@ -52,6 +52,8 @@ def test_plan_authoring_is_distinct_from_synthetic_proof():
     assert _ASSETS["/proof"][0] == "index.html"
     assert _ASSETS["/studio.js"][0] == "studio.js"
     assert _ASSETS["/studio.css"][0] == "studio.css"
+    assert _ASSETS["/product.js"][0] == "product.js"
+    assert _ASSETS["/proof-premium.css"][0] == "proof-premium.css"
     assert "localStorage" in source
     assert 'schema_version:"0.1.0"' in source
     assert 'data.release_authorized !== false' in source
@@ -74,3 +76,26 @@ def test_connected_preflight_keys_and_strict_fixture_boundary():
     assert 'UNCERTAIN / EVIDENCE UNAVAILABLE' in js
     assert 'data.release_authorized !== false' in js
     assert 'innerHTML' not in js
+
+
+def test_premium_product_surfaces_without_fake_provider_results():
+    html = (ROOT / "studio.html").read_text(encoding="utf-8")
+    css = (ROOT / "studio.css").read_text(encoding="utf-8")
+    js = (ROOT / "product.js").read_text(encoding="utf-8")
+    proof = (ROOT / "index.html").read_text(encoding="utf-8")
+    for name in ("home", "plan", "map", "evidence", "history", "provider", "settings"):
+        assert f'id="view-{name}"' in html
+        assert f'data-view-link="{name}"' in html
+    for marker in ('id="global-search"', 'id="home-create"', 'id="home-example"',
+                   'id="map-nodes"', 'id="evidence-preview"', 'id="history-rows"',
+                   'id="motion-enabled"'):
+        assert marker in html
+    assert '/proof-premium.css' in proof
+    assert 'prefers-reduced-motion' in css
+    assert '.motion-off' in css
+    assert 'localStorage' in js
+    assert 'data.source_mode!=="SYNTHETIC"' in js
+    assert 'data.release_authorized!==false' in js
+    assert 'data.external_action_executed!==false' in js
+    assert 'innerHTML' not in js
+    assert 'setInterval(' not in js
