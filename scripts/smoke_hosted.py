@@ -137,7 +137,7 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
     _headers(page)
     if b'SANDBOX / SYNTHETIC' not in page.content or b'OFC' not in page.content:
         raise SmokeFailure("visible synthetic label absent")
-    for asset, expected_type in (("/app.js", "javascript"), ("/styles.css", "text/css")):
+    for asset, expected_type in (("/app.js", "javascript"), ("/experience.js", "javascript"), ("/styles.css", "text/css")):
         response = client.get(asset)
         if response.status != 200 or expected_type not in response.headers.get_content_type():
             raise SmokeFailure("web asset missing")
