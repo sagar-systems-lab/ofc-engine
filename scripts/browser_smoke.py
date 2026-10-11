@@ -34,7 +34,9 @@ def run_browser(origin: str) -> dict:
                     if page.locator("#check-preflight").is_enabled():
                         raise BrowserFailure("unvalidated plan allowed preflight")
                     page.locator("#load-example").click()
-                    page.wait_for_function("document.querySelector('#decision-list').children.length === 6", timeout=30_000)
+                    page.locator("#decision-list .decision-card").nth(5).wait_for(state="attached", timeout=30_000)
+                    if page.locator("#decision-list .decision-card").count() != 6:
+                        raise BrowserFailure("canonical fixture did not load exactly six decisions")
                     page.locator("#validate").click()
                     if page.locator("#proposal-state").inner_text() != "Contract valid":
                         raise BrowserFailure("canonical typed proposal cannot be validated")
