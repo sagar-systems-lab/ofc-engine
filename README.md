@@ -95,3 +95,22 @@ semantics remain unqualified until tested with the real API.
 The two locality variants are distinct experiments: result restriction
 (`filter`) versus locality-influenced ranking (`signal`). Do not assume either
 variant is supported for brand-type queries without live validation.
+
+
+## Local proof console
+
+Run a read-only, synthetic web demonstration:
+
+```bash
+python -m ofc_engine.webdemo --port 8765
+```
+
+Open `http://127.0.0.1:8765`. The viewer uses the existing
+synthetic evaluation and repair workflow to display a three-city tour baseline,
+decision verdicts, selective changes, dependent rechecks, evidence inspection
+and a same-baseline evidence OFF/ON contrast. The scenario selector includes
+a provider outage, missing dependent evidence and repair-budget exhaustion.
+
+This local viewer binds to loopback only. It provides no authentication,
+Qloo-backed decision authority, external action execution or deployable
+production API. Results remain explicitly marked synthetic and release-blocked.
