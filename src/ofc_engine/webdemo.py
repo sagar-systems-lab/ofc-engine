@@ -113,6 +113,8 @@ def demo_snapshot(scenario: str) -> dict:
             "changed": before[item_id].candidate_id != current,
             "initial_verdict": first.verdict.value,
             "latest_verdict": last.verdict.value,
+            "initial_reason_codes": list(first.reason_codes),
+            "initial_evidence_ids": list(first.evidence_refs),
             "depends_on": list(decision.depends_on),
             "rechecked": item_id in affected,
             "pending_recheck": item_id in on.ledger.pending_recheck_ids,
@@ -134,6 +136,16 @@ def demo_snapshot(scenario: str) -> dict:
         for binding in on.reviews[-1].bindings
     ]
     changed_count = sum(d["changed"] for d in decisions)
+    timeline = [("BASELINE_FROZEN", baseline.revision)]
+    for index, review in enumerate(on.reviews):
+        if index:
+            timeline.append(("PATCH_APPLIED", on.traces[index - 1].proposed_revision))
+        timeline.append(("EVALUATED", review.plan_revision))
+    timeline.append((on.status.value, on.plan.revision))
+    events = [
+        {"sequence": index, "state": state, "revision": revision}
+        for index, (state, revision) in enumerate(timeline)
+    ]
     return {
         "scenario": scenario,
         "demo_mode": "SYNTHETIC",
@@ -152,6 +164,8 @@ def demo_snapshot(scenario: str) -> dict:
         "baseline_revision": baseline.revision,
         "current_revision": on.plan.revision,
         "policy_version": "fixture-rank-v1",
+        "last_event_sequence": events[-1]["sequence"],
+        "timeline": events,
         "attempts_used": on.ledger.attempts_used,
         "max_attempts": on.ledger.max_attempts,
         "reason_codes": list(on.reason_codes),
