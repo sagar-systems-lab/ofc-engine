@@ -15,12 +15,18 @@ and SQLite run stores are separate and must never be exposed by this service.
 Manually deploy the approved main revision. Compare the actual source commit
 in the Render deployment record against the intended commit.
 
-The OFC_BUILD_SHA environment variable does **not** select a Git revision.
-Changing that variable alone is not an upgrade or rollback.
+On Render, the preview reports Render's `RENDER_GIT_COMMIT` as its
+`/readyz` build identity. An optional `OFC_BUILD_SHA` must match its prefix,
+otherwise the server refuses startup. Locally, the explicit build identity or
+`unknown` remains available.
 
-Run the bounded hosted HTTP and browser scripts against
-https://ofc-fixture-preview.onrender.com with an expected SHA matching the
-actual deployment:
+Neither environment variable selects a Git revision. Changing identity alone
+is not an upgrade or rollback.
+
+After a deploy, run the manual hosted qualification workflow with
+`base_url=https://ofc-fixture-preview.onrender.com` and
+`expected_sha=<actual 40-character Render deployment commit>`. Run the bounded
+hosted HTTP and browser scripts against the deployed service:
 
 - scripts/smoke_hosted.py (with --expected-sha and --wait-seconds 150)
 - scripts/browser_smoke.py
