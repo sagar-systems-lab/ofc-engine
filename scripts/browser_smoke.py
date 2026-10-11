@@ -124,8 +124,9 @@ def run_browser(origin: str) -> dict:
                         "name": "unsupported.json", "mimeType": "application/json",
                         "buffer": json.dumps(imported).encode("utf-8"),
                     })
-                    if "Unsupported imported fields" not in page.locator("#editor-message").inner_text():
-                        raise BrowserFailure("unsupported proposal fields were silently discarded")
+                    page.locator("#editor-message").filter(
+                        has_text="Unsupported imported fields"
+                    ).wait_for(state="visible", timeout=12_000)
                     if page.locator("#taste-locality").input_value() != "three cities":
                         raise BrowserFailure("failed import replaced the existing draft")
                     page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
