@@ -232,3 +232,25 @@ The response state is always `BASELINE_FROZEN / EVIDENCE_PENDING` with
 fit, authenticate provider evidence or execute an agent action. Use a
 separate run ID for a changed proposal; do not treat an old review or
 fixture result as release permission.
+
+
+## End-to-end offline proposal check
+
+An agent proposal can be exercised through the existing synthetic evaluator
+without altering its saved revision-zero plan:
+
+```bash
+python examples/agent_proposal_fixture_check.py \
+  --database ./ofc.sqlite3 \
+  --proposal examples/agent_proposal.json \
+  --scenario repair
+```
+
+The check stores or replays the typed baseline, then compares fixture evidence
+OFF and ON using that exact frozen plan. It reports candidate changes,
+dependent rechecks, structural outcomes and the unchanged stored revision.
+Use `outage`, `dependent_missing`, or `budget_exhausted` to inspect failure paths.
+
+No Qloo requests or real external actions occur. A fixture repair is a
+simulation, not a committed plan revision, verified live decision or release
+authorization. The hosted read-only preview is unchanged.
