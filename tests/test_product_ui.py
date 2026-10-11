@@ -103,25 +103,22 @@ def test_premium_product_surfaces_without_fake_provider_results():
 
 
 
-def test_console_typography_has_no_cursor_glare():
+def test_optical_hardening_keeps_readable_content_and_motion_controls():
     css = (ROOT / "optical.css").read_text(encoding="utf-8")
     home = (ROOT / "studio.html").read_text(encoding="utf-8")
     proof = (ROOT / "index.html").read_text(encoding="utf-8")
     product = (ROOT / "product.js").read_text(encoding="utf-8")
     assert 'href="/optical.css"' in home
     assert 'href="/optical.css"' in proof
-    assert '"Open Sans", "Segoe UI"' in css
-    assert 'font-size: 14px' in css
-    assert '.page-intro h1' in css
-    assert '.home-copy h1' in css
-    assert 'content: none' in css
-    assert 'prefers-reduced-motion: reduce' in css
-    assert '.motion-off *' in css
-    assert "enableOpticalReflections" not in product
-    assert "--glint-" not in product
-    assert "--glint-" not in css
-    assert "pointermove" not in product
-    assert "backdrop-filter: none" in css
+    for token in ("--opt-ink:", "--opt-copy:", "--opt-support:", "--opt-shadow:",
+                  "radial-gradient(", "linear-gradient(", ".editor-panel",
+                  ".decision-card", ".side-link.active", ".hero-art",
+                  ".primary::before", ".primary::after"):
+        assert token in css
+    assert "prefers-reduced-motion: reduce" in css
+    assert ".motion-off *" in css
+    assert "enableOpticalReflections()" in product
+    assert "reducedMotion.matches" in product
     assert "setInterval(" not in product
     assert "innerHTML" not in product
     assert not any(external in css for external in ("@import", "url(http", "url(//"))
