@@ -105,7 +105,16 @@ Run a read-only, synthetic web demonstration:
 python -m ofc_engine.webdemo --port 8765
 ```
 
-Open `http://127.0.0.1:8765`. The viewer uses the existing
+Open `http://127.0.0.1:8765/` for the browser-local plan authoring
+workspace. **New plan** creates a blank typed proposal. **Load canonical
+example** fetches the six-decision frozen tour fixture. After client-side
+contract validation, **Run preflight** shows `USER_REVIEW` with no evidence
+for arbitrary plans. Only the unchanged canonical fixture unlocks the
+synthetic proof lab at `/proof`. Saved drafts/search remain on the device.
+The hosted service never accepts plan submissions or private agent runs;
+exports target the separately authenticated local intake, not live Qloo.
+
+The fixture proof viewer uses the existing
 synthetic evaluation and repair workflow to display a three-city tour baseline,
 decision verdicts, selective changes, dependent rechecks, evidence inspection
 and a same-baseline evidence OFF/ON contrast. The scenario selector includes
