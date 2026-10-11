@@ -39,6 +39,16 @@ def run_browser(origin: str) -> dict:
                     toggle.click()
                     if toggle.get_attribute("aria-expanded") != "true" or not page.locator("#inspector-details").is_visible():
                         raise BrowserFailure("inspector progressive disclosure broken")
+                    verdicts = page.locator("#verdict-list .verdict-trigger")
+                    if verdicts.count() != 6:
+                        raise BrowserFailure("decision inspection controls missing")
+                    verdicts.first.click()
+                    if verdicts.first.get_attribute("aria-pressed") != "true":
+                        raise BrowserFailure("selected decision not reflected accessibly")
+                    if "Focused:" not in page.locator("#evidence-count").inner_text():
+                        raise BrowserFailure("selected evidence not focused")
+                    if page.locator('[data-stage="ACT"]').get_attribute("data-state") != "blocked":
+                        raise BrowserFailure("action boundary not locked")
                     page.locator("#scenario").select_option("outage")
                     page.locator("#run").click()
                     page.get_by_text("USER REVIEW", exact=True).first.wait_for(state="visible", timeout=30_000)
