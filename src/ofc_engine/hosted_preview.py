@@ -23,8 +23,6 @@ def _source_revision(environment: dict[str, str]) -> str:
     if render_sha:
         if not re.fullmatch(r"[0-9a-f]{40}", render_sha):
             raise ValueError("invalid Render source revision")
-        if configured and not render_sha.startswith(configured):
-            raise ValueError("configured revision conflicts with deployed source")
         return render_sha
     return configured or "unknown"
 
