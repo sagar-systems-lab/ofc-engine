@@ -65,3 +65,33 @@ Python >= 3.11. Provider-specific semantics require live API observations before
 ## Limitations
 
 A valid synthetic graph does not imply cultural fit. The preliminary schema and Python digest format have not been approved for cross-language parity. Releasing a real action is out of scope. The in-memory reference store is not restart durable. SQLite state survives a process restart on persistent disk, but is not a cross-host distributed state store and has no authorization layer. Its hash-linked journal detects ordinary inconsistencies, not deliberate tampering by a privileged database writer. Review integrity is **not** a cultural fitness verdict, provider authenticity attestation or release authorization: a future trusted Qloo adapter must prove evidence origin and a qualified evaluator must produce the verdicts. A changed plan requires a new exact-revision review; safe carry-forward of unchanged decisions is not implemented. Repair attempt ledgers are also **non-durable** and cannot enforce production budgets. The SQLite store persists unresolved recheck IDs but deliberately does not clear them or authorize an action; a trusted evidence-review transition remains to be implemented. The repair preview requires caller-submitted verdicts; it does not choose a candidate or establish Qloo authenticity. `workflow.py` chooses candidates only in strictly labeled synthetic fixtures; real-world evaluation requires qualified Qloo evidence and a separately approved policy. No external action is executed.
+
+
+## Qloo capability probes
+
+The diagnostic client is deliberately separate from the decision engine. It
+does not convert Qloo responses into policy verdicts or certify cultural fit.
+Without `--live`, these commands make **zero network requests**:
+
+```bash
+python -m ofc_engine.qloo_probe --search "Example artist" --type artist
+python -m ofc_engine.qloo_probe --artist-id ARTIST_QLOO_ID --brands BRAND_ID_1,BRAND_ID_2
+python -m ofc_engine.qloo_probe --artist-id ARTIST_QLOO_ID --brands BRAND_ID_1,BRAND_ID_2 --locality "Chicago" --locality-mode signal
+```
+
+With an event-provided credential configured **only on the server** as the
+`QLOO_API_KEY` environment variable, add `--live` to perform one bounded GET
+request. Optional `--capture` writes raw response material under
+`~/.local/share/ofc-engine/private-qloo-probes/` with restricted filesystem
+permissions. Never commit local captures or disclose the key. Respect the
+provider's event credential and data-use terms.
+
+The client pins `https://hackathon.api.qloo.com`, refuses redirects, limits
+response size/timeouts, and never retries automatically. Search and fixed
+shortlist requests reflect Qloo's published API shape; actual entity identity,
+explainability, response structure, locality parameter support, and ranking
+semantics remain unqualified until tested with the real API.
+
+The two locality variants are distinct experiments: result restriction
+(`filter`) versus locality-influenced ranking (`signal`). Do not assume either
+variant is supported for brand-type queries without live validation.
