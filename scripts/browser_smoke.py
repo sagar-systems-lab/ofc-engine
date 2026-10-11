@@ -143,7 +143,12 @@ def run_browser(origin: str) -> dict:
                     if not page.get_by_text("NOT AUTHORIZED").is_visible():
                         raise BrowserFailure("outage falsely authorized release")
                     if page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
-                        raise BrowserFailure("horizontal overflow at width " + str(width))
+                        offenders = page.evaluate("""() => [...document.querySelectorAll('*')].map(el => ({
+                            tag: el.tagName, cls: el.className?.baseVal ?? el.className,
+                            scroll: el.scrollWidth, width: el.clientWidth,
+                            right: Math.round(el.getBoundingClientRect().right)
+                        })).filter(x => x.right > innerWidth + 1 || x.scroll > x.width + 4).slice(0,16)""")
+                        raise BrowserFailure("horizontal overflow at width " + str(width) + ": " + str(offenders))
                     if errors or outside:
                         raise BrowserFailure("browser error or unexpected external request")
                     tested.append(width)
