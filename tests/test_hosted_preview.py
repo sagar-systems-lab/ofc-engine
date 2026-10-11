@@ -170,6 +170,7 @@ def test_docker_defaults_are_nonroot_read_only_app_and_no_private_files():
     ({"OFC_BUILD_SHA": "abc123d"}, "abc123d"),
     ({"RENDER_GIT_COMMIT": "a" * 40}, "a" * 40),
     ({"RENDER_GIT_COMMIT": "a" * 40, "OFC_BUILD_SHA": "a" * 7}, "a" * 40),
+    ({"RENDER_GIT_COMMIT": "a" * 40, "OFC_BUILD_SHA": "b" * 7}, "a" * 40),
 ])
 def test_build_identity_prefers_actual_render_revision(environment, expected):
     assert hosted_preview._source_revision(environment) == expected
@@ -178,7 +179,6 @@ def test_build_identity_prefers_actual_render_revision(environment, expected):
 @pytest.mark.parametrize("environment", [
     {"RENDER_GIT_COMMIT": "unknown"},
     {"RENDER_GIT_COMMIT": "A" * 40},
-    {"RENDER_GIT_COMMIT": "a" * 40, "OFC_BUILD_SHA": "b" * 7},
 ])
 def test_invalid_or_conflicting_render_identity_fails_closed(environment):
     with pytest.raises(ValueError):

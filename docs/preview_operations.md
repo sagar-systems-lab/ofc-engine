@@ -16,9 +16,9 @@ Manually deploy the approved main revision. Compare the actual source commit
 in the Render deployment record against the intended commit.
 
 On Render, the preview reports Render's `RENDER_GIT_COMMIT` as its
-`/readyz` build identity. An optional `OFC_BUILD_SHA` must match its prefix,
-otherwise the server refuses startup. Locally, the explicit build identity or
-`unknown` remains available.
+`/readyz` build identity. A legacy `OFC_BUILD_SHA` cannot override the
+platform commit, even when its value is stale. Invalid Render commit metadata
+fails startup. Locally, `OFC_BUILD_SHA` or `unknown` remains available.
 
 Neither environment variable selects a Git revision. Changing identity alone
 is not an upgrade or rollback.
