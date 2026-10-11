@@ -191,6 +191,28 @@
       root.replaceChildren(label("p","evidence-error","Fixture unavailable or provenance invalid. No verdict is issued."));
     }
   }
+  function enableOpticalReflections() {
+    const finePointer = matchMedia("(hover: hover) and (pointer: fine)");
+    const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    const panels = document.querySelectorAll(
+      ".editor-panel, .summary-panel, .white-panel, .feature-card, .metric-tile, .map-node, .hero-art"
+    );
+    panels.forEach(panel => {
+      panel.addEventListener("pointermove", event => {
+        if (!finePointer.matches || reducedMotion.matches
+          || document.documentElement.classList.contains("motion-off")) return;
+        const box = panel.getBoundingClientRect();
+        if (!box.width || !box.height) return;
+        panel.style.setProperty("--glint-x", ((event.clientX - box.left) / box.width * 100).toFixed(1) + "%");
+        panel.style.setProperty("--glint-y", ((event.clientY - box.top) / box.height * 100).toFixed(1) + "%");
+      }, {passive: true});
+      panel.addEventListener("pointerleave", () => {
+        panel.style.removeProperty("--glint-x");
+        panel.style.removeProperty("--glint-y");
+      });
+    });
+  }
+
   function init() {
     document.querySelectorAll("[data-view-link]").forEach(a=>{
       a.addEventListener("click",e=>{e.preventDefault();navigate(a.dataset.viewLink);});
@@ -236,6 +258,7 @@
     });
     $("decision-list").addEventListener("input",()=>{if(current==="map")refreshMap();});
     addEventListener("hashchange",()=>view(location.hash.slice(1)));
+    enableOpticalReflections();
     view(location.hash.slice(1));
   }
   function localStorageSafeGet(key){try{return localStorage.getItem(key);}catch(_){return null;}}

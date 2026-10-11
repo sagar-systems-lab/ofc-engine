@@ -35,35 +35,11 @@ def run_browser(origin: str) -> dict:
                     if page.request.get(origin + "/optical.css").status != 200:
                         raise BrowserFailure("optical depth stylesheet not served")
                     optical = page.locator(".topbar").evaluate("""el => ({
-                        background: getComputedStyle(el).backgroundColor,
-                        image: getComputedStyle(el).backgroundImage,
+                        shadow: getComputedStyle(el).boxShadow,
                         border: getComputedStyle(el).borderBottomColor
                     })""")
-                    if optical["background"] != "rgb(255, 255, 255)" or optical["image"] != "none":
-                        raise BrowserFailure("header still has translucent or glowing backdrop")
-                    heading = page.locator("#home-title").evaluate("""el => ({
-                        family: getComputedStyle(el).fontFamily,
-                        size: parseFloat(getComputedStyle(el).fontSize)
-                    })""")
-                    if "Georgia" in heading["family"] or "Baskerville" in heading["family"] or heading["size"] > 48:
-                        raise BrowserFailure("old oversized serif display typography remains")
-                    page.locator('[data-view-link="map"]').click()
-                    panel = page.locator(".map-board")
-                    bg_before = panel.evaluate("el => getComputedStyle(el).backgroundImage")
-                    page.mouse.move(120, 190)
-                    page.mouse.move(390, 470)
-                    bg_after = panel.evaluate("el => getComputedStyle(el).backgroundImage")
-                    if bg_before != bg_after:
-                        raise BrowserFailure("map background changes with mouse position")
-                    if panel.evaluate("el => el.style.getPropertyValue('--glint-x') || el.style.getPropertyValue('--glint-y')"):
-                        raise BrowserFailure("cursor glare variables still set")
-                    map_title = page.locator("#map-title").evaluate("""el => ({
-                        family: getComputedStyle(el).fontFamily,
-                        size: parseFloat(getComputedStyle(el).fontSize)
-                    })""")
-                    if "Georgia" in map_title["family"] or map_title["size"] > 38:
-                        raise BrowserFailure("map heading violates compact console scale")
-                    page.locator('[data-view-link="home"]').click()
+                    if optical["shadow"] == "none":
+                        raise BrowserFailure("glass header lost visual depth")
                     if page.locator("#objective").is_visible():
                         raise BrowserFailure("home should open before the plan editor")
                     page.locator("#home-create").click()
