@@ -1,0 +1,69 @@
+{
+  "intent": {
+    "schema_version": "0.1.0",
+    "run_id": "tour-agent-example-001",
+    "client_request_id": "request-example-001",
+    "objective": "Choose partners and experiences for a fictional emerging artist's three-city tour.",
+    "constraints": {
+      "budget_usd": 60000,
+      "cities": [
+        "Chicago",
+        "Austin",
+        "Seattle"
+      ]
+    },
+    "taste_context": {
+      "audience": "synthetic example",
+      "locality": "three cities"
+    }
+  },
+  "decisions": [
+    {
+      "decision_id": "brand",
+      "domain": "partner",
+      "candidate_id": "brand-a",
+      "candidate_pool": [
+        "brand-a",
+        "brand-b"
+      ],
+      "mutable_fields": [
+        "candidate_id"
+      ],
+      "depends_on": [],
+      "locality_ref": "Chicago",
+      "required": true
+    },
+    {
+      "decision_id": "afterparty",
+      "domain": "experience",
+      "candidate_id": "experience-a",
+      "candidate_pool": [
+        "experience-a",
+        "experience-b"
+      ],
+      "mutable_fields": [
+        "candidate_id"
+      ],
+      "depends_on": [
+        "brand"
+      ],
+      "locality_ref": "Chicago",
+      "required": true
+    },
+    {
+      "decision_id": "opener",
+      "domain": "performer",
+      "candidate_id": "opener-a",
+      "candidate_pool": [
+        "opener-a",
+        "opener-b"
+      ],
+      "mutable_fields": [
+        "candidate_id"
+      ],
+      "depends_on": [],
+      "locality_ref": "Austin",
+      "required": true
+    }
+  ]
+}
