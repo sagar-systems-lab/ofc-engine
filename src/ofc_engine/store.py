@@ -1,8 +1,4 @@
-"""Reference single-process atomic patch store. It has NO restart durability.
-
-Only a validated RepairPatch can mutate plan state. Durable journals and a
-multi-process CAS backend require separate qualification before hosted use.
-"""
+"""In-memory revision store; state is lost on restart."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -46,7 +42,7 @@ class MemoryRevisionStore:
         *,
         client_request_id: str,
     ) -> tuple[PlanSnapshot, tuple[str, ...]]:
-        """Atomic within one Python process; no durable journal or cross-worker lock."""
+        """Serializes patches within one process; not safe across workers."""
         if not client_request_id:
             raise ValueError("client_request_id is required")
         fp = digest_obj(patch.model_dump(mode="json"))

@@ -1,9 +1,4 @@
-"""Pure, budgeted selective-repair previews with revision-bound rechecks.
-
-This module is not a cultural evaluator, a trusted provider adapter, a durable
-attempt ledger or a release authority. Caller-supplied reviews remain untrusted
-until a separate qualified evaluator and provider adapter are integrated.
-"""
+"""Pure selective repair previews and revision-bound recheck tracking."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -19,12 +14,12 @@ class RepairReviewRejected(ValueError):
 
 
 class RepairBudgetExceeded(RepairReviewRejected):
-    """Do not retry endlessly or silently reset the attempt counter."""
+    """Repair attempt budget exceeded."""
 
 
 @dataclass(frozen=True)
 class RepairLedger:
-    """Non-durable simulation record, bound to a plan's exact current digest."""
+    """In-memory repair ledger bound to one plan digest."""
 
     plan_id: str
     plan_revision: int
@@ -36,7 +31,7 @@ class RepairLedger:
 
 @dataclass(frozen=True)
 class RepairPreview:
-    """Candidate revision preview only; it makes no storage or release changes."""
+    """Proposed revision without storage changes or action execution."""
 
     proposed_plan: PlanSnapshot
     ledger: RepairLedger
@@ -101,12 +96,7 @@ def preview_repair(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> RepairPreview:
-    """Preview exactly one evidence-bound, policy-requested selective repair.
-
-    Existing PASS decisions are preserved in the candidate snapshot. All
-    affected dependents are marked for *new* current-revision review; no PASS
-    verdict is carried across revisions. No action is executed.
-    """
+    """Preview one REPAIR change and invalidate affected decision reviews."""
     _require_current_ledger(plan, ledger)
     if ledger.attempts_used >= ledger.max_attempts:
         raise RepairBudgetExceeded("repair attempt budget exhausted")
@@ -118,7 +108,6 @@ def preview_repair(
     target = verdicts.get(patch.decision_id)
     if target is None or target.verdict != Verdict.REPAIR:
         raise RepairReviewRejected("target decision must carry a REPAIR verdict")
-    # The previous repair cannot silently reuse verdicts for invalidated nodes.
     if not set(ledger.pending_recheck_ids).issubset(verdicts):
         raise RepairReviewRejected("affected decisions require current-revision recheck")
     if any(
@@ -127,7 +116,6 @@ def preview_repair(
         if decision_id != patch.decision_id
     ):
         raise RepairReviewRejected("dependent rechecks must PASS before another repair")
-    # Exact evidence provenance, not a caller-supplied unrelated ID.
     if len(set(patch.evidence_refs)) != len(patch.evidence_refs):
         raise RepairReviewRejected("duplicate patch evidence references")
     if set(patch.evidence_refs) != set(target.evidence_refs):
@@ -164,10 +152,9 @@ def record_recheck_integrity(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> RepairLedger:
-    """Clear pending IDs after a fresh all-PASS review; never release a plan.
+    """Clear rechecks after a fresh integrity-valid all-PASS review.
 
-    A clean result proves structural review integrity only, not actual Qloo
-    authenticity, cultural suitability or permission to execute an action.
+    Does not authenticate Qloo evidence or authorize actions.
     """
     _require_current_ledger(plan, ledger)
     if not ledger.pending_recheck_ids:

@@ -1,9 +1,4 @@
-"""SQLite-backed revision store with transactional CAS and idempotent replay.
-
-Designed for single-database, multi-process use. The file must live on durable
-local storage. This component does not validate cultural judgments, authorize
-repairs or actions, or replace an authenticated evidence provider.
-"""
+"""SQLite revision persistence with transactional CAS and idempotent replay."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -39,12 +34,10 @@ class RevisionEvent:
 
 
 class SQLiteRevisionStore:
-    """Atomic storage primitives; never expose directly to untrusted clients.
+    """Local SQLite store with cross-connection, transactional writes.
 
-    Each operation creates its own connection and BEGIN IMMEDIATE transaction,
-    serializing compare-and-swap and deduplication across SQLite connections.
-    This is not distributed consensus, a user authorization layer, or a release
-    gate. Keep the database file and associated WAL on persistent local disk.
+    Keep the database and WAL on persistent local storage. This store does not
+    provide distributed consensus or authorize actions.
     """
 
     def __init__(self, db_path: str | Path, *, timeout_seconds: float = 10.0) -> None:
@@ -97,7 +90,6 @@ class SQLiteRevisionStore:
             conn.execute(f"PRAGMA busy_timeout = {int(self._timeout * 1000)}")
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA synchronous = FULL")
-            # WAL mode keeps reads available while a writer commits.
             conn.execute("PRAGMA journal_mode = WAL")
             return conn
         except BaseException:
@@ -138,7 +130,7 @@ class SQLiteRevisionStore:
         return next_hash
 
     def insert(self, plan: PlanSnapshot) -> None:
-        """Persist a fully validated initial snapshot, rejecting duplicate IDs."""
+        """Insert a validated plan; reject duplicate plan IDs."""
         plan = PlanSnapshot.model_validate(plan.model_dump())
         if plan.revision != 0:
             raise ValueError("initial stored plan must be revision zero")
@@ -177,12 +169,7 @@ class SQLiteRevisionStore:
     def apply_patch_once(
         self, plan_id: str, patch: RepairPatch, *, client_request_id: str,
     ) -> tuple[PlanSnapshot, tuple[str, ...]]:
-        """Commit a validated patch exactly once per (plan_id, request_id).
-
-        The same request and patch returns its original result after restart,
-        even if newer revisions exist. Different payload under the same key is
-        rejected. Callers must independently authorize repair decisions.
-        """
+        """Apply a patch once per request ID; identical retries return the saved result."""
         if not isinstance(client_request_id, str) or not client_request_id.strip():
             raise ValueError("client_request_id is required")
         patch = RepairPatch.model_validate(patch.model_dump())
@@ -198,8 +185,7 @@ class SQLiteRevisionStore:
                 if saved[0] != fingerprint:
                     raise IdempotencyConflict("same request key with different patch")
                 replay = PlanSnapshot.model_validate_json(saved[1])
-                # Response integrity is checked against the recorded patch's
-                # precondition + deterministic revision rules below in audit.
+                # Validate replay against its recorded journal event.
                 if replay.plan_id != plan_id or replay.revision != patch.base_revision + 1:
                     raise StorageIntegrityError("invalid idempotent response snapshot")
                 invalidated = tuple(json.loads(saved[2]))
@@ -264,12 +250,7 @@ class SQLiteRevisionStore:
             conn.close()
 
     def pending_rechecks(self, plan_id: str) -> tuple[str, ...]:
-        """Read unresolved decision IDs; only a trusted review workflow may clear them.
-
-        Deliberately no clear/approve/release method is provided here. A later
-        evaluation boundary must verify current-revision evidence before it may
-        acknowledge rechecks in the same transaction as a state transition.
-        """
+        """Return unresolved rechecks; this store cannot approve or clear them."""
         conn = self._connect()
         try:
             row = conn.execute(
@@ -295,11 +276,7 @@ class SQLiteRevisionStore:
             conn.close()
 
     def audit_history(self, plan_id: str) -> tuple[RevisionEvent, ...]:
-        """Check complete event chain and current plan digest, without mutation.
-
-        Hash linking detects ordinary inconsistency or accidental corruption,
-        not a malicious database writer able to rewrite every hash.
-        """
+        """Verify stored snapshot consistency and the hash-linked event journal."""
         conn = self._connect()
         try:
             state = conn.execute(

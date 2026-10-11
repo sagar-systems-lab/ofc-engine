@@ -1,8 +1,4 @@
-"""Deterministic fixture workflow for testing evaluation and repair invariants.
-
-Synthetic rank order is deliberately *not* a production cultural-fit policy.
-No method in this module authenticates a Qloo response or authorizes an action.
-"""
+"""Deterministic evaluator and repair workflow for synthetic fixtures."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -38,7 +34,7 @@ class FixtureEvidenceSource(Protocol):
 
 @dataclass(frozen=True)
 class FixtureRun:
-    """Immutable output, with no release/execute method or permit."""
+    """Fixture run result; does not authorize external actions."""
 
     baseline: PlanSnapshot
     plan: PlanSnapshot
@@ -74,7 +70,7 @@ def _usable_binding(
     decision, binding: EvidenceBinding, *, as_of: datetime,
     max_evidence_age: timedelta,
 ) -> bool:
-    """Check inputs before synthetic ranking; all checks are fail-closed."""
+    """Validate synthetic evidence before ranking."""
     if binding.decision_id != decision.decision_id:
         return False
     q, e = binding.query, binding.evidence
@@ -110,11 +106,7 @@ def evaluate_fixture(
     max_evidence_age: timedelta,
     evidence_enabled: bool = True,
 ) -> ReviewEnvelope:
-    """A deterministic synthetic policy; no Qloo rank is inferred or claimed.
-
-    Without evidence, every decision is UNCERTAIN, not PASS. Each decision
-    needs exactly one individually bound, fresh, fully ranked fixture record.
-    """
+    """Evaluate fresh, complete fixture ranks; missing evidence is UNCERTAIN."""
     if as_of.utcoffset() is None or max_evidence_age <= timedelta(0):
         raise ValueError("timezone-aware clock and positive evidence age required")
     indexed: dict[str, list[EvidenceBinding]] = {}
@@ -165,17 +157,11 @@ def run_fixture(
     max_attempts: int = 2,
     evidence_enabled: bool = True,
 ) -> FixtureRun:
-    """Bounded deterministic orchestration; source is injected, never networked.
-
-    A missing/malformed/untrusted fixture source degrades to USER_REVIEW. The
-    public output is never eligible for external release, even when all checks
-    pass, because there is no trusted Qloo adapter or qualified live policy.
-    """
+    """Run bounded fixture evaluation and repair without external actions."""
     ledger = begin_repair_ledger(baseline, max_attempts=max_attempts)
     plan = baseline
     reviews: list[ReviewEnvelope] = []
     traces: list[RepairTrace] = []
-    # Hold one pending preview until its replacement revision is evaluated.
     pending: tuple[PlanSnapshot, RepairLedger, ReviewEnvelope, RepairPatch, RepairPreview] | None = None
 
     def finish(status: WorkflowState, reasons: tuple[str, ...]) -> FixtureRun:
@@ -253,7 +239,7 @@ def compare_fixture_arms(
     max_evidence_age: timedelta,
     max_attempts: int = 2,
 ) -> FixtureAblation:
-    """Identical frozen baseline, OFF/ON fixture contrast; no causal Qloo claim."""
+    """Compare fixture runs with and without evidence from one baseline."""
     off = run_fixture(
         baseline, source, as_of=as_of, max_evidence_age=max_evidence_age,
         max_attempts=max_attempts, evidence_enabled=False,
