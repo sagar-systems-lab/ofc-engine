@@ -35,11 +35,12 @@ def run_browser(origin: str) -> dict:
                     if page.request.get(origin + "/optical.css").status != 200:
                         raise BrowserFailure("optical depth stylesheet not served")
                     optical = page.locator(".topbar").evaluate("""el => ({
-                        shadow: getComputedStyle(el).boxShadow,
+                        background: getComputedStyle(el).backgroundColor,
+                        image: getComputedStyle(el).backgroundImage,
                         border: getComputedStyle(el).borderBottomColor
                     })""")
-                    if optical["shadow"] == "none":
-                        raise BrowserFailure("glass header lost visual depth")
+                    if optical["background"] != "rgb(255, 255, 255)" or optical["image"] != "none":
+                        raise BrowserFailure("header still has translucent or glowing backdrop")
                     heading = page.locator("#home-title").evaluate("""el => ({
                         family: getComputedStyle(el).fontFamily,
                         size: parseFloat(getComputedStyle(el).fontSize)
