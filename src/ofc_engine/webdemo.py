@@ -186,7 +186,11 @@ def demo_snapshot(scenario: str) -> dict:
 
 
 _ASSETS = {
-    "/": ("index.html", "text/html; charset=utf-8"),
+    "/": ("studio.html", "text/html; charset=utf-8"),
+    "/proof": ("index.html", "text/html; charset=utf-8"),
+    "/studio.html": ("studio.html", "text/html; charset=utf-8"),
+    "/studio.css": ("studio.css", "text/css; charset=utf-8"),
+    "/studio.js": ("studio.js", "text/javascript; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "text/javascript; charset=utf-8"),
