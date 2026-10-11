@@ -96,6 +96,7 @@ def run_browser(origin: str) -> dict:
                         "name": "agent_proposal.json", "mimeType": "application/json",
                         "buffer": example_file.read_bytes(),
                     })
+                    page.locator("#editor-message").filter(has_text="Proposal imported").wait_for(state="visible",timeout=12_000)
                     if page.locator("#taste-locality").input_value() != "three cities":
                         raise BrowserFailure("JSON import discarded cultural locality")
                     if page.locator("#decision-list .decision-card").count() != 3:
