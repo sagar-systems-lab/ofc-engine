@@ -32,9 +32,10 @@ def test_single_baseline_and_structural_repair():
     assert snapshot["traces"][0]["recheck_state"] == "STRUCTURAL_PASS"
     assert snapshot["last_event_sequence"] == len(snapshot["timeline"]) - 1
     assert [e["state"] for e in snapshot["timeline"]] == [
-        "BASELINE_FROZEN", "EVALUATED", "PATCH_APPLIED", "INTEGRITY_ONLY",
+        "BASELINE_FROZEN", "EVALUATED", "PATCH_APPLIED", "EVALUATED",
+        "INTEGRITY_ONLY",
     ]
-    assert [e["revision"] for e in snapshot["timeline"]] == [0, 0, 1, 1]
+    assert [e["revision"] for e in snapshot["timeline"]] == [0, 0, 1, 1, 1]
     brand = next(d for d in snapshot["decisions"] if d["id"] == "brand")
     assert brand["initial_verdict"] == "REPAIR"
     assert brand["latest_verdict"] == "PASS"
