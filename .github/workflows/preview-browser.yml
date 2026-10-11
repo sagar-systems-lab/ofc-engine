@@ -46,3 +46,21 @@ jobs:
           python scripts/smoke_hosted.py --base-url http://127.0.0.1:18080 --expected-sha abc123d
           python scripts/browser_smoke.py --base-url http://127.0.0.1:18080
           python scripts/bench_preview.py --base-url http://127.0.0.1:18080 --samples 64 --workers 4 --warmup 8
+  hosted_https:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install headless Chromium
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Qualify public HTTPS preview
+        env:
+          DEPLOY_URL: https://ofc-fixture-preview.onrender.com
+        run: |
+          python scripts/smoke_hosted.py --base-url "$DEPLOY_URL" --wait-seconds 150
+          python scripts/browser_smoke.py --base-url "$DEPLOY_URL"
