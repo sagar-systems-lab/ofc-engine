@@ -154,6 +154,7 @@ function render(data) {
   drawComparison(data);
   drawInspector(data);
   setText($("status"), data.run_status === "INTEGRITY_ONLY" ? "Synthetic structural checks complete. External release remains blocked." : "Review required: " + data.reason_codes.join(", ").replaceAll("_", " "));
+  document.dispatchEvent(new CustomEvent("ofc:snapshot", {detail: data}));
 }
 
 let latestRun = 0;
@@ -213,6 +214,7 @@ async function run(restore = false) {
   const button = $("run");
   const scenario = $("scenario").value;
   button.disabled = true;
+  $("status").classList.add("is-loading");
   setText($("status"), restore ? "Restoring saved synthetic run…" : "Running local synthetic decision preflight…");
   try {
     const savedId = restore ? runFromUrl() : null;
@@ -232,7 +234,10 @@ async function run(restore = false) {
     $("result").hidden = true;
     setText($("status"), "Saved run unavailable or incomplete. No release or external action has been authorized.");
   } finally {
-    if (token === latestRun) button.disabled = false;
+    if (token === latestRun) {
+      button.disabled = false;
+      $("status").classList.remove("is-loading");
+    }
   }
 }
 

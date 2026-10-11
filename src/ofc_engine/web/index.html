@@ -4,36 +4,50 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f7fa">
-  <title>OFC Engine — Decision preflight</title>
+  <title>OFC Engine · Decision Control</title>
   <link rel="stylesheet" href="/styles.css">
   <script defer src="/app.js"></script>
+  <script defer src="/experience.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#workspace">Skip to decision workspace</a>
   <div class="app-shell">
     <header class="masthead">
       <a class="wordmark" href="/" aria-label="OFC Engine home">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>OFC<span class="wordmark-soft">ENGINE</span></span>
       </a>
-      <div class="top-right"><span class="environment-tag"><span class="status-dot"></span> SANDBOX / SYNTHETIC</span><span class="head-sep"></span><span class="top-note">DECISION INTELLIGENCE / 001</span></div>
+      <span class="header-product">DECISION CONTROL / 01</span>
+      <div class="top-right"><span class="environment-tag"><span class="status-dot"></span> SANDBOX / SYNTHETIC</span><span class="head-sep"></span><span class="top-note">SOURCE: FIXTURE ONLY</span></div>
     </header>
 
-    <main id="main">
+    <main id="workspace">
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
-          <div class="eyebrow"><span class="eyebrow-line"></span> THE PREFLIGHT LAYER</div>
-          <h1 id="page-title">Decision preflight. <em>Proof before action.</em></h1>
-          <p>Evaluate the plan, isolate the weak choice, and trace every repair. One decision at a time. Nothing executes here.</p>
+          <div class="eyebrow"><span class="eyebrow-line"></span> PRE-EXECUTION INTELLIGENCE / TOUR-001</div>
+          <h1 id="page-title">A better decision, <em>before the action.</em></h1>
+          <p>Six decisions. One frozen plan. Every change evidence-linked and revision-bound.</p>
         </div>
-        
+        <div class="hero-aside" aria-label="Execution state"><span class="hero-aside-label">EXECUTION STATE</span><strong>LOCKED <span aria-hidden="true">↗</span></strong><small>Verification is not authorization</small></div>
       </section>
 
       <section class="control-panel" aria-label="Demo controls">
-        <div class="control-info"><span class="caption-label">CURRENT WORKSPACE</span><strong>Emerging Artist / Three-City Tour</strong><span class="control-sub">Chicago · Austin · Seattle <span class="dot-sep">·</span> $60,000</span></div>
-        <div class="control-actions"><label for="scenario">Scenario</label><select id="scenario"><option value="repair">Evidence-backed repair</option><option value="outage">Provider unavailable</option><option value="dependent_missing">Missing dependent evidence</option><option value="budget_exhausted">Repair budget exhausted</option></select><button id="run" type="button"><span class="run-icon" aria-hidden="true">↗</span> Run synthetic check</button></div>
+        <div class="control-info"><span class="caption-label">ACTIVE WORKSPACE / 001</span><strong>Emerging Artist · Three-City Tour</strong><span class="control-sub">Chicago · Austin · Seattle <span class="dot-sep">·</span> $60,000</span></div>
+        <div class="control-actions"><label for="scenario">Test condition</label><select id="scenario"><option value="repair">Evidence-backed repair</option><option value="outage">Provider unavailable</option><option value="dependent_missing">Missing dependent evidence</option><option value="budget_exhausted">Repair budget exhausted</option></select><button id="run" type="button"><span class="run-icon" aria-hidden="true">↗</span> Check decisions</button></div>
       </section>
 
-      <section class="trust-banner" aria-label="Provenance notice"><span class="trust-icon" aria-hidden="true">◇</span><p><strong>Illustrative environment.</strong> All rankings and decisions are synthetic. No Qloo API calls, external actions, cultural-fit forecasts, or release authorization.</p><span class="banner-label">NO LIVE EVIDENCE</span></section>
+      <section class="trust-banner" aria-label="Provenance notice"><span class="trust-icon" aria-hidden="true">◇</span><p><strong>Synthetic evidence environment.</strong> All rankings and decisions are synthetic. No Qloo API calls, external actions, cultural-fit forecasts, or release authorization.</p><span class="banner-label">NO LIVE EVIDENCE</span></section>
+
+      <section class="journey" aria-label="Preflight process">
+        <div class="journey-heading"><span class="caption-label">CONTROL FLOW</span><span class="journey-sub">Completed events only · no simulated progress</span></div>
+        <ol id="lifecycle-stages" class="lifecycle-stages">
+          <li data-stage="PROPOSE"><span class="stage-number">01</span><span>Propose</span><span class="stage-state">WAITING</span></li>
+          <li data-stage="CHECK"><span class="stage-number">02</span><span>Check</span><span class="stage-state">WAITING</span></li>
+          <li data-stage="REPAIR"><span class="stage-number">03</span><span>Repair</span><span class="stage-state">WAITING</span></li>
+          <li data-stage="VERIFY"><span class="stage-number">04</span><span>Verify</span><span class="stage-state">WAITING</span></li>
+          <li data-stage="ACT"><span class="stage-number">05</span><span>Act</span><span class="stage-state">LOCKED</span></li>
+        </ol>
+      </section>
 
       <section id="status" class="status-strip" aria-live="polite" aria-atomic="true"><span class="loading-mark"></span> Select a scenario and run the synthetic preflight.</section>
 
@@ -45,21 +59,30 @@
           <div class="metric metric-release"><span class="metric-label">RELEASE BOUNDARY</span><strong class="metric-value release-value">NOT AUTHORIZED <span aria-hidden="true">↗</span></strong><small>Agent execution remains disabled</small></div>
         </section>
 
+        <div class="section-lead">
+          <div><span class="eyebrow eyebrow-small">01 / THE DECISION SURFACE</span><h2>One plan. Every decision accountable.</h2></div>
+          <span class="section-lead-aside">SELECT A VERDICT TO INSPECT EVIDENCE ↘</span>
+        </div>
         <section class="work-grid" aria-label="Decision review">
           <div class="panel baseline-panel"><div class="panel-top"><span class="panel-index">01 / FROZEN INPUT</span><span class="small-pill">READ ONLY</span></div><div class="panel-heading"><div><h2>Proposed plan</h2><p>Agent-selected choices before the check.</p></div><span class="heading-symbol" aria-hidden="true">⌁</span></div><div id="baseline-list" class="decision-list"></div><div class="panel-foot"><span>BASELINE DIGEST</span><code id="baseline-digest">—</code></div></div>
           <div class="panel verdict-panel"><div class="panel-top"><span class="panel-index">02 / DECISION PREFLIGHT</span><span class="small-pill cyan-pill">EVIDENCE CHECK</span></div><div class="panel-heading"><div><h2>Decision verdicts</h2><p>Reasons, provenance, and confidence boundaries.</p></div><span class="heading-symbol cyan" aria-hidden="true">✳</span></div><div id="verdict-list" class="decision-list"></div><div class="panel-foot"><span>POLICY</span><code id="policy-version">—</code></div></div>
           <div class="panel patch-panel"><div class="panel-top"><span class="panel-index">03 / REPAIR & VERIFY</span><span class="small-pill">BOUNDED</span></div><div class="panel-heading"><div><h2>Selective repair</h2><p>Only the affected part of the plan changes.</p></div><span class="heading-symbol" aria-hidden="true">↗</span></div><div id="repair-list" class="repair-list"></div><div id="recheck-panel" class="recheck-panel"></div><div class="panel-foot"><span>CURRENT REVISION</span><code id="current-revision">—</code></div></div>
         </section>
 
-        <section class="panel timeline-panel" aria-labelledby="timeline-title"><div class="panel-top"><span class="panel-index">04 / RUN LIFECYCLE</span><span class="small-pill">COMPLETED EVENTS ONLY</span></div><h2 id="timeline-title">Revision timeline</h2><p class="subheading">Derived from completed fixture revisions; no simulated progress.</p><ol id="timeline-list" class="timeline-list"></ol></section>
+        <section class="insight-strip" aria-label="Decision interpretation">
+          <span class="insight-icon" aria-hidden="true">↗</span>
+          <div><span class="caption-label">SYSTEM INTERPRETATION / SYNTHETIC</span>
+          <p id="insight-text">The engine preserves unaffected choices and exposes revision-bound evidence for adjustments.</p></div>
+        </section>
+        <section class="panel timeline-panel" aria-labelledby="timeline-title"><div class="panel-top"><span class="panel-index">04 / RUN LIFECYCLE</span><span class="small-pill">COMPLETED EVENTS ONLY</span></div><div class="timeline-heading"><h2 id="timeline-title">Run timeline</h2><span id="timeline-meta" class="timeline-meta">—</span></div><p class="subheading">Derived from completed fixture revisions; no simulated progress.</p><ol id="timeline-list" class="timeline-list"></ol></section>
 
         <section class="lower-grid" aria-label="Evidence and comparison">
-          <article class="panel compare-panel"><div class="panel-top"><span class="panel-index">05 / CAUSALITY CHECK</span><span class="small-pill">SAME BASELINE</span></div><h2>What changed with evidence?</h2><p class="subheading">An identical starting plan. Two different evidence conditions.</p><div class="compare-arms"><div class="arm"><span class="arm-title">EVIDENCE <strong>OFF</strong></span><div class="arm-value" id="arm-off">—</div><p>Missing evidence cannot be treated as approval.</p></div><div class="compare-arrow" aria-hidden="true">→</div><div class="arm"><span class="arm-title">FIXTURE EVIDENCE <strong>ON</strong></span><div class="arm-value" id="arm-on">—</div><p id="arm-effect">—</p></div></div><div id="compare-validity" class="compare-validity"></div></article>
-          <article class="panel inspect-panel"><div class="panel-top"><span class="panel-index">06 / OBSERVABLE PROOF</span><span class="small-pill">INSPECTABLE</span></div><h2>Evidence inspector</h2><p class="subheading">Follow the exact revision, query fingerprint, and repair lineage.</p><div class="inspect-top"><span id="evidence-count">— evidence records</span><button id="inspect-toggle" aria-expanded="false" aria-controls="inspector-details" type="button">Open inspector <span aria-hidden="true">↗</span></button></div><div id="inspector-details" class="inspector-details" hidden><div id="inspector-data"></div></div><div class="no-execution"><span aria-hidden="true">⛨</span><div><strong>Execution blocked by design</strong><p>A structural check never grants real action permission.</p></div></div></article>
+          <article class="panel compare-panel"><div class="panel-top"><span class="panel-index">05 / CAUSALITY CHECK</span><span class="small-pill">SAME BASELINE</span></div><h2>Evidence changes the decision.</h2><p class="subheading">Same candidate pool and baseline, with and without fixture evidence.</p><div class="compare-arms"><div class="arm"><span class="arm-title">EVIDENCE <strong>OFF</strong></span><div class="arm-value" id="arm-off">—</div><p>Missing evidence cannot be treated as approval.</p></div><div class="compare-arrow" aria-hidden="true">→</div><div class="arm"><span class="arm-title">FIXTURE EVIDENCE <strong>ON</strong></span><div class="arm-value" id="arm-on">—</div><p id="arm-effect">—</p></div></div><div id="compare-validity" class="compare-validity"></div></article>
+          <article class="panel inspect-panel"><div class="panel-top"><span class="panel-index">06 / OBSERVABLE PROOF</span><span class="small-pill">INSPECTABLE</span></div><h2>Evidence inspector</h2><p class="subheading">Trace requested candidates, query fingerprint and repair lineage.</p><div class="inspect-top"><span id="evidence-count">— evidence records</span><button id="inspect-toggle" aria-expanded="false" aria-controls="inspector-details" type="button">Open inspector <span aria-hidden="true">↗</span></button></div><div id="inspector-details" class="inspector-details" hidden><div id="inspector-data"></div></div><div class="no-execution"><span aria-hidden="true">⛨</span><div><strong>Execution blocked by design</strong><p>A structural check never grants real action permission.</p></div></div></article>
         </section>
       </div>
     </main>
-    <footer><span>OFC ENGINE / EXPERIMENTAL DECISION PREFLIGHT</span><span>PROPOSE <span class="footer-arrow">→</span> CHECK <span class="footer-arrow">→</span> REPAIR <span class="footer-arrow">→</span> VERIFY <span class="footer-arrow">→</span> ACT*</span><span>*ACTION DISABLED IN THIS DEMO</span></footer>
+    <footer><span>OFC ENGINE / DECISION CONTROL</span><span>PROPOSE <span class="footer-arrow">→</span> CHECK <span class="footer-arrow">→</span> REPAIR <span class="footer-arrow">→</span> VERIFY <span class="footer-arrow">→</span> ACT*</span><span>*ACTION DISABLED IN THIS DEMO</span></footer>
   </div>
 </body>
 </html>

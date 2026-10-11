@@ -198,3 +198,13 @@ that the hosted site exists or works. Confirm both manual workflow jobs and
 inspect the real hosted UI before any public demonstration. Free instances can
 cold-start or have capacity limits; do not use this preview to carry private
 evidence or authorize real agent actions.
+
+
+### Decision workspace
+
+The preview uses a single proof-first workspace rather than a free-form
+chat view. Verdicts are inspectable per decision, with source references,
+selective changes, dependent recheck state and revision events. Status and
+short motion transitions are driven by received snapshots; reduced-motion
+users receive the same information without animation. Scenario outcomes
+remain synthetic and external execution is always disabled.
