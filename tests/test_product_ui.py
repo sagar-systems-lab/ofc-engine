@@ -54,6 +54,7 @@ def test_plan_authoring_is_distinct_from_synthetic_proof():
     assert _ASSETS["/studio.css"][0] == "studio.css"
     assert _ASSETS["/product.js"][0] == "product.js"
     assert _ASSETS["/proof-premium.css"][0] == "proof-premium.css"
+    assert _ASSETS["/optical.css"][0] == "optical.css"
     assert "localStorage" in source
     assert 'schema_version:"0.1.0"' in source
     assert 'data.release_authorized !== false' in source
@@ -99,3 +100,25 @@ def test_premium_product_surfaces_without_fake_provider_results():
     assert 'data.external_action_executed!==false' in js
     assert 'innerHTML' not in js
     assert 'setInterval(' not in js
+
+
+
+def test_optical_hardening_keeps_readable_content_and_motion_controls():
+    css = (ROOT / "optical.css").read_text(encoding="utf-8")
+    home = (ROOT / "studio.html").read_text(encoding="utf-8")
+    proof = (ROOT / "index.html").read_text(encoding="utf-8")
+    product = (ROOT / "product.js").read_text(encoding="utf-8")
+    assert 'href="/optical.css"' in home
+    assert 'href="/optical.css"' in proof
+    for token in ("--opt-ink:", "--opt-copy:", "--opt-support:", "--opt-shadow:",
+                  "radial-gradient(", "linear-gradient(", ".editor-panel",
+                  ".decision-card", ".side-link.active", ".hero-art",
+                  ".primary::before", ".primary::after"):
+        assert token in css
+    assert "prefers-reduced-motion: reduce" in css
+    assert ".motion-off *" in css
+    assert "enableOpticalReflections()" in product
+    assert "reducedMotion.matches" in product
+    assert "setInterval(" not in product
+    assert "innerHTML" not in product
+    assert not any(external in css for external in ("@import", "url(http", "url(//"))
