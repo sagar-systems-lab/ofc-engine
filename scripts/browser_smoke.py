@@ -47,6 +47,8 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("selected decision not reflected accessibly")
                     if "Focused:" not in page.locator("#evidence-count").inner_text():
                         raise BrowserFailure("selected evidence not focused")
+                    if page.locator("#inspector-data .inspection-record.selected-evidence").count() != 1:
+                        raise BrowserFailure("focused decision does not match one evidence record")
                     if page.locator('[data-stage="ACT"]').get_attribute("data-state") != "blocked":
                         raise BrowserFailure("action boundary not locked")
                     page.locator("#scenario").select_option("outage")

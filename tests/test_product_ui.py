@@ -9,7 +9,7 @@ def test_proof_first_workspace_and_provenance():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     for marker in (
         'id="lifecycle-stages"', 'id="baseline-list"', 'id="verdict-list"',
-        'id="repair-list"', 'id="inspector-details"', 'id="timeline-list"',
+        'id="repair-list"', 'id="inspector"', 'id="inspector-details"', 'id="timeline-list"',
         'id="compare-validity"', 'id="insight-text"', 'id="run-status"',
         'id="scenario"', 'aria-live="polite"', 'href="#workspace"',
         'SANDBOX / SYNTHETIC', 'NOT AUTHORIZED', 'src="/experience.js"',
