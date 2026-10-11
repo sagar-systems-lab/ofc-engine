@@ -48,6 +48,15 @@ tests prove transaction rollback before commit, not disk-loss recovery or
 cross-host restoration. This procedure is documented; a live Render rollback
 rehearsal is **not yet qualified**.
 
+## Offline release rehearsal
+
+Run `python -m scripts.rehearse_release --output release-rehearsal.json` to
+replay all four fixture scenarios, verify restart-safe proposal idempotency,
+and test SQLite backup/restoration. CI publishes the sanitized JSON report as
+`offline-release-rehearsal`. It never contacts Qloo or Render, authorizes
+real actions, proves disk-loss recovery, or substitutes for hosted deployment
+and rollback verification.
+
 ## Release boundary
 
 These checks do not establish WCAG certification, production SLOs, real
