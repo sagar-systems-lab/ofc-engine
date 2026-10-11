@@ -133,11 +133,17 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
         raise SmokeFailure("unexpected deployed build identity")
     page = client.get("/")
     if page.status != 200 or page.headers.get_content_type() != "text/html":
-        raise SmokeFailure("public proof page missing")
+        raise SmokeFailure("public plan workspace missing")
     _headers(page)
-    if b'SANDBOX / SYNTHETIC' not in page.content or b'OFC' not in page.content:
-        raise SmokeFailure("visible synthetic label absent")
-    for asset, expected_type in (("/app.js", "javascript"), ("/experience.js", "javascript"), ("/styles.css", "text/css")):
+    if b'PROVIDER PENDING' not in page.content or b'id="objective"' not in page.content:
+        raise SmokeFailure("plan editor or provider boundary missing")
+    proof = client.get("/proof")
+    if proof.status != 200 or proof.headers.get_content_type() != "text/html":
+        raise SmokeFailure("synthetic proof lab missing")
+    _headers(proof)
+    if b'SANDBOX / SYNTHETIC' not in proof.content:
+        raise SmokeFailure("fixture provenance missing")
+    for asset, expected_type in (("/app.js", "javascript"), ("/experience.js", "javascript"), ("/styles.css", "text/css"), ("/studio.js", "javascript"), ("/studio.css", "text/css")):
         response = client.get(asset)
         if response.status != 200 or expected_type not in response.headers.get_content_type():
             raise SmokeFailure("web asset missing")
