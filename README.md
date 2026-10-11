@@ -272,3 +272,28 @@ synthetic outcomes, detects changing response bodies and records observed
 p50/p95/p99 and throughput. Results depend on the host, concurrency,
 runtime and sample window. They are **not** Qloo latency measurements,
 production SLOs or public Render capacity qualifications.
+
+
+## Local agent API
+
+To submit agent-proposed plans over HTTP on the local machine, start the
+authenticated, loopback-only API. Set a high-entropy operator token in
+`OFC_AGENT_TOKEN` before starting the server:
+
+```bash
+python -m ofc_engine.agent_api --database ./ofc-agent.sqlite3 --port 8770
+```
+
+Requests to `POST /api/proposals` must include
+`Authorization: Bearer <operator token>` and a strict JSON body matching
+`examples/agent_proposal.json`. A successful submission freezes and journals the
+initial plan, returning revision-zero digests and `EVIDENCE_PENDING`. Reusing
+the same proposal is idempotent. A conflicting proposal returns HTTP 409.
+
+`GET /api/proposals/{run_id}` reports a minimal, integrity-checked
+revision and pending-recheck status without returning the original audience
+or constraints. Other operations, including action execution and release,
+are unavailable. Host/origin validation, a required bearer token, a strict
+request-size cap, and loopback binding protect this **single-operator local
+interface**. It is not suitable for public hosting or untrusted multi-tenant
+use; do not expose it through Render or copy operator tokens into Git.
