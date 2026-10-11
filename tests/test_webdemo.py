@@ -147,7 +147,7 @@ def test_canonical_example_is_the_exact_frozen_fixture_baseline():
     assert example["source_mode"] == "SYNTHETIC"
     assert example["release_authorized"] is False
     assert example["external_action_executed"] is False
-    proposal = AgentProposal.model_validate(example["example"])
+    proposal = AgentProposal.model_validate_json(json.dumps(example["example"]))
     frozen, _ = freeze_proposal(proposal)
     assert proposal == canonical_proposal()
     assert frozen == baseline_plan()
