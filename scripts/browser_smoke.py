@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
 
 from playwright.sync_api import sync_playwright
@@ -68,6 +69,28 @@ def run_browser(origin: str) -> dict:
                     page.locator("#draft-list .draft-item").first.click()
                     if page.locator("#objective").input_value() != "Custom cultural decision proposal":
                         raise BrowserFailure("reopening saved draft lost user input")
+                    example_file = Path(__file__).resolve().parents[1] / "examples" / "agent_proposal.json"
+                    page.locator("#import-file").set_input_files({
+                        "name": "agent_proposal.json", "mimeType": "application/json",
+                        "buffer": example_file.read_bytes(),
+                    })
+                    if page.locator("#taste-locality").input_value() != "three cities":
+                        raise BrowserFailure("JSON import discarded cultural locality")
+                    if page.locator("#decision-list .decision-card").count() != 3:
+                        raise BrowserFailure("JSON import discarded decisions")
+                    page.locator("#validate").click()
+                    if page.locator("#proposal-state").inner_text() != "Contract valid":
+                        raise BrowserFailure("imported typed proposal failed local validation")
+                    imported = page.request.get(origin + "/api/example").json()["example"]
+                    imported["intent"]["constraints"]["unrepresented"] = "must-not-drop"
+                    page.locator("#import-file").set_input_files({
+                        "name": "unsupported.json", "mimeType": "application/json",
+                        "buffer": json.dumps(imported).encode("utf-8"),
+                    })
+                    if "Unsupported imported fields" not in page.locator("#editor-message").inner_text():
+                        raise BrowserFailure("unsupported proposal fields were silently discarded")
+                    if page.locator("#taste-locality").input_value() != "three cities":
+                        raise BrowserFailure("failed import replaced the existing draft")
                     page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#run-status").wait_for(state="visible", timeout=40_000)
                     if page.locator("#run-status").inner_text().strip() != "INTEGRITY ONLY":
