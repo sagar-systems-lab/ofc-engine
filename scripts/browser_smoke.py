@@ -40,6 +40,7 @@ def run_browser(origin: str) -> dict:
                     if not page.locator("#export-proposal").is_disabled():
                         raise BrowserFailure("changed proposal reused stale validation")
                     page.locator("#save-draft").click()
+                    page.reload(wait_until="domcontentloaded")
                     page.locator("#draft-search").fill("Custom cultural")
                     if page.locator("#draft-list .draft-item").count() != 1:
                         raise BrowserFailure("draft save/search failed")
