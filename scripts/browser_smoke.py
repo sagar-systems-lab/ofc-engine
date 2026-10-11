@@ -29,12 +29,17 @@ def run_browser(origin: str) -> dict:
                 page.on("request", lambda request: outside.append(request.url) if not request.url.startswith(origin + "/") else None)
                 try:
                     page.goto(origin + "/", wait_until="domcontentloaded", timeout=90_000)
+                    page.locator("#home-title").wait_for(state="visible", timeout=40_000)
+                    if not page.locator(".status-label").is_visible():
+                        raise BrowserFailure("provider boundary missing from premium shell")
+                    if page.locator("#objective").is_visible():
+                        raise BrowserFailure("home should open before the plan editor")
+                    page.locator("#home-create").click()
                     page.locator("#objective").wait_for(state="visible", timeout=40_000)
-                    if not page.get_by_text("PROVIDER PENDING").is_visible():
-                        raise BrowserFailure("provider boundary missing from writable workspace")
                     if page.locator("#check-preflight").is_enabled():
                         raise BrowserFailure("unvalidated plan allowed preflight")
-                    page.locator("#load-example").click()
+                    page.locator('[data-view-link="home"]').click()
+                    page.locator("#home-example").click()
                     page.locator("#decision-list .decision-card").nth(5).wait_for(state="attached", timeout=30_000)
                     if page.locator("#decision-list .decision-card").count() != 6:
                         raise BrowserFailure("canonical fixture did not load exactly six decisions")
@@ -63,12 +68,29 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("custom review did not account for every decision")
                     page.locator("#save-draft").click()
                     page.reload(wait_until="domcontentloaded")
-                    page.locator("#draft-search").fill("Custom cultural")
-                    if page.locator("#draft-list .draft-item").count() != 1:
+                    page.locator('[data-view-link="history"]').click()
+                    page.locator("#history-search").fill("Custom cultural")
+                    if page.locator("#history-rows .history-row:not(.history-row-head)").count() != 1:
                         raise BrowserFailure("draft save/search failed")
-                    page.locator("#draft-list .draft-item").first.click()
+                    page.locator("#history-rows .history-row:not(.history-row-head) button").first.click()
                     if page.locator("#objective").input_value() != "Custom cultural decision proposal":
                         raise BrowserFailure("reopening saved draft lost user input")
+                    page.locator('[data-view-link="map"]').click()
+                    if page.locator("#map-nodes .map-node").count() != 6:
+                        raise BrowserFailure("decision map did not reflect current proposal")
+                    page.locator("#map-nodes .map-node").first.click()
+                    if page.locator("#map-selected-title").inner_text() != "brand":
+                        raise BrowserFailure("decision map inspector selection failed")
+                    page.locator('[data-view-link="evidence"]').click()
+                    page.locator("#evidence-preview .evidence-facts").wait_for(state="visible",timeout=30_000)
+                    if not page.get_by_text("SYNTHETIC FIXTURE",exact=True).is_visible():
+                        raise BrowserFailure("evidence provenance unavailable")
+                    page.locator('[data-view-link="settings"]').click()
+                    page.locator("#motion-enabled").uncheck(force=True)
+                    if "motion-off" not in page.locator("html").get_attribute("class"):
+                        raise BrowserFailure("motion preference did not apply")
+                    page.locator("#motion-enabled").check(force=True)
+                    page.locator('[data-view-link="plan"]').click()
                     example_file = Path(__file__).resolve().parents[1] / "examples" / "agent_proposal.json"
                     page.locator("#import-file").set_input_files({
                         "name": "agent_proposal.json", "mimeType": "application/json",
