@@ -208,3 +208,27 @@ selective changes, dependent recheck state and revision events. Status and
 short motion transitions are driven by received snapshots; reduced-motion
 users receive the same information without animation. Scenario outcomes
 remain synthetic and external execution is always disabled.
+
+
+## Agent proposal intake
+
+Freeze a typed agent proposal into a revision-zero plan and SQLite audit record
+without requesting Qloo evidence or allowing external actions:
+
+```bash
+python -m ofc_engine.proposal_cli --database ./ofc.sqlite3 --input examples/agent_proposal.json
+```
+
+The JSON input contains an `intent` (run ID, request ID, objective, immutable
+constraints and audience context) and a `decisions` array (selected candidate,
+fixed candidate pool, allowed mutation fields, and dependency IDs). The
+intake validates the typed graph and fingerprints the complete initial
+proposal, constraints and candidate pools. Identical retries return the same
+baseline; reusing a run ID with different content or after a revision is
+rejected. The durable record is local SQLite, not cross-host persistence.
+
+The response state is always `BASELINE_FROZEN / EVIDENCE_PENDING` with
+`release_authorized=false`. This command does **not** evaluate real cultural
+fit, authenticate provider evidence or execute an agent action. Use a
+separate run ID for a changed proposal; do not treat an old review or
+fixture result as release permission.
