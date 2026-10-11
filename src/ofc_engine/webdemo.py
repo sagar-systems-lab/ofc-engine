@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from .contracts import ActionIntent, Decision, EvidenceQuerySpec, EvidenceStatus, PlanSnapshot, QlooEvidence, SourceMode
 from .intake import AgentProposal, freeze_proposal
 from .proof import EvidenceBinding
-from .revisions import digest_obj
+from .revisions import digest_obj, plan_digest
 from .workflow import compare_fixture_arms
 
 AS_OF = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
@@ -62,7 +62,7 @@ def example_payload() -> dict:
         "external_action_executed": False,
         "provider_authenticated": False,
         "real_qloo_requests": 0,
-        "baseline_digest": baseline_plan().baseline_digest,
+        "baseline_digest": plan_digest(baseline_plan()),
         "example": canonical_proposal().model_dump(mode="json"),
     }
 
