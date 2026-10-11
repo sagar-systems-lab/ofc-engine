@@ -11,13 +11,14 @@
   const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
   const uuid = (prefix) => prefix + "-" + crypto.randomUUID();
   const split = (s) => String(s || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const seed = () => ({objective:"",budget:"",cities:"",audience:"",decisions:[]});
+  const seed = () => ({objective:"",budget:"",cities:"",audience:"",tasteLocality:"",decisions:[]});
   const proposalForm = (data) => {
     const i = data.intent, c = i.constraints || {};
     return {
       objective:i.objective, budget:String(c.budget_usd ?? ""),
       cities:Array.isArray(c.cities) ? c.cities.join(", ") : "",
       audience:typeof i.taste_context?.audience === "string" ? i.taste_context.audience : "",
+      tasteLocality:typeof i.taste_context?.locality === "string" ? i.taste_context.locality : "",
       decisions:data.decisions.map((d) => ({
         decision_id:d.decision_id, domain:d.domain,
         candidate_id:d.candidate_id,
@@ -29,6 +30,13 @@
       }))
     };
   };
+  function stableJson(value) {
+    if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
+    if (value !== null && typeof value === "object")
+      return "{" + Object.keys(value).sort().map((k) =>
+        JSON.stringify(k) + ":" + stableJson(value[k])).join(",") + "}";
+    return JSON.stringify(value);
+  }
   const comparable = (value) => JSON.stringify({
     ...value, intent:{...value.intent, run_id:"example", client_request_id:"example"}
   });
@@ -51,6 +59,7 @@
     return {
       objective: $("objective").value.trim(), budget: $("budget").value.trim(),
       audience: $("audience").value.trim(), cities: $("cities").value.trim(),
+      tasteLocality: $("taste-locality").value.trim(),
       decisions: Array.from($("decision-list").children, (card) => {
         const item = {};
         card.querySelectorAll("[data-key]").forEach((input) => {
@@ -117,7 +126,9 @@
     });
   }
   function populate(form) {
-    ["objective","budget","cities","audience"].forEach((id)=>{$(id).value=form[id]||"";});
+    ["objective","budget","cities","audience","taste-locality"].forEach((id)=>{
+      $(id).value=id==="taste-locality" ? form.tasteLocality||"" : form[id]||"";
+    });
     $("decision-list").replaceChildren();
     (form.decisions || []).slice(0,64).forEach(addDecision);
     invalidate();
@@ -160,7 +171,7 @@
     decisions.forEach((d)=>check(d.decision_id));
     const proposal={intent:{schema_version:"0.1.0",run_id:id,client_request_id:request,
       objective:form.objective,constraints:{budget_usd:Number(form.budget),cities},
-      taste_context:{audience:form.audience,locality:cities.join(", ")}},decisions};
+      taste_context:{audience:form.audience,locality:form.tasteLocality||cities.join(", ")}},decisions};
     if(JSON.stringify(proposal).length>96*1024)throw Error("Proposal exceeds 96 KiB limit.");
     return proposal;
   }
@@ -287,12 +298,14 @@
         throw Error("Expected a typed OFC agent proposal.");
       const i=data.intent;
       const form=proposalForm(data);
-      build(form,i.run_id,i.client_request_id);
+      const regenerated=build(form,i.run_id,i.client_request_id);
+      if (stableJson(regenerated) !== stableJson(data))
+        throw Error("Unsupported imported fields or values; proposal not modified.");
       draftId=uuid("draft");runId=i.run_id;requestId=i.client_request_id;populate(form);
       message("Proposal imported. Validate before saving or exporting.","ok");
     } catch(error){message(error.message||"Invalid import.","error");}
   }
-  ["objective","budget","cities","audience"].forEach((id)=>$(id).addEventListener("input",invalidate));
+  ["objective","budget","cities","audience","taste-locality"].forEach((id)=>$(id).addEventListener("input",invalidate));
   $("new-draft").addEventListener("click",()=>{fresh();$("objective").focus();});
   $("load-example").addEventListener("click",loadExample);
   $("add-decision").addEventListener("click",()=>addDecision());
