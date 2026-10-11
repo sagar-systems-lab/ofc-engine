@@ -1,0 +1,54 @@
+name: hosted qualification
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Deployed HTTPS Render URL'
+        type: string
+        required: true
+      expected_sha:
+        description: 'Optional deployed OFC_BUILD_SHA (7-40 lowercase hex chars)'
+        type: string
+        required: false
+jobs:
+  endpoint_smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      DEPLOY_URL: ${{ inputs.base_url }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify eligible hosted origin
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          u = urlsplit(os.environ['DEPLOY_URL'])
+          assert u.scheme == 'https' and (u.hostname or '').endswith('.onrender.com')
+          assert not u.username and not u.password and u.path in ('','/') and not u.query and not u.fragment
+          PY
+      - name: Verify live fixture deployment
+        run: |
+          args=(--base-url "$DEPLOY_URL" --wait-seconds 150)
+          if [ -n "$EXPECTED_SHA" ]; then args+=(--expected-sha "$EXPECTED_SHA"); fi
+          python scripts/smoke_hosted.py "${args[@]}"
+  browser_smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEPLOY_URL: ${{ inputs.base_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Chromium smoke dependencies
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Verify desktop and mobile journey
+        run: python scripts/browser_smoke.py --base-url "$DEPLOY_URL"

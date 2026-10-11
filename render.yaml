@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ofc-fixture-preview
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /readyz
+    autoDeployTrigger: "off"
