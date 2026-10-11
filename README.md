@@ -168,3 +168,33 @@ A container build is not equivalent to a deployed, monitored service. The
 public preview contains no Qloo verification, authenticated live data, user
 sessions, real-world actions or qualified cross-host persistence. Do not mount
 secrets or attach production data to this container.
+
+
+## Deploying the fixture preview
+
+The repository includes a Render Blueprint (`render.yaml`) for one Docker
+web service on the **Free** compute plan. It uses `/readyz` for health checks
+and disables automatic deployments. Connect Render to this private GitHub
+repository, review the Blueprint and its free-plan selection, and explicitly
+deploy the service. The repository stays private; only the synthetic,
+read-only web preview is intended to be publicly accessible. No databases,
+Qloo keys or environment secrets are required.
+
+After receiving the actual HTTPS `*.onrender.com` service URL, run
+the **hosted qualification** GitHub Actions workflow manually. Provide its
+`base_url` input. The two independent jobs verify HTTP security, all four
+fixture scenarios, blocked private routes, and a Chromium journey at desktop,
+375px and 320px widths. An optional `expected_sha` can be supplied only
+when `OFC_BUILD_SHA` is configured on the service to that exact revision.
+
+The same read-only HTTP check can be run without a browser:
+
+```bash
+python scripts/smoke_hosted.py --base-url https://YOUR-SERVICE.onrender.com --wait-seconds 150
+```
+
+A successful local Docker test or a checked-in Blueprint **does not establish**
+that the hosted site exists or works. Confirm both manual workflow jobs and
+inspect the real hosted UI before any public demonstration. Free instances can
+cold-start or have capacity limits; do not use this preview to carry private
+evidence or authorize real agent actions.
