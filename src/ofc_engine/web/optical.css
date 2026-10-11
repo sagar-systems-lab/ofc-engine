@@ -322,6 +322,22 @@ h1, h2, h3,
   box-shadow: inset 0 2px 4px rgba(7, 35, 107, .15), 0 5px 10px rgba(29, 90, 231, .18);
 }
 
+/* The visual switch must have a real layout box for its keyboard and pointer target. */
+.switch {
+  display: inline-block;
+  position: relative;
+  flex: 0 0 41px;
+  width: 41px;
+  height: 23px;
+}
+
+.switch input {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
 .field input,
 .field textarea,
 .decision-cell input,
