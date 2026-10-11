@@ -53,6 +53,7 @@ class SQLiteRevisionStore:
         self._timeout = float(timeout_seconds)
         conn = self._connect()
         try:
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS plans (
                     plan_id TEXT PRIMARY KEY,
@@ -90,7 +91,6 @@ class SQLiteRevisionStore:
             conn.execute(f"PRAGMA busy_timeout = {int(self._timeout * 1000)}")
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA synchronous = FULL")
-            conn.execute("PRAGMA journal_mode = WAL")
             return conn
         except BaseException:
             conn.close()
@@ -105,6 +105,21 @@ class SQLiteRevisionStore:
         if plan.revision != revision or plan_digest(plan) != stored_digest:
             raise StorageIntegrityError("stored plan revision or digest mismatch")
         return plan
+
+    @staticmethod
+    def _decode_pending(raw: str, plan: PlanSnapshot) -> tuple[str, ...]:
+        try:
+            values = json.loads(raw)
+        except (TypeError, ValueError) as exc:
+            raise StorageIntegrityError("invalid pending recheck list") from exc
+        if (
+            not isinstance(values, list)
+            or any(not isinstance(x, str) for x in values)
+            or len(values) != len(set(values))
+            or not set(values).issubset(d.decision_id for d in plan.decisions)
+        ):
+            raise StorageIntegrityError("invalid pending recheck IDs")
+        return tuple(values)
 
     @staticmethod
     def _event_payload(
@@ -177,6 +192,7 @@ class SQLiteRevisionStore:
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
+            self.audit_history(plan_id)
             saved = conn.execute(
                 "SELECT patch_digest,response_snapshot,invalidated FROM requests WHERE plan_id=? AND request_id=?",
                 (plan_id, client_request_id),
@@ -215,11 +231,8 @@ class SQLiteRevisionStore:
             if row is None:
                 raise KeyError("unknown plan")
             snapshot, revision, digest, head, pending_raw = row
-            try:
-                pending_prior = tuple(json.loads(pending_raw))
-            except (TypeError, ValueError) as exc:
-                raise StorageIntegrityError("invalid pending recheck list") from exc
             current = self._decode(snapshot, revision, digest)
+            pending_prior = self._decode_pending(pending_raw, current)
             updated, invalidated = apply_patch(current, patch)
             next_digest = plan_digest(updated)
             seq = updated.revision
@@ -260,18 +273,7 @@ class SQLiteRevisionStore:
                 raise KeyError("unknown plan")
             pending_json, snapshot, revision, digest = row
             plan = self._decode(snapshot, revision, digest)
-            try:
-                values = json.loads(pending_json)
-            except (TypeError, ValueError) as exc:
-                raise StorageIntegrityError("invalid pending recheck list") from exc
-            if (
-                not isinstance(values, list)
-                or any(not isinstance(x, str) for x in values)
-                or len(values) != len(set(values))
-                or not set(values).issubset(d.decision_id for d in plan.decisions)
-            ):
-                raise StorageIntegrityError("invalid pending recheck IDs")
-            return tuple(values)
+            return self._decode_pending(pending_json, plan)
         finally:
             conn.close()
 
