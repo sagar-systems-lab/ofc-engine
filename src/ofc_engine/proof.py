@@ -1,10 +1,4 @@
-"""Provider-neutral integrity checks for evidence-bound decision reviews.
-
-These checks validate provenance *references* and snapshot freshness, not the
-truth of external results or the quality of cultural policy judgments. Only a
-qualified evaluator and trusted provider adapter may establish those facts.
-Nothing in this module authorizes an action or creates a release artifact.
-"""
+"""Revision-bound evidence integrity checks, not provider authentication."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -62,7 +56,7 @@ class ReviewIntegrity:
 
     @property
     def eligible_for_policy_verification(self) -> bool:
-        """Integrity complete; *not* proof of cultural fit or release permission."""
+        """Review bindings are consistent; no policy or release approval implied."""
         return not self.issues
 
 
@@ -73,11 +67,9 @@ def check_review_integrity(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> ReviewIntegrity:
-    """Fail closed on stale snapshots, unresolved decisions and unbound evidence.
+    """Reject stale reviews, incomplete evidence, and mismatched source modes.
 
-    Both the review's declared source mode and provider response source mode
-    must match. A declaration of VERIFIED_LIVE is not proof of authenticity;
-    that guarantee belongs to the future trusted Qloo adapter.
+    A VERIFIED_LIVE label does not authenticate the provider.
     """
     if as_of.utcoffset() is None:
         raise ValueError("as_of must be timezone-aware")

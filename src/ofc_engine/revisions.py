@@ -1,4 +1,4 @@
-"""Provisional pure revision/dependency logic. No I/O, Qloo calls or side effects."""
+"""Pure plan revisions and dependency invalidation."""
 from __future__ import annotations
 
 from hashlib import sha256
@@ -17,7 +17,7 @@ class PatchRejected(Exception):
 
 
 def canonical_bytes(value: Any) -> bytes:
-    """Deterministic Python serialization; cross-language parity remains unverified."""
+    """Deterministic Python digest; cross-language parity is unverified."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 

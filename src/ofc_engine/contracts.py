@@ -1,8 +1,4 @@
-"""Provisional, provider-independent OFC logical contracts.
-
-Provider-derived evidence fields require live API validation. These contracts
-do not authorize external actions.
-"""
+"""Provisional, provider-independent plan and evidence contracts."""
 
 from __future__ import annotations
 

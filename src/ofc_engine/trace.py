@@ -1,9 +1,4 @@
-"""Revision-bound, human-inspectable traces for selective repair previews.
-
-These are *illustrative integrity traces*, not provider attestations, policy
-approval, release permits or externally executed actions. A trusted adapter
-and evaluator must be added before any review can become authoritative.
-"""
+"""Revision-bound traces for inspecting selective repair previews."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,7 +59,7 @@ class RepairTrace:
     release_authorized: bool = False
 
     def as_dict(self) -> dict:
-        """JSON-safe trace for a future proof inspector or demo fixture."""
+        """JSON-safe trace for inspection or a synthetic demo."""
         return {
             "plan_id": self.plan_id,
             "baseline_digest": self.baseline_digest,
@@ -116,12 +111,7 @@ def build_repair_trace(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> RepairTrace:
-    """Recompute the preview and inspect optional latest-revision recheck.
-
-    Replaying the proposal protects against callers injecting forged change sets,
-    attempts, digests or dependent-invalidation lists. An after-review with bad
-    provenance is displayed as BLOCKED, never as success. No I/O is performed.
-    """
+    """Recompute the preview; block inconsistent changes or stale reviews."""
     canonical = preview_repair(
         initial_plan, initial_ledger, before_review, patch,
         as_of=as_of, max_evidence_age=max_evidence_age,
@@ -130,7 +120,6 @@ def build_repair_trace(
         raise RepairReviewRejected("preview does not match the validated repair")
     revised = canonical.proposed_plan
     if after_review is not None and after_review.source_mode != before_review.source_mode:
-        # Mixed data provenance cannot silently become a success.
         cross_source = True
     else:
         cross_source = False
@@ -151,8 +140,6 @@ def build_repair_trace(
         if after_review.policy_version != before_review.policy_version:
             problems.add("POLICY_VERSION_CHANGED")
         if not problems:
-            # The helper validates *all* required decisions, not merely the
-            # changed one; no old PASS verdict is carried to a new revision.
             cleared = record_recheck_integrity(
                 revised, canonical.ledger, after_review,
                 as_of=as_of, max_evidence_age=max_evidence_age,
