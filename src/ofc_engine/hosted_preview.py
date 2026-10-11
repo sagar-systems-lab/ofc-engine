@@ -17,6 +17,18 @@ _TIMEOUT_SECONDS = 5
 _HEX_SHA = re.compile(r"^[0-9a-f]{7,40}$")
 
 
+def _source_revision(environment: dict[str, str]) -> str:
+    render_sha = environment.get("RENDER_GIT_COMMIT", "")
+    configured = environment.get("OFC_BUILD_SHA", "")
+    if render_sha:
+        if not re.fullmatch(r"[0-9a-f]{40}", render_sha):
+            raise ValueError("invalid Render source revision")
+        if configured and not render_sha.startswith(configured):
+            raise ValueError("configured revision conflicts with deployed source")
+        return render_sha
+    return configured or "unknown"
+
+
 def _encoded(value: dict) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
@@ -135,7 +147,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
-    sha = os.environ.get("OFC_BUILD_SHA", "unknown")
+    sha = _source_revision(os.environ)
     with HostedFixtureServer((args.bind, args.port), build_sha=sha) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
