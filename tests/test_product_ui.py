@@ -44,7 +44,7 @@ def test_plan_authoring_is_distinct_from_synthetic_proof():
     for marker in (
         'id="objective"', 'id="budget"', 'id="cities"', 'id="audience"',
         'id="decision-list"', 'id="new-draft"', 'id="draft-search"',
-        'id="save-draft"', 'id="validate"', 'id="import-file"',
+        'id="save-draft"', 'id="validate"', 'id="import-file"', 'id="taste-locality"',
         'id="export-proposal"', 'PROVIDER PENDING', 'href="/proof"',
     ):
         assert marker in html
@@ -58,6 +58,7 @@ def test_plan_authoring_is_distinct_from_synthetic_proof():
     assert 'fetch("/api/example"' in source
     assert 'innerHTML' not in source
     assert 'eval(' not in source
+    assert 'stableJson(regenerated) !== stableJson(data)' in source
 
 
 
