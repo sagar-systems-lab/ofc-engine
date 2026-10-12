@@ -92,6 +92,15 @@ def run_browser(origin: str) -> dict:
                     page.locator('[data-view-link="map"]').click()
                     if page.locator("#map-nodes .map-node").count() != 6:
                         raise BrowserFailure("decision map did not reflect current proposal")
+                    map_panel = page.locator(".map-board")
+                    before_style = map_panel.get_attribute("style") or ""
+                    before_bg = map_panel.evaluate("el => getComputedStyle(el).backgroundImage")
+                    page.mouse.move(420, 360)
+                    page.mouse.move(760, 530)
+                    after_style = map_panel.get_attribute("style") or ""
+                    after_bg = map_panel.evaluate("el => getComputedStyle(el).backgroundImage")
+                    if before_style != after_style or before_bg != after_bg:
+                        raise BrowserFailure("decision map still reacts to mouse position")
                     page.locator("#map-nodes .map-node").first.click()
                     if page.locator("#map-selected-title").inner_text() != "brand":
                         raise BrowserFailure("decision map inspector selection failed")
