@@ -126,3 +126,15 @@ def test_optical_hardening_keeps_readable_content_and_motion_controls():
     assert "setInterval(" not in product
     assert "innerHTML" not in product
     assert not any(external in css for external in ("@import", "url(http", "url(//"))
+
+
+def test_section_headings_use_crisp_display_face_without_global_font_rewrite():
+    css = (ROOT / "optical.css").read_text(encoding="utf-8")
+    assert ".editor-panel .section-head h2" in css
+    assert ".decisions-heading h2" in css
+    assert ".summary-panel h2" in css
+    assert ".panel h2" in css
+    assert '"Iowan Old Style", Baskerville, "Palatino Linotype", Georgia, serif' in css
+    assert "font-weight: 700" in css
+    assert "font-synthesis: none" in css
+    assert "text-rendering: auto" in css
