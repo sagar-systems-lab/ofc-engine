@@ -32,6 +32,15 @@ def run_browser(origin: str) -> dict:
                     page.locator("#home-title").wait_for(state="visible", timeout=40_000)
                     if not page.locator(".status-label").is_visible():
                         raise BrowserFailure("provider boundary missing from premium shell")
+                    workspace_brand = page.locator(".brand-icon").evaluate("""el => ({
+                        width: getComputedStyle(el).width,
+                        height: getComputedStyle(el).height,
+                        radius: getComputedStyle(el).borderRadius,
+                        color: getComputedStyle(el).color,
+                        text: el.textContent.trim()
+                    })""")
+                    if workspace_brand["text"] != "◇":
+                        raise BrowserFailure("workspace canonical brand mark changed")
                     if page.request.get(origin + "/optical.css").status != 200:
                         raise BrowserFailure("optical depth stylesheet not served")
                     optical = page.locator(".topbar").evaluate("""el => ({
@@ -155,6 +164,19 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("failed import replaced the existing draft")
                     page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#run-status").wait_for(state="visible", timeout=40_000)
+                    proof_brand = page.locator(".proof-brand-icon").evaluate("""el => ({
+                        width: getComputedStyle(el).width,
+                        height: getComputedStyle(el).height,
+                        radius: getComputedStyle(el).borderRadius,
+                        color: getComputedStyle(el).color,
+                        text: el.textContent.trim()
+                    })""")
+                    if proof_brand["text"] != "◇":
+                        raise BrowserFailure("proof lab is not using canonical diamond mark")
+                    if width >= 768 and proof_brand != workspace_brand:
+                        raise BrowserFailure("proof lab brand mark does not match workspace brand")
+                    if page.locator(".proof-brand-copy small").inner_text().strip() != "AGENT DECISION CONTROL":
+                        raise BrowserFailure("proof lab brand subtitle does not match workspace")
                     proof_heading = page.locator(".panel h2").first.evaluate("""el => ({
                         family: getComputedStyle(el).fontFamily,
                         weight: getComputedStyle(el).fontWeight,
