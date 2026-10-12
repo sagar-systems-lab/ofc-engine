@@ -117,8 +117,12 @@ def test_optical_hardening_keeps_readable_content_and_motion_controls():
         assert token in css
     assert "prefers-reduced-motion: reduce" in css
     assert ".motion-off *" in css
-    assert "enableOpticalReflections()" in product
-    assert "reducedMotion.matches" in product
+    assert "enableOpticalReflections" not in product
+    assert "pointermove" not in product
+    assert "--glint-x" not in product
+    assert "--glint-y" not in product
+    assert "--glint-x" not in css
+    assert "--glint-y" not in css
     assert "setInterval(" not in product
     assert "innerHTML" not in product
     assert not any(external in css for external in ("@import", "url(http", "url(//"))

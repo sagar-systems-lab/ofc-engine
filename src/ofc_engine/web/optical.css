@@ -118,8 +118,6 @@ h1, h2, h3,
   border: 1px solid var(--opt-border);
   border-top-color: rgba(255, 255, 255, .96);
   background:
-    radial-gradient(ellipse 210px 115px at var(--glint-x, 95%) var(--glint-y, 0%),
-      rgba(119, 167, 255, .16), transparent 95%),
     linear-gradient(152deg, #fff 0%, #fff 36%, #f9fbff 66%, #f1f6ff 100%);
   box-shadow: var(--opt-inset), var(--opt-shadow);
   border-radius: 19px;
@@ -388,8 +386,6 @@ h1, h2, h3,
 .history-row:not(.history-row-head) {
   border-color: #cbd9ef;
   background:
-    radial-gradient(ellipse 190px 95px at var(--glint-x, 96%) var(--glint-y, 2%),
-      rgba(92, 150, 247, .12), transparent 100%),
     linear-gradient(150deg, #fff, #f1f6ff);
   box-shadow: inset 0 1px 0 #fff, 0 8px 21px rgba(26, 68, 131, .085);
 }
@@ -529,8 +525,6 @@ h1, h2, h3,
 
 .feature-primary {
   background:
-    radial-gradient(ellipse 240px 140px at var(--glint-x, 96%) var(--glint-y, 0%),
-      rgba(130, 183, 255, .20), transparent),
     linear-gradient(135deg, #f9fcff, #eaf2ff 80%, #fff);
 }
 
