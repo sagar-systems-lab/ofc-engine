@@ -138,3 +138,17 @@ def test_section_headings_use_crisp_display_face_without_global_font_rewrite():
     assert "font-weight: 700" in css
     assert "font-synthesis: none" in css
     assert "text-rendering: auto" in css
+
+
+def test_proof_lab_uses_canonical_workspace_brand_identity():
+    studio = (ROOT / "studio.html").read_text(encoding="utf-8")
+    proof = (ROOT / "index.html").read_text(encoding="utf-8")
+    css = (ROOT / "proof-premium.css").read_text(encoding="utf-8")
+    assert 'class="brand-icon" aria-hidden="true">◇</span>' in studio
+    assert 'class="proof-brand-icon" aria-hidden="true">◇</span>' in proof
+    assert 'AGENT DECISION CONTROL' in studio
+    assert 'AGENT DECISION CONTROL' in proof
+    assert 'class="brand-mark"' not in proof
+    assert 'class="wordmark"' not in proof
+    assert ".proof-brand-icon" in css
+    assert ".proof-brand-line b" in css
