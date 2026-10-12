@@ -578,3 +578,19 @@ h1, h2, h3,
   transition: none !important;
   scroll-behavior: auto !important;
 }
+
+
+/* Section titles use the same crisp display face as the proven serif headings.
+   Sizes and layout stay unchanged; only family/weight/rendering role changes. */
+.editor-panel .section-head h2,
+.decisions-heading h2,
+.summary-panel h2,
+.panel h2 {
+  font-family: "Iowan Old Style", Baskerville, "Palatino Linotype", Georgia, serif;
+  font-weight: 700;
+  font-synthesis: none;
+  text-rendering: auto;
+  letter-spacing: -.032em;
+  line-height: 1.14;
+  text-shadow: none;
+}
