@@ -46,6 +46,15 @@ def run_browser(origin: str) -> dict:
                     page.locator("#objective").wait_for(state="visible", timeout=40_000)
                     if page.locator("#check-preflight").is_enabled():
                         raise BrowserFailure("unvalidated plan allowed preflight")
+                    heading_style = page.locator("#draft-title").evaluate("""el => ({
+                        family: getComputedStyle(el).fontFamily,
+                        weight: getComputedStyle(el).fontWeight,
+                        size: parseFloat(getComputedStyle(el).fontSize)
+                    })""")
+                    if "Georgia" not in heading_style["family"] or heading_style["weight"] != "700":
+                        raise BrowserFailure("plan section heading is not using the crisp display role")
+                    if heading_style["size"] < 20:
+                        raise BrowserFailure("plan section heading size was unintentionally reduced")
                     card_style = page.locator(".editor-panel").evaluate("""el => ({
                         shadow: getComputedStyle(el).boxShadow,
                         textColor: getComputedStyle(el.querySelector('.section-head h2')).color
@@ -146,6 +155,15 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("failed import replaced the existing draft")
                     page.goto(origin + "/proof", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#run-status").wait_for(state="visible", timeout=40_000)
+                    proof_heading = page.locator(".panel h2").first.evaluate("""el => ({
+                        family: getComputedStyle(el).fontFamily,
+                        weight: getComputedStyle(el).fontWeight,
+                        size: parseFloat(getComputedStyle(el).fontSize)
+                    })""")
+                    if "Georgia" not in proof_heading["family"] or proof_heading["weight"] != "700":
+                        raise BrowserFailure("proof panel heading is not using the crisp display role")
+                    if proof_heading["size"] < 20:
+                        raise BrowserFailure("proof panel heading size was unintentionally reduced")
                     if page.locator("#run-status").inner_text().strip() != "INTEGRITY ONLY":
                         raise BrowserFailure("initial fixture check not visible")
                     if not page.get_by_text("SANDBOX / SYNTHETIC").is_visible():
