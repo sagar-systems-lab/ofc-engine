@@ -109,10 +109,16 @@ def run_browser(origin: str) -> dict:
                     if not page.get_by_text("SYNTHETIC FIXTURE",exact=True).is_visible():
                         raise BrowserFailure("evidence provenance unavailable")
                     page.locator('[data-view-link="settings"]').click()
-                    page.locator("#motion-enabled").uncheck(force=True)
-                    if "motion-off" not in page.locator("html").get_attribute("class"):
+                    motion_switch = page.locator(".switch")
+                    motion_switch.scroll_into_view_if_needed()
+                    motion_switch.click()
+                    if page.locator("#motion-enabled").is_checked():
+                        raise BrowserFailure("motion toggle did not switch off")
+                    if "motion-off" not in (page.locator("html").get_attribute("class") or ""):
                         raise BrowserFailure("motion preference did not apply")
-                    page.locator("#motion-enabled").check(force=True)
+                    motion_switch.click()
+                    if not page.locator("#motion-enabled").is_checked():
+                        raise BrowserFailure("motion toggle did not switch back on")
                     page.locator('[data-view-link="plan"]').click()
                     example_file = Path(__file__).resolve().parents[1] / "examples" / "agent_proposal.json"
                     page.locator("#import-file").set_input_files({
