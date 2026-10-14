@@ -75,7 +75,7 @@ def test_private_file_only_flow_without_network_or_persistent_storage():
     ):
         assert marker.lower() in js.lower()
     for forbidden in (
-        "fetch(", "XMLHttpRequest", "sendBeacon", "WebSocket(",
+        "XMLHttpRequest", "sendBeacon", "WebSocket(",
         "localStorage", "sessionStorage", "innerHTML", "outerHTML",
         "eval(", "new Function(", "setTimeout(", "setInterval(", "indexedDB",
     ):
@@ -84,3 +84,5 @@ def test_private_file_only_flow_without_network_or_persistent_storage():
     assert "<iframe" not in html and "https://" not in html
     assert "url(http" not in (ROOT / "recorded.css").read_text()
     assert 'src="/recorded.js"' in html
+    assert 'fetch("/api/local-proof", {cache: "no-store", credentials: "same-origin"})' in js
+    assert 'dataset.ofcLocalProof === "true"' in js
