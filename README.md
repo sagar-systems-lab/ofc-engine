@@ -1,6 +1,6 @@
 # OFC Engine
 
-A pre-execution cultural decision layer for autonomous agents. **This repository skeleton is a key-independent foundation, not the product or a live Qloo integration.**
+A pre-execution cultural decision layer for autonomous agents. The public preview is a read-only synthetic demo; operator-only Qloo search, recorded affinity ranking, and revision-bound repair replay are separate. **Recorded ranking is not trusted live cultural approval or execution authorization.**
 
 ## Current implementation
 
@@ -20,7 +20,7 @@ A pre-execution cultural decision layer for autonomous agents. **This repository
   and same-baseline evidence OFF/ON comparison (not live Qloo causality).
 - Unit/negative tests and fast CI.
 
-No Qloo credential, API requests, trusted agent orchestration, persisted provider evidence, external execution, or live causal results are present. `PASS/REPAIR/UNCERTAIN` in model definitions are contract enums, not currently running policy.
+No Qloo credentials or raw provider captures are committed. A local operator can explicitly request bounded Qloo data, inspect private captures, and run recorded rank-only decisions. Provider authentication, trusted real-world suitability policy, real causal proof, and action execution remain unqualified. `PASS/REPAIR/UNCERTAIN` in recorded previews are narrow affinity-rank verdicts, not general cultural certification.
 
 ## Quick start
 
@@ -306,3 +306,8 @@ are unavailable. Host/origin validation, a required bearer token, a strict
 request-size cap, and loopback binding protect this **single-operator local
 interface**. It is not suitable for public hosting or untrusted multi-tenant
 use; do not expose it through Render or copy operator tokens into Git.
+
+
+## Recorded Qloo qualification
+
+Private captured affinity results can drive a fixed-pool rank-only review and bounded recorded replay. The operator CLI defaults to cache reuse and blocks unapproved fresh requests. For a private redacted proof export with a local digest check, see [recorded proof export](docs/qloo_recorded_proof_export.md). If the response is old, use explicit historical replay; never relabel it as fresh. The public site remains synthetic-only.
