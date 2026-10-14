@@ -30,3 +30,39 @@ A successful response contains per-decision `PASS / REPAIR / UNCERTAIN`, recorde
 A token is required even on loopback. Do not put it in browser JavaScript or on a public Render service. This API is local only, not designed for external multi-user hosting.
 
 This is the agent-facing **recorded evidence review** milestone, not a verified live release gate. A fresh response obtained via `qloo_live_recheck` can be inspected here without another provider request; pending verification and action release remain blocked until separate trusted evidence policy and authority are qualified.
+
+
+## One-command connected operator workspace
+
+For the already repaired **single-decision** plan, use one local command with the original and later saved Qloo captures. There is no Qloo traffic, no auto-retry, no new patch and no release transition:
+
+```bash
+python -m ofc_engine.agent_workspace \
+  --database "$DB" \
+  --proposal "$PROPOSAL" \
+  --capture "$ORIGINAL_CAPTURE" \
+  --recheck-capture "$FRESH_CAPTURE" \
+  --artist-id "$ARTIST_ID" \
+  --brands "$BRAND_IDS" \
+  --decision-id brand
+```
+
+The command validates the stored revision, both saved captures and the private proof manifest before binding two loopback-only servers. It prints one **Recorded Proof browser URL** and one **authenticated Agent Review API URL**. Both use the same evidence in memory. The browser uses the already-existing OFC Recorded Proof UI; styling and public routes are unchanged.
+
+A random local API bearer token is generated and saved outside the repository in a permission-restricted file when `OFC_AGENT_TOKEN` is unset. The terminal displays **only the token file path**, not its contents. You can inspect the authenticated API locally with:
+
+```bash
+TOKEN=$(cat "/path/printed/in/token_file")
+curl --fail --silent \
+  -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:LOCAL_API_PORT/api/proposals/PLAN_ID/review"
+unset TOKEN
+```
+
+When the process ends normally, the generated token file is deleted. If using an externally configured `OFC_AGENT_TOKEN`, no token file is created. Keep all captured responses and local token files off GitHub and public hosting.
+
+For old evidence add `--historical` **explicitly**. It uses a historical point-in-time reference and labels both browser proof and API response; historical replay cannot certify current suitability. Do not use this flag to claim fresh verification.
+
+The read-only session currently supports the previously stored one-decision rank repair for the proof viewer, while the underlying agent API can also accept evidence indexes for multiple independent brand decisions. It cannot certify locality or dependent cultural choices. The recorded-rank PASS never clears SQLite pending rechecks, authenticates the provider, or authorizes execution.
+
+The two bound URLs are local operator interfaces, not production hosted endpoints. Stop with Ctrl+C after reviewing. Never forward the generated bearer token to browser code.
