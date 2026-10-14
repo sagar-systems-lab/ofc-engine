@@ -58,7 +58,7 @@ def inspect(root: Path = ROOT) -> dict:
         ),
         "submission_docs_present": all(
             (root / name).is_file()
-            for name in ("docs/SUBMISSION.md", "docs/JUDGE_QUICKSTART.md")
+            for name in ("docs/PROJECT.md", "docs/TRY_IT.md")
         ),
     }
     return {
