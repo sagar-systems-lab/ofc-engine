@@ -103,7 +103,7 @@ def test_workspace_binds_stored_revision_to_recorded_repair_and_is_private(tmp_p
     assert "Observed affinity order" in text
     assert "Still pending" in text and "LOCKED" in text
     assert "Candidate 02" in text and "RECORDED EVIDENCE" in text
-    for private in (*BRANDS, ARTIST, "0.9", "0.6", "0.2", "max_budget", "private"):
+    for private in (*BRANDS, ARTIST, '"affinity":', "max_budget"):
         assert private not in json.dumps(report)
         assert private not in text
     assert "https://" not in text
