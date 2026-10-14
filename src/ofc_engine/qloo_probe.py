@@ -59,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.capture and not args.live:
         raise SystemExit("--capture requires --live")
+    if args.live and args.locality:
+        raise SystemExit("Brand locality parameters are not qualified for this entity type; live request blocked")
     if not args.live:
         print(json.dumps({
             "mode": "DRY_RUN_NO_NETWORK", "endpoint": spec.path,
