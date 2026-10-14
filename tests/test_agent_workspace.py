@@ -88,22 +88,14 @@ def prepare(tmp_path, db, paths, **kw):
 
 @contextmanager
 def running(workspace):
-    threads = [
-        Thread(target=workspace.agent.serve_forever, daemon=True),
-        Thread(target=workspace.proof.serve_forever, daemon=True),
-    ]
-    for thread in threads:
-        thread.start()
+    thread = Thread(target=workspace.server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{workspace.server.server_port}"
     try:
-        yield (
-            f"http://127.0.0.1:{workspace.agent.server_port}",
-            f"http://127.0.0.1:{workspace.proof.server_port}",
-        )
+        yield base, base
     finally:
-        workspace.agent.shutdown()
-        workspace.proof.shutdown()
-        for thread in threads:
-            thread.join(timeout=5)
+        workspace.server.shutdown()
+        thread.join(timeout=5)
         workspace.close()
 
 
@@ -144,8 +136,15 @@ def test_connected_session_exposes_authenticated_review_and_existing_proof(
         assert request(review_url, token=TOKEN, headers={"Host": "evil.test"})[0] == 403
         assert request(review_url, token=TOKEN, method="POST")[0] == 405
         assert request(agent + "/api/proposals/other/review", token=TOKEN)[0] == 404
+        from importlib.resources import files as package_files
+
         code, page, _ = request(proof + "/")
-        assert code == 200 and b"data-ofc-local-proof" in page
+        assert code == 200
+        assert page == package_files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+        assert b"Decision Workspace" in page
+        code, recorded_page, _ = request(proof + "/recorded")
+        assert code == 200 and b'data-ofc-local-proof="true"' in recorded_page
+        assert b"Recorded Proof" in recorded_page
         code, data, _ = request(proof + "/api/local-proof")
         manifest = json.loads(data)
         assert code == 200
@@ -154,7 +153,7 @@ def test_connected_session_exposes_authenticated_review_and_existing_proof(
         assert manifest["payload"]["plan"]["stored_digest"] == result["plan_digest"]
         assert request(proof + "/api/local-proof", method="POST")[0] == 405
         assert request(proof + "/api/local-proof", headers={"Host": "evil.test"})[0] == 403
-        for payload in (body, data, page):
+        for payload in (body, data, page, recorded_page):
             assert ARTIST.encode() not in payload
             assert all(brand.encode() not in payload for brand in BRANDS)
             assert TOKEN.encode() not in payload
@@ -224,3 +223,22 @@ def test_wrong_database_and_symlink_capture_fail_closed(tmp_path, monkeypatch):
     linked_db.symlink_to(db)
     with pytest.raises(ValueError):
         prepare(tmp_path, linked_db, paths, auth_token=TOKEN)
+
+
+def test_one_origin_rejects_rebinding_and_keeps_public_fixture_routes(tmp_path, monkeypatch):
+    _, db, paths = files(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    workspace = prepare(tmp_path, db, paths, auth_token=TOKEN)
+    with running(workspace) as (base, same_base):
+        assert base == same_base
+        for path in ("/", "/recorded", "/api/local-proof", "/api/demo?scenario=repair"):
+            assert request(base + path)[0] == 200
+            assert request(base + path, headers={"Host": "attacker.test"})[0] == 403
+            assert request(base + path, headers={"Origin": "https://attacker.test"})[0] == 403
+            assert request(base + path, headers={"Sec-Fetch-Site": "cross-site"})[0] == 403
+        assert request(base + "/api/local-proof?bad=1")[0] == 400
+        assert request(base + "/api/execute")[0] == 404
+        assert request(base + "/api/local-proof", method="POST")[0] == 405
+        assert request(base + "/api/proposals/connected-operator-001/review")[0] == 401
+        assert request(base + "/recorded.css")[0] == 200
+        assert request(base + "/studio.js")[0] == 200
