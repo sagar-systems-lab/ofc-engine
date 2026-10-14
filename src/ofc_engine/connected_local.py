@@ -1,7 +1,6 @@
 """One loopback origin for the frozen studio, private proof, and agent intake."""
 from __future__ import annotations
 
-import hmac
 import json
 from importlib.resources import files
 from urllib.parse import urlsplit
