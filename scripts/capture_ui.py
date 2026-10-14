@@ -40,7 +40,8 @@ def capture(origin: str, directory: Path) -> None:
                         outside.append(request.url)
                         if not request.url.startswith(origin + "/") else None)
                 try:
-                    page.goto(origin + path, wait_until="networkidle", timeout=30000)
+                    print(f"CAPTURE_FRAME: {name}", flush=True)
+                    page.goto(origin + path, wait_until="domcontentloaded", timeout=30000)
                     if click:
                         page.locator(click).click()
                     page.locator(marker).wait_for(state="visible", timeout=12000)
