@@ -119,6 +119,8 @@ def run_integrated_gate(
     """
     if as_of.utcoffset() is None or max_evidence_age <= timedelta(0):
         raise AgentEvidenceRejected("INVALID_EVIDENCE_WINDOW")
+    if commit and historical:
+        raise AgentEvidenceRejected("HISTORICAL_CAPTURE_CANNOT_COMMIT")
     if commit and (acknowledgement != _ACK or not request_id or not _REQUEST.fullmatch(request_id)):
         raise AgentEvidenceRejected("EXPLICIT_COMMIT_ACK_REQUIRED")
     if recheck_sources is not None and commit:
@@ -211,6 +213,10 @@ def run_integrated_gate(
             journal_head=events[-1].event_hash, historical=historical,
         )
 
+    if recheck_sources is not None and current == baseline:
+        raise AgentEvidenceRejected("RECHECK_BEFORE_REPAIR")
+    if commit:
+        raise AgentEvidenceRejected("STORED_REPAIR_ALREADY_PRESENT")
     if current.revision != 1 or len(history) != 2 or history[-1].kind != "PATCH":
         raise AgentEvidenceRejected("UNSUPPORTED_STORED_REVISION")
     changed = [
