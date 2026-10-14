@@ -254,3 +254,50 @@ def test_bad_capture_blocks_preflight_before_network(tmp_path):
     with pytest.raises(ValueError):
         invoke(store, p, original, client, tmp_path)
     assert transport.calls == 0
+
+
+def test_historical_original_reference_can_preflight_without_new_request(tmp_path):
+    _, store, p, original = seeded(tmp_path)
+    original["summary"]["utc_collected_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=6)
+    ).isoformat()
+    spec, before, reservation = _preflight(
+        store, p, original, decision_id="brand", artist_id=ARTIST,
+        brand_ids=BRANDS, as_of=datetime.now(timezone.utc),
+        max_evidence_age=timedelta(hours=24),
+    )
+    assert spec == SPEC
+    assert before["historical_original_reference"] is True
+    assert before["status"] == "ORIGINAL_CAPTURE_REPLAY_ONLY"
+    assert before["pending_recheck_ids"] == ["brand"]
+    assert len(reservation) == 64
+    assert store.pending_rechecks(p.intent.run_id) == ("brand",)
+
+
+def test_historical_original_with_new_mock_response_remains_blocked(tmp_path):
+    _, store, p, original = seeded(tmp_path)
+    original["summary"]["utc_collected_at"] = (
+        datetime.now(timezone.utc) - timedelta(days=6)
+    ).isoformat()
+    client, transport = fresh_client()
+    result, captured, reserved = invoke(store, p, original, client, tmp_path)
+    assert transport.calls == 1
+    assert len(captured) == len(reserved) == 1
+    assert result["historical_original_reference"] is True
+    assert result["status"] == "FRESH_QLOO_RANK_PASS_REVIEW_PENDING"
+    assert result["provider_authenticated"] is False
+    assert result["independent_recheck_completed"] is False
+    assert result["pending_recheck_cleared"] is False
+    assert result["release_authorized"] is False
+    assert store.pending_rechecks(p.intent.run_id) == ("brand",)
+
+
+def test_future_original_capture_rejected_before_request(tmp_path):
+    _, store, p, original = seeded(tmp_path)
+    original["summary"]["utc_collected_at"] = (
+        datetime.now(timezone.utc) + timedelta(days=1)
+    ).isoformat()
+    client, transport = fresh_client()
+    with pytest.raises(ValueError, match="ORIGINAL_CAPTURE_FROM_FUTURE"):
+        invoke(store, p, original, client, tmp_path)
+    assert transport.calls == 0
