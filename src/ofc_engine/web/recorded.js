@@ -18,7 +18,6 @@
   const validDate = (value) => typeof value === "string" &&
     value.length >= 20 && value.length <= 40 && Number.isFinite(Date.parse(value));
   const validAlias = (value) => typeof value === "string" && ALIAS.test(value);
-  const count = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 64;
   const put = (id, value) => { $(id).textContent = String(value); };
   const stableJson = (value) => {
     if (Array.isArray(value)) return "[" + value.map(stableJson).join(",") + "]";
