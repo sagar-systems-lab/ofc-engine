@@ -183,7 +183,19 @@ def test_dependency_and_locality_cannot_be_certified(tmp_path):
     store, p = seeded(tmp_path, second=True, dependent=True)
     with pytest.raises(AgentEvidenceRejected, match="UNSUPPORTED_DEPENDENT_OR_LOCAL_DECISION"):
         run(store, p, sources(second=True))
-    store2, p2 = seeded(tmp_path / "other", locality="Chicago")
+
+
+def test_historical_mode_cannot_mutate_and_repeated_commit_is_blocked(tmp_path):
+    store, p = seeded(tmp_path)
+    mapping = sources()
+    with pytest.raises(AgentEvidenceRejected, match="HISTORICAL_CAPTURE_CANNOT_COMMIT"):
+        run(store, p, mapping, commit=True, historical=True,
+            request_id="history", acknowledgement=ACK)
+    with pytest.raises(AgentEvidenceRejected, match="RECHECK_BEFORE_REPAIR"):
+        run(store, p, mapping, recheck_sources=mapping)
+    run(store, p, mapping, commit=True, request_id="initial", acknowledgement=ACK)
+    with pytest.raises(AgentEvidenceRejected, match="STORED_REPAIR_ALREADY_PRESENT"):
+        run(store, p, mapping, commit=True, request_id="another", acknowledgement=ACK)
 
 
 def test_locality_source_rejected(tmp_path):
