@@ -14,21 +14,22 @@
 <div class="shell">
 <aside class="sidebar" aria-label="Primary navigation">
   <a class="brand" href="#home"><span class="brand-icon" aria-hidden="true">◇</span><span>OFC <b>ENGINE</b><small>AGENT DECISION CONTROL</small></span></a>
-  <div class="nav-heading">YOUR WORKSPACE</div>
-  <nav class="nav-stack" aria-label="Product sections">
-    <a class="side-link active" href="#home" data-view-link="home"><span class="side-icon">⌂</span><span>Home<small>Overview</small></span></a>
-    <a class="side-link" href="#plan" data-view-link="plan"><span class="side-icon">▤</span><span>Plan builder<small>Create & validate</small></span></a>
-    <a class="side-link" href="#map" data-view-link="map"><span class="side-icon">◇</span><span>Decision map<small>Explore dependencies</small></span></a>
-    <a class="side-link" href="#evidence" data-view-link="evidence"><span class="side-icon">◫</span><span>Evidence<small>Fixture inspection</small></span></a>
-    <a class="side-link" href="#history" data-view-link="history"><span class="side-icon">◷</span><span>Draft history<small>Local saves</small></span></a>
-    <a class="side-link" href="/proof"><span class="side-icon">⌘</span><span>Proof lab<small>Compare OFF / ON</small></span><span class="nav-arrow">↗</span></a>
-    <a class="side-link" href="/recorded"><span class="side-icon">◈</span><span>Recorded proof<small>Open local manifest</small></span><span class="nav-arrow">↗</span></a>
+  <nav class="nav-stack primary-nav" aria-label="Main sections">
+    <a class="side-link active" href="#home" data-view-link="home"><span class="side-icon">⌂</span><span>Home<small>Start here</small></span></a>
+    <a class="side-link" href="#plan" data-view-link="plan"><span class="side-icon">▤</span><span>Create a plan<small>Build your decisions</small></span></a>
+    <a class="side-link" href="/proof"><span class="side-icon">▶</span><span>Try the demo<small>Interactive example</small></span></a>
+    <a class="side-link" href="/recorded"><span class="side-icon">◈</span><span>Recorded proof<small>View saved evidence</small></span></a>
   </nav>
-  <div class="nav-heading system-heading">SYSTEM</div>
-  <nav class="nav-stack" aria-label="System">
-    <a class="side-link" href="#provider" data-view-link="provider"><span class="side-icon">⛨</span><span>Provider status<small>Fail-closed state</small></span></a>
-    <a class="side-link" href="#settings" data-view-link="settings"><span class="side-icon">⚙</span><span>Settings<small>Local preferences</small></span></a>
-  </nav>
+  <details class="more-tools" id="more-tools">
+    <summary>More tools <span aria-hidden="true">⌄</span></summary>
+    <nav class="nav-stack advanced-nav" aria-label="Additional tools">
+      <a class="side-link" href="#map" data-view-link="map"><span class="side-icon">◇</span><span>Decision map<small>Connections</small></span></a>
+      <a class="side-link" href="#evidence" data-view-link="evidence"><span class="side-icon">◫</span><span>Test scenarios<small>Synthetic checks</small></span></a>
+      <a class="side-link" href="#history" data-view-link="history"><span class="side-icon">◷</span><span>Saved drafts<small>This device</small></span></a>
+      <a class="side-link" href="#provider" data-view-link="provider"><span class="side-icon">⛨</span><span>Provider status<small>Connection state</small></span></a>
+      <a class="side-link" href="#settings" data-view-link="settings"><span class="side-icon">⚙</span><span>Settings<small>Preferences</small></span></a>
+    </nav>
+  </details>
   <div class="sidebar-actions"><button id="new-draft" type="button" class="side-action">＋ &nbsp; New plan</button><button id="load-example" type="button" class="side-secondary">◇ &nbsp; Load tour example</button></div>
   <div class="history-head"><span class="group-label">RECENT DRAFTS</span><span id="draft-count">0</span></div>
   <label class="search-wrap"><span class="visually-hidden">Search saved drafts</span><span aria-hidden="true">⌕</span><input id="draft-search" type="search" maxlength="100" autocomplete="off" placeholder="Find a draft…"></label>
@@ -36,40 +37,42 @@
   <div class="sidebar-bottom"><div class="rail-status"><span class="rail-dot"></span><div><strong>Synthetic workspace</strong><small>No Qloo API connected</small></div></div><p>Drafts stay on this device. Never mistaken for authenticated run history.</p><button id="clear-drafts" type="button" class="text-action">Clear saved drafts</button></div>
 </aside>
 <main id="main" class="main">
-  <header class="topbar"><div class="crumb"><strong id="breadcrumb-title">Overview</strong><span>/</span> OFC Engine</div><label class="global-search"><span aria-hidden="true">⌕</span><span class="visually-hidden">Search drafts or sections</span><input id="global-search" type="search" placeholder="Search drafts or sections…" autocomplete="off" maxlength="100"><kbd>Ctrl K</kbd></label><div class="top-right"><span class="status-label">● &nbsp; SYNTHETIC / PROVIDER PENDING</span><a class="top-proof" href="/proof">Proof lab ↗</a><a class="top-gear" href="#settings" aria-label="Settings">⚙</a></div></header>
+  <header class="topbar"><div class="crumb"><strong id="breadcrumb-title">Overview</strong><span>/</span> OFC Engine</div><label class="global-search"><span aria-hidden="true">⌕</span><span class="visually-hidden">Search drafts or sections</span><input id="global-search" type="search" placeholder="Search drafts or sections…" autocomplete="off" maxlength="100"><kbd>Ctrl K</kbd></label><div class="top-right"><span class="status-label">● &nbsp; DEMO MODE · NO LIVE APPROVAL</span><a class="top-proof" href="/proof">Try demo →</a><a class="top-gear" href="#settings" aria-label="Settings">⚙</a></div></header>
   <div class="main-scroll">
   <section class="surface-view home-view" id="view-home" aria-labelledby="home-title">
     <div class="home-grid">
       <div class="home-copy">
-        <div class="eyebrow">A SECOND OPINION FOR AGENT DECISIONS <span class="eyebrow-star">✦</span></div>
-        <h1 id="home-title">Good plans deserve a <em>second opinion.</em></h1>
-        <p class="home-lede">Know what to change. <strong>Keep what works.</strong> An evidence-conscious decision layer for agents, built to question choices before execution.</p>
-        <div class="home-actions"><button id="home-create" type="button" class="primary hero-button">Create a plan <span>↗</span></button><button id="home-example" type="button" class="secondary hero-button">Explore six-decision demo <span>→</span></button></div>
-        <div class="home-honesty"><span>◉</span> Preview is interactive. Cultural judgments require Qloo evidence.</div>
+        <div class="eyebrow">A SAFETY CHECK FOR AI AGENTS</div>
+        <h1 id="home-title">Better decisions.<br><em>Before they happen.</em></h1>
+        <p class="home-lede">Your AI agent makes a plan. OFC checks the choices, suggests a focused fix, and shows you why—before anything happens.</p>
+        <div class="home-actions">
+          <button id="home-example" type="button" class="primary hero-button">Try the demo <span aria-hidden="true">→</span></button>
+          <button id="home-create" type="button" class="secondary hero-button">Create a plan <span aria-hidden="true">↗</span></button>
+        </div>
+        <p class="home-honesty">Interactive demo uses example data. Real Qloo proof is available separately.</p>
       </div>
-      <div class="hero-art" aria-label="Illustrative decision path, not live evidence" role="img">
-        <div class="art-grid"></div><div class="art-halo"></div><div class="art-route route-one"></div><div class="art-route route-two"></div>
-        <div class="art-core"><div class="art-core-icon">◈</div><span>YOUR PLAN</span><strong>Six decisions</strong><small>One frozen baseline</small></div>
-        <div class="art-tile tile-brand"><div class="tile-emoji">◇</div><span><strong>Brand partner</strong><small>Candidate choices</small></span><i class="tile-neutral">1</i></div>
-        <div class="art-tile tile-venue"><div class="tile-emoji">▣</div><span><strong>City venues</strong><small>Three locations</small></span><i class="tile-neutral">3</i></div>
-        <div class="art-tile tile-artist"><div class="tile-emoji orange">♫</div><span><strong>Opening act</strong><small>Depends on evidence</small></span><i class="tile-amber">?</i></div>
-        <div class="art-tile tile-after"><div class="tile-emoji violet">✦</div><span><strong>Afterparty</strong><small>Dependent decision</small></span><i class="tile-neutral">1</i></div>
-        <div class="hero-orbit orbit-a"></div><div class="hero-orbit orbit-b"></div><div class="art-caption">DESIGN ILLUSTRATION · NOT PROVIDER RESULTS</div>
+      <div class="simple-preview" aria-label="Illustrative decision example, not live provider evidence">
+        <div class="preview-top"><span>HOW OFC HELPS</span><span class="preview-sample">EXAMPLE ONLY</span></div>
+        <div class="preview-choice"><span class="choice-icon">▤</span><div><small>ORIGINAL CHOICE</small><strong>Brand partner A</strong></div><span class="choice-tag">Needs review</span></div>
+        <div class="preview-connector" aria-hidden="true"><span>↓</span></div>
+        <div class="preview-choice selected"><span class="choice-icon">✓</span><div><small>FOCUSED REPAIR</small><strong>Brand partner B</strong></div><span class="choice-tag">Suggested</span></div>
+        <p>Change one choice. Keep the rest of the plan.</p>
+        <div class="preview-footer"><span>Proof included</span><span>Action stays locked <span aria-hidden="true">●</span></span></div>
       </div>
     </div>
-    <div class="home-band" aria-label="Current product boundaries">
-      <div><span class="band-icon blue">▤</span><span><strong id="home-draft-count">0</strong><small>Local saved drafts</small></span></div>
-      <div><span class="band-icon teal">◇</span><span><strong>6</strong><small>Canonical fixture decisions</small></span></div>
-      <div><span class="band-icon orange">◷</span><span><strong>4</strong><small>Testable fixture scenarios</small></span></div>
-      <div><span class="band-icon gray">⛨</span><span><strong>LOCKED</strong><small>External action authority</small></span></div>
+    <div class="home-band" aria-label="What the product does">
+      <div><span class="band-icon blue">1</span><span><strong>Plan</strong><small>Start with an agent's choices</small></span></div>
+      <div><span class="band-icon teal">2</span><span><strong>Check</strong><small>See which choice needs attention</small></span></div>
+      <div><span class="band-icon orange">3</span><span><strong>Improve</strong><small>Change only what is necessary</small></span></div>
     </div>
     <div class="home-bottom">
-      <article class="feature-card feature-primary"><span class="mini-eyebrow">GET STARTED / 01</span><h2>From a question to a <em>reviewable plan.</em></h2><p>Write intent, pin the candidate pool, and inspect what is missing before your agent acts.</p><button id="home-build" class="subtle-cta" type="button">Open plan builder <span>↗</span></button><div class="feature-ornament">01 / PROPOSE <span>→</span> 02 / CHECK <span>→</span> 03 / VERIFY</div></article>
-      <article class="feature-card"><span class="mini-eyebrow">SEE IT WORK / 02</span><h2>One controlled experiment.</h2><p>Same frozen plan. Evidence OFF versus synthetic fixture evidence ON. Every changed decision is traceable.</p><a class="subtle-cta" href="/proof">Inspect proof lab <span>↗</span></a><div class="feature-stack"><span>BASELINE</span><span>⇢</span><span>REPAIR TRACE</span><span>⇢</span><span>RECHECK</span></div></article>
+      <article class="feature-card feature-primary"><span class="mini-eyebrow">EXPERIENCE THE PRODUCT</span><h2>See it work on a tour plan.</h2><p>Explore a six-decision example, including what changes when evidence is available.</p><a class="subtle-cta" href="/proof">Open interactive demo <span aria-hidden="true">→</span></a><div class="feature-ornament">Example data · No external actions</div></article>
+      <article class="feature-card"><span class="mini-eyebrow">ACTUAL RECORDED EXPERIMENT</span><h2>See the evidence behind a repair.</h2><p>Open a saved Qloo ranking and inspect the stored before-and-after decision.</p><a class="subtle-cta" href="/recorded">Open recorded proof <span aria-hidden="true">→</span></a><div class="feature-stack"><span>Recorded evidence</span><span>·</span><span>Not live approval</span></div></article>
     </div>
+    <span id="home-draft-count" hidden>0</span>
   </section>
   <section class="surface-view" id="view-plan" hidden aria-labelledby="headline">
-  <section class="intro" aria-labelledby="headline"><div class="eyebrow">PRE-EXECUTION INTELLIGENCE &nbsp; / &nbsp; PLAN BUILDER</div><h1 id="headline">Give your agent a <em>second opinion.</em></h1><p>Define the action, lock candidate choices, and prepare a typed proposal for cultural preflight. No synthetic intelligence is presented as live evidence.</p></section>
+  <section class="intro" aria-labelledby="headline"><div class="eyebrow">PRE-EXECUTION INTELLIGENCE &nbsp; / &nbsp; PLAN BUILDER</div><h1 id="headline">Build a plan. <em>Check each choice.</em></h1><p>Describe the goal and the choices your agent wants to make. OFC helps review the plan before action. This page does not use live Qloo evidence.</p></section>
   <section class="state-strip" aria-label="Preflight progress"><div class="state-item active"><span>01</span><strong>Prepare plan</strong><small>EDITABLE</small></div><div class="state-item"><span>02</span><strong>OFC check</strong><small>AWAITING QLOO</small></div><div class="state-item"><span>03</span><strong>Review &amp; act</strong><small>LOCKED</small></div></section>
   <div class="columns">
     <section class="editor-panel" aria-labelledby="draft-title">
@@ -81,11 +84,11 @@
     <div class="section-divider"></div>
     <div class="decisions-heading"><div><div class="eyebrow subtle">02 / FROZEN CANDIDATES</div><h2>Decision candidates</h2><p>Only choices within a frozen candidate pool are eligible for selective repair.</p></div><button id="add-decision" type="button" class="secondary small">＋ Add decision</button></div>
     <div id="decision-list" class="decisions" aria-label="Plan decisions"></div>
-    <div class="editor-actions"><button id="validate" type="button" class="primary">Validate proposal →</button><button id="save-draft" type="button" class="secondary">Save draft</button><label class="secondary import-label" for="import-file">Import JSON<input id="import-file" type="file" accept="application/json,.json" hidden></label></div>
+    <div class="editor-actions"><button id="validate" type="button" class="primary">Check my plan →</button><button id="save-draft" type="button" class="secondary">Save draft</button><label class="secondary import-label" for="import-file">Import JSON<input id="import-file" type="file" accept="application/json,.json" hidden></label></div>
     <div id="editor-message" class="editor-message" role="status" aria-live="polite">Edits stay in this browser. Validation does not run a cultural evaluation.</div>
     </section>
     <aside class="review-column" aria-label="Plan review">
-      <section class="summary-panel"><div class="eyebrow subtle">PROPOSAL READINESS</div><h2>Ready for a real check?</h2><div class="big-state"><div class="state-icon">◌</div><div><strong id="proposal-state">Not validated</strong><small id="proposal-detail">Edit a plan to begin.</small></div></div><div class="summary-row"><span>Decision count</span><strong id="decision-count">0</strong></div><div class="summary-row"><span>Mutable choices</span><strong id="mutable-count">0</strong></div><div class="summary-row"><span>Provider evidence</span><strong class="warning">Unavailable</strong></div><div class="summary-row"><span>Action release</span><strong class="warning">Blocked</strong></div><button id="check-preflight" type="button" class="primary preflight-button" disabled>Run preflight →</button><button id="export-proposal" type="button" class="export-button" disabled>Export proposal JSON ↗</button><p class="small-note">A validated draft exports the typed format accepted by the local agent intake. Export does not freeze, execute or approve an action.</p></section>
+      <section class="summary-panel"><div class="eyebrow subtle">PROPOSAL READINESS</div><h2>Ready for a real check?</h2><div class="big-state"><div class="state-icon">◌</div><div><strong id="proposal-state">Not validated</strong><small id="proposal-detail">Edit a plan to begin.</small></div></div><div class="summary-row"><span>Decision count</span><strong id="decision-count">0</strong></div><div class="summary-row"><span>Mutable choices</span><strong id="mutable-count">0</strong></div><div class="summary-row"><span>Provider evidence</span><strong class="warning">Unavailable</strong></div><div class="summary-row"><span>Action release</span><strong class="warning">Blocked</strong></div><button id="check-preflight" type="button" class="primary preflight-button" disabled>Review plan →</button><button id="export-proposal" type="button" class="export-button" disabled>Export proposal JSON ↗</button><p class="small-note">A validated draft exports the typed format accepted by the local agent intake. Export does not freeze, execute or approve an action.</p></section>
       <section class="summary-panel" id="preflight-panel" hidden aria-labelledby="preflight-heading">
         <div class="eyebrow subtle">PREFLIGHT / EVIDENCE BOUNDARY</div>
         <h2 id="preflight-heading">Preflight outcome</h2>
