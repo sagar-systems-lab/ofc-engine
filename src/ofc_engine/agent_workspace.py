@@ -1,4 +1,4 @@
-"""Run the existing agent review and recorded-proof viewer from one private session."""
+"""Launch the frozen OFC studio with saved local Qloo evidence."""
 from __future__ import annotations
 
 import argparse
@@ -9,18 +9,17 @@ import os
 from pathlib import Path
 import secrets
 from stat import S_ISDIR, S_ISREG
-from threading import Thread
 
-from .agent_api import AgentAPIServer
 from .agent_evidence_session import OperatorEvidenceSession
-from .local_proof_server import LocalProofServer, load_manifest
+from .connected_local import ConnectedLocalServer
+from .durable import SQLiteRevisionStore
+from .local_proof_server import load_manifest
 from .qloo_operator_workspace import _save, build_workspace
 
 
 @dataclass
 class ConnectedWorkspace:
-    agent: AgentAPIServer
-    proof: LocalProofServer
+    server: ConnectedLocalServer
     token_file: Path | None
     proof_file: Path
     run_id: str
@@ -28,8 +27,7 @@ class ConnectedWorkspace:
     historical: bool
 
     def close(self) -> None:
-        self.agent.server_close()
-        self.proof.server_close()
+        self.server.server_close()
         if self.token_file is not None:
             self.token_file.unlink(missing_ok=True)
 
@@ -71,11 +69,10 @@ def prepare_workspace(
     decision_id: str = "brand",
     age_hours: int = 24,
     historical: bool = False,
-    api_port: int = 0,
-    proof_port: int = 0,
+    port: int = 0,
     auth_token: str | None = None,
 ) -> ConnectedWorkspace:
-    if not 0 <= api_port <= 65535 or not 0 <= proof_port <= 65535:
+    if not 0 <= port <= 65535:
         raise ValueError("invalid port")
     db_info = database.lstat()
     if not S_ISREG(db_info.st_mode) or not db_info.st_size:
@@ -87,8 +84,6 @@ def prepare_workspace(
         decision_id=decision_id, artist_id=artist_id, brand_ids=brand_ids,
         age_hours=age_hours, historical=historical,
     )
-    from .durable import SQLiteRevisionStore
-
     store = SQLiteRevisionStore(database)
     review = session.review(store, session.proposal.intent.run_id)
     report = build_workspace(
@@ -114,28 +109,23 @@ def prepare_workspace(
     if token is None:
         token, token_file = _create_session_token()
     try:
-        agent = AgentAPIServer(
-            ("127.0.0.1", api_port), database=str(database),
-            auth_token=token, evidence_session=session,
+        server = ConnectedLocalServer(
+            ("127.0.0.1", port), database=str(database),
+            token=token, session=session, manifest=manifest,
         )
-        try:
-            proof = LocalProofServer(("127.0.0.1", proof_port), manifest=manifest)
-        except BaseException:
-            agent.server_close()
-            raise
     except BaseException:
         if token_file is not None:
             token_file.unlink(missing_ok=True)
         raise
     return ConnectedWorkspace(
-        agent, proof, token_file, manifest_path, session.proposal.intent.run_id,
+        server, token_file, manifest_path, session.proposal.intent.run_id,
         review["status"], historical,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Local agent and proof workspace with previously saved Qloo captures"
+        description="Frozen OFC product UI and private agent evidence on one local origin"
     )
     parser.add_argument("--database", required=True, type=Path)
     parser.add_argument("--proposal", required=True, type=Path)
@@ -146,18 +136,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--decision-id", default="brand")
     parser.add_argument("--age-hours", type=int, default=24)
     parser.add_argument("--historical", action="store_true")
-    parser.add_argument("--api-port", type=int, default=0)
-    parser.add_argument("--proof-port", type=int, default=0)
+    parser.add_argument("--port", type=int, default=18080)
     args = parser.parse_args(argv)
     try:
-        session = prepare_workspace(
+        workspace = prepare_workspace(
             database=args.database, proposal=args.proposal,
             original_capture=args.capture, later_capture=args.recheck_capture,
             artist_id=args.artist_id,
             brand_ids=tuple(args.brands.split(",")),
             decision_id=args.decision_id, age_hours=args.age_hours,
-            historical=args.historical, api_port=args.api_port,
-            proof_port=args.proof_port,
+            historical=args.historical, port=args.port,
             auth_token=os.environ.get("OFC_AGENT_TOKEN") or None,
         )
     except (OSError, ValueError, TypeError, KeyError):
@@ -167,33 +155,26 @@ def main(argv: list[str] | None = None) -> int:
         }, sort_keys=True))
         return 2
 
-    with session.agent, session.proof:
-        worker = Thread(target=session.agent.serve_forever, daemon=True)
-        worker.start()
-        try:
-            print(json.dumps({
-                "status": "LOCAL_CONNECTED_WORKSPACE_READY",
-                "run_id": session.run_id,
-                "recorded_rank_status": session.rank_status,
-                "historical_replay": session.historical,
-                "agent_review_url": (
-                    f"http://127.0.0.1:{session.agent.server_port}/api/proposals/"
-                    f"{session.run_id}/review"
-                ),
-                "proof_url": f"http://127.0.0.1:{session.proof.server_port}/",
-                "token_file": str(session.token_file) if session.token_file else None,
-                "source_mode": "RECORDED_REDACTED",
-                "real_qloo_requests": 0,
-                "release_authorized": False,
-                "external_action_executed": False,
-            }, sort_keys=True), flush=True)
-            session.proof.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            session.agent.shutdown()
-            worker.join(timeout=5)
-            session.close()
+    try:
+        print(json.dumps({
+            "status": "LOCAL_PRODUCT_READY",
+            "run_id": workspace.run_id,
+            "recorded_rank_status": workspace.rank_status,
+            "historical_replay": workspace.historical,
+            "product_url": f"http://127.0.0.1:{workspace.server.server_port}/",
+            "proof_route": "/recorded",
+            "agent_review_route": f"/api/proposals/{workspace.run_id}/review",
+            "token_file": str(workspace.token_file) if workspace.token_file else None,
+            "source_mode": "RECORDED_REDACTED",
+            "real_qloo_requests": 0,
+            "release_authorized": False,
+            "external_action_executed": False,
+        }, sort_keys=True), flush=True)
+        workspace.server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        workspace.close()
     return 0
 
 
