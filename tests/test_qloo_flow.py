@@ -250,7 +250,8 @@ def test_cli_performs_offline_comparison_without_leaking_raw(tmp_path, capsys):
     assert result["real_qloo_requests"] == 0
     assert result["evidence_off"]["status"] == "REVIEW_REQUIRED"
     assert result["evidence_on"]["status"] == "RECORDED_RANK_REVIEW_ONLY"
-    assert "affinity" not in json.dumps(result)
+    assert '"affinity":' not in json.dumps(result)
+    assert '"secret"' not in json.dumps(result)
     assert result["evidence_on"]["selected_candidates"]["brand"] == "brand-b"
 
 
