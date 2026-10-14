@@ -30,6 +30,18 @@ def run_browser(origin: str) -> dict:
                 try:
                     page.goto(origin + "/", wait_until="domcontentloaded", timeout=90_000)
                     page.locator("#home-title").wait_for(state="visible", timeout=40_000)
+                    if page.locator(".primary-nav > .side-link").count() != 4:
+                        raise BrowserFailure("primary navigation is not judge-focused")
+                    if page.locator("#more-tools").get_attribute("open") is not None:
+                        raise BrowserFailure("advanced tools should be collapsed by default")
+                    if not page.locator(".simple-preview").is_visible():
+                        raise BrowserFailure("plain-language decision example missing")
+                    hero_type = page.locator("#home-title").evaluate("""el => ({
+                        weight: parseFloat(getComputedStyle(el).fontWeight),
+                        size: parseFloat(getComputedStyle(el).fontSize)
+                    })""")
+                    if hero_type["weight"] > 700 or hero_type["size"] > 70:
+                        raise BrowserFailure("hero typography is oversized or too heavy")
                     if not page.locator(".status-label").is_visible():
                         raise BrowserFailure("provider boundary missing from premium shell")
                     workspace_brand = page.locator(".brand-icon").evaluate("""el => ({
@@ -100,6 +112,7 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("custom review did not account for every decision")
                     page.locator("#save-draft").click()
                     page.reload(wait_until="domcontentloaded")
+                    page.locator("#more-tools summary").click()
                     page.locator('[data-view-link="history"]').click()
                     page.locator("#history-search").fill("Custom cultural")
                     if page.locator("#history-rows .history-row:not(.history-row-head)").count() != 1:
