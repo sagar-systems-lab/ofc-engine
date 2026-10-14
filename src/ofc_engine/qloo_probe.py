@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from stat import S_ISREG
 import sys
 from uuid import uuid4
 
@@ -13,7 +14,8 @@ from .qloo import QlooProbeClient, QlooProbeError, brand_affinity_probe, search_
 
 def _parse(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Bounded Qloo capability probe (no automatic retries)")
-    p.add_argument("--live", action="store_true", help="perform one real API call; consumes event quota")
+    p.add_argument("--live", action="store_true", help="perform one real API call only if no cached capture exists")
+    p.add_argument("--refresh", action="store_true", help="force one fresh request; consumes event quota")
     action = p.add_mutually_exclusive_group(required=True)
     action.add_argument("--search", help="entity name to look up")
     action.add_argument("--artist-id", help="resolved Qloo artist entity ID")
@@ -44,6 +46,30 @@ def private_capture(payload: dict, summary: dict) -> Path:
     return filename
 
 
+def find_private_cached_probe(query_fingerprint: str) -> tuple[Path, dict] | None:
+    directory = Path.home() / ".local" / "share" / "ofc-engine" / "private-qloo-probes"
+    if directory.is_symlink() or not directory.is_dir():
+        return None
+    for path in sorted(directory.glob("*.json"))[:1024]:
+        try:
+            status = path.lstat()
+            if not S_ISREG(status.st_mode) or status.st_size > 1024 * 1024:
+                continue
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            summary = doc.get("summary") if isinstance(doc, dict) else None
+            if not isinstance(summary, dict) or not isinstance(doc.get("payload"), dict):
+                continue
+            if (summary.get("query_fingerprint") == query_fingerprint
+                    and summary.get("http_status") == 200
+                    and summary.get("mode") == "LIVE_RESPONSE_UNQUALIFIED"
+                    and summary.get("real_qloo_requests") == 1
+                    and summary.get("endpoint") in ("/search", "/v2/insights")):
+                return path, summary
+        except (OSError, ValueError, UnicodeError, TypeError):
+            continue
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse(argv)
     if args.search:
@@ -59,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.capture and not args.live:
         raise SystemExit("--capture requires --live")
+    if args.refresh and not (args.live and args.capture):
+        raise SystemExit("--refresh requires --live --capture")
     if args.live and args.locality:
         raise SystemExit("Brand locality parameters are not qualified for this entity type; live request blocked")
     if not args.live:
@@ -68,6 +96,19 @@ def main(argv: list[str] | None = None) -> int:
             "query_fingerprint": spec.fingerprint, "real_qloo_requests": 0,
         }, sort_keys=True))
         return 0
+    if not args.refresh:
+        cached = find_private_cached_probe(spec.fingerprint)
+        if cached:
+            path, old_summary = cached
+            summary = dict(old_summary)
+            summary["mode"] = "PRIVATE_CAPTURE_REPLAY"
+            summary["real_qloo_requests"] = 0
+            summary["private_capture_file"] = str(path)
+            summary["live_capability_qualified"] = False
+            summary["normalized_for_policy"] = False
+            summary["authenticated_by_adapter"] = False
+            print(json.dumps(summary, sort_keys=True))
+            return 0
     try:
         result = QlooProbeClient.from_environment().probe(spec)
     except QlooProbeError as exc:
