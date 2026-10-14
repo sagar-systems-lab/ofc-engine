@@ -143,6 +143,8 @@ def run_integrated_gate(
     review = review_recorded_plan(
         current, sources, as_of=as_of, max_evidence_age=max_evidence_age,
     )
+    if recheck_sources is not None and current == baseline:
+        raise AgentEvidenceRejected("RECHECK_BEFORE_REPAIR")
     if current == baseline:
         if current.revision != 0 or len(history) != 1 or pending:
             raise AgentEvidenceRejected("STORED_BASELINE_NOT_CLEAN")
@@ -213,8 +215,6 @@ def run_integrated_gate(
             journal_head=events[-1].event_hash, historical=historical,
         )
 
-    if recheck_sources is not None and current == baseline:
-        raise AgentEvidenceRejected("RECHECK_BEFORE_REPAIR")
     if commit:
         raise AgentEvidenceRejected("STORED_REPAIR_ALREADY_PRESENT")
     if current.revision != 1 or len(history) != 2 or history[-1].kind != "PATCH":
