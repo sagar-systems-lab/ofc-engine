@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Mapping
 
 from .durable import SQLiteRevisionStore
-from .intake import AgentProposal
-from .qloo_agent_bridge import AgentEvidenceRejected, _read_private_json
+from .intake import AgentProposal, freeze_proposal
+from .qloo_agent_bridge import _read_private_json
 from .qloo_decision_gate import _load_sources, _sources, run_integrated_gate
 from .qloo_flow import RecordedSource
 
@@ -37,8 +37,6 @@ class OperatorEvidenceSession:
         )
         original = _load_sources(evidence_index, proposal)
         later = _load_sources(recheck_index, proposal) if recheck_index else None
-        by_plan = tuple(proposal.decisions)
-        from .intake import freeze_proposal
         plan, _ = freeze_proposal(proposal)
         _sources(plan, original)
         if later is not None:
