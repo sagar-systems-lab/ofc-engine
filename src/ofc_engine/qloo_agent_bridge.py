@@ -105,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         if not 1 <= args.age_hours <= 72:
             raise AgentEvidenceRejected("INVALID_AGE_WINDOW")
         raw_proposal = _read_private_json(args.proposal, max_bytes=96 * 1024)
-        proposal = AgentProposal.model_validate(raw_proposal)
+        proposal = AgentProposal.model_validate_json(json.dumps(raw_proposal, ensure_ascii=False))
         capture = _read_private_json(args.capture, max_bytes=1024 * 1024)
         result = compare_agent_proposal(
             proposal, capture,
