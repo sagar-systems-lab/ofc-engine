@@ -2,7 +2,7 @@
 
 After the recorded repair is stored at revision 1, use `qloo_live_recheck` to preflight its saved journal and optionally conduct **one** new direct Qloo HTTPS request. This path reuses the local operator-only Qloo transport and quota reservation; it never runs from public Render, GitHub CI, or the web browser. A failed request still consumes the local one-attempt reservation because its upstream outcome may be unknown.
 
-The recorded repair's selected candidate, frozen baseline, query pool, and pending recheck are validated **before** network access. The reservation is scoped to the exact stored revision and query fingerprint, not to an arbitrary user-controlled retry ID. The raw new response is saved in the protected private Qloo capture directory, outside Git. No automatic retry, no alternate endpoint fallback, no release or action execution.
+The recorded repair's selected candidate, frozen baseline, query pool, and pending recheck are validated **before** network access. If the original capture is older than the current freshness window, it is validated only at its original collection timestamp as a **historical reference**, not treated as fresh evidence. Future-dated original captures are rejected; the new response still must be fresh, distinct, and later than the original. The preflight output explicitly reports `historical_original_reference=true` when applicable. The reservation is scoped to the exact stored revision and query fingerprint, not to an arbitrary user-controlled retry ID. The raw new response is saved in the protected private Qloo capture directory, outside Git. No automatic retry, no alternate endpoint fallback, no release or action execution.
 
 ## Safe offline preflight (zero requests)
 
