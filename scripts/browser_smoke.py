@@ -100,6 +100,7 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("custom review did not account for every decision")
                     page.locator("#save-draft").click()
                     page.reload(wait_until="domcontentloaded")
+                    page.locator("#more-tools summary").click()
                     page.locator('[data-view-link="history"]').click()
                     page.locator("#history-search").fill("Custom cultural")
                     if page.locator("#history-rows .history-row:not(.history-row-head)").count() != 1:
