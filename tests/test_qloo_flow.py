@@ -143,7 +143,7 @@ def test_unsupported_dependent_blocks_mutation_even_with_brand_evidence():
     assert result.status == RecordedState.REVIEW_REQUIRED
     assert result.plan.revision == 0
     assert result.ledger.attempts_used == 0
-    assert result.reviews[0].verdicts[1].reason_codes == ("RECORDED_EVIDENCE_MISSING",)
+    assert result.reviews[0].verdicts[1].reason_codes == ("DEPENDENCY_QUERY_NOT_QUALIFIED",)
     assert not result.traces
 
 
