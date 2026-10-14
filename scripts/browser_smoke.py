@@ -32,6 +32,25 @@ def run_browser(origin: str) -> dict:
                     page.locator("#home-title").wait_for(state="visible", timeout=40_000)
                     if page.locator(".primary-nav > .side-link").count() != 4:
                         raise BrowserFailure("primary navigation is not judge-focused")
+                    if width <= 375:
+                        visible_navigation = page.locator(".primary-nav").evaluate("""nav => {
+                            const frame = nav.getBoundingClientRect();
+                            const links = [...nav.querySelectorAll(".side-link")];
+                            return {
+                                scrollWidth: nav.scrollWidth,
+                                clientWidth: nav.clientWidth,
+                                clipped: links.some(link => {
+                                    const r = link.getBoundingClientRect();
+                                    return r.right > frame.right + 1 || r.left < frame.left - 1;
+                                }),
+                                count: links.filter(link => getComputedStyle(link).display !== "none").length
+                            };
+                        }""")
+                        if (visible_navigation["clipped"] or
+                            visible_navigation["scrollWidth"] > visible_navigation["clientWidth"] + 1 or
+                            visible_navigation["count"] != 4):
+                            raise BrowserFailure("primary navigation clipped on mobile")
+
                     if page.locator("#more-tools").get_attribute("open") is not None:
                         raise BrowserFailure("advanced tools should be collapsed by default")
                     if not page.locator(".simple-preview").is_visible():
