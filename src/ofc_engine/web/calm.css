@@ -327,7 +327,7 @@
 }
 .studio-page .topbar{
   background:#f7f9fc;
-  box-shadow:none;
+  box-shadow:0 1px 3px rgba(20,38,65,.045);
 }
 .studio-page .status-label{
   border-color:#ead6b7;background:#fff9ee;
