@@ -63,3 +63,12 @@ def test_bad_json_blocked_without_exception(tmp_path, capsys):
     path.write_text("{invalid")
     assert main(["--capture", str(path)]) == 2
     assert json.loads(capsys.readouterr().out)["status"] == "BLOCKED"
+
+def test_unqualified_brand_locality_is_blocked_before_live_request():
+    from ofc_engine.qloo_probe import main as probe_main
+
+    with pytest.raises(SystemExit, match="Brand locality parameters are not qualified"):
+        probe_main([
+            "--live", "--artist-id", "ARTIST_ID", "--brands", "BRAND_A,BRAND_B",
+            "--locality", "Chicago", "--locality-mode", "signal",
+        ])
