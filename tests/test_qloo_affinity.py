@@ -25,13 +25,13 @@ def capture():
         "payload": {
             "success": True, "query": {"explainability": {}},
             "results": {"entities": [
-                {"entity_id": BRANDS[1], "type": "urn:entity:brand",
+                {"entity_id": BRANDS[1], "type": "urn:entity",
                  "query": {"affinity": 0.88, "measurements": {},
                            "explainability": {"signal.interests.entities": {"score": 0.4}}}},
-                {"entity_id": BRANDS[0], "type": "urn:entity:brand",
+                {"entity_id": BRANDS[0], "type": "urn:entity",
                  "query": {"affinity": 0.6, "measurements": {},
                            "explainability": {"signal.interests.entities": {"score": 0.2}}}},
-                {"entity_id": BRANDS[2], "type": "urn:entity:brand",
+                {"entity_id": BRANDS[2], "type": "urn:entity",
                  "query": {"affinity": 0.2, "measurements": {},
                            "explainability": {"signal.interests.entities": {"score": 0.1}}}},
             ]},
@@ -49,6 +49,7 @@ def test_offline_observation_uses_exact_fingerprint_and_ranked_real_ids():
     assert result["real_qloo_requests"] == 0
     assert result["provider_policy_verified"] is False
     assert result["release_authorized"] is False
+    assert result["entity_taxonomy_independently_verified"] is False
     assert result["external_action_executed"] is False
     assert "0.88" not in json.dumps(result)
 
@@ -72,6 +73,22 @@ def test_fail_closed_on_invalid_evidence(change, expected):
     with pytest.raises(AffinityCaptureError, match=expected):
         normalize_affinity_capture(data, SPEC)
 
+
+
+def test_generic_insights_type_is_not_independent_brand_proof():
+    data = capture()
+    assert all(e["type"] == "urn:entity" for e in data["payload"]["results"]["entities"])
+    result = normalize_affinity_capture(data, SPEC)
+    assert result["candidate_count"] == 3
+    assert result["entity_taxonomy_independently_verified"] is False
+    assert result["provider_policy_verified"] is False
+
+
+def test_unexpected_specific_taxonomy_is_rejected():
+    data = capture()
+    data["payload"]["results"]["entities"][0]["type"] = "urn:entity:brand"
+    with pytest.raises(AffinityCaptureError, match="RESULT_TYPE_MISMATCH"):
+        normalize_affinity_capture(data, SPEC)
 
 def test_unrelated_query_cannot_reuse_cached_evidence():
     altered = brand_affinity_probe("another-artist", BRANDS)
