@@ -44,15 +44,44 @@ def inspect_capture(data: Any, *, expected_type: str | None = None) -> dict[str,
             "provider_policy_verified": False, "real_qloo_requests": 0,
         }
     if endpoint == "/v2/insights":
-        entities = payload.get("entities")
-        if not isinstance(entities, list) or len(entities) > 100:
+        if payload.get("success") is not True:
+            raise CaptureInvalid("INSIGHTS_NOT_SUCCESSFUL")
+        results = payload.get("results")
+        if not isinstance(results, dict):
             raise CaptureInvalid("UNEXPECTED_INSIGHTS_RESULTS")
+        entities = results.get("entities")
+        if not isinstance(entities, list) or len(entities) > 100:
+            raise CaptureInvalid("UNEXPECTED_INSIGHTS_ENTITIES")
+        if any(not isinstance(item, dict) for item in entities):
+            raise CaptureInvalid("UNEXPECTED_INSIGHTS_ENTITY")
+        ids = [item.get("entity_id") for item in entities]
+        if any(not isinstance(entity_id, str) or not entity_id or len(entity_id) > 128 for entity_id in ids):
+            raise CaptureInvalid("UNEXPECTED_INSIGHTS_ENTITY_ID")
+        first = entities[0] if entities else {}
+        entity_query = first.get("query")
+        top_query = payload.get("query")
+        if entity_query is not None and not isinstance(entity_query, dict):
+            raise CaptureInvalid("UNEXPECTED_ENTITY_QUERY")
+        if top_query is not None and not isinstance(top_query, dict):
+            raise CaptureInvalid("UNEXPECTED_TOP_QUERY")
         return {
-            "status": "INSIGHTS_SHAPE_OBSERVED", "endpoint": endpoint,
+            "status": "INSIGHTS_SHAPE_OBSERVED" if entities else "INSIGHTS_EMPTY",
+            "endpoint": endpoint,
             "query_fingerprint": summary["query_fingerprint"],
-            "top_level_fields": sorted(payload), "entity_count": len(entities),
-            "first_entity_fields": sorted(entities[0]) if entities and isinstance(entities[0], dict) else [],
-            "provider_policy_verified": False, "real_qloo_requests": 0,
+            "top_level_fields": sorted(payload),
+            "results_fields": sorted(results),
+            "query_fields": sorted(top_query) if top_query is not None else [],
+            "query_explainability_fields": sorted(top_query.get("explainability", {}))
+            if isinstance(top_query, dict) and isinstance(top_query.get("explainability"), dict) else [],
+            "entity_count": len(entities),
+            "entity_ids": ids,
+            "duplicate_id_count": len(ids) - len(set(ids)),
+            "first_entity_fields": sorted(first),
+            "first_entity_query_fields": sorted(entity_query) if entity_query is not None else [],
+            "first_entity_explainability_fields": sorted(entity_query.get("explainability", {}))
+            if isinstance(entity_query, dict) and isinstance(entity_query.get("explainability"), dict) else [],
+            "provider_policy_verified": False,
+            "real_qloo_requests": 0,
         }
     raise CaptureInvalid("UNEXPECTED_ENDPOINT")
 
