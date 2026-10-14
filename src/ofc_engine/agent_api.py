@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hmac
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -12,7 +13,10 @@ from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
+from .agent_evidence_session import OperatorEvidenceSession
 from .durable import SQLiteRevisionStore, StorageIntegrityError
+from .qloo_agent_bridge import AgentEvidenceRejected
+from .qloo_affinity import AffinityCaptureError
 from .intake import AgentProposal, ProposalConflict, accept_proposal
 from .revisions import plan_digest
 
@@ -77,10 +81,30 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._reply(200, {"status": "ok", "mode": "LOCAL", "release_authorized": False})
             return
         prefix = "/api/proposals/"
-        if not parts.path.startswith(prefix) or not _RUN_ID.fullmatch(parts.path[len(prefix):]):
+        if not parts.path.startswith(prefix):
             self._deny(404, "NOT_FOUND")
             return
-        run_id = parts.path[len(prefix):]
+        suffix = parts.path[len(prefix):]
+        is_review = suffix.endswith("/review")
+        run_id = suffix[:-len("/review")] if is_review else suffix
+        if not _RUN_ID.fullmatch(run_id):
+            self._deny(404, "NOT_FOUND")
+            return
+        if is_review:
+            session = self.server.evidence_session
+            if session is None or session.proposal.intent.run_id != run_id:
+                self._deny(404, "NOT_FOUND")
+                return
+            try:
+                result = session.review(self.server.store, run_id)
+            except KeyError:
+                self._deny(404, "NOT_FOUND")
+                return
+            except (StorageIntegrityError, sqlite3.Error, ValueError, AffinityCaptureError):
+                self._deny(503, "EVIDENCE_REVIEW_UNAVAILABLE")
+                return
+            self._reply(200, result)
+            return
         try:
             plan = self.server.store.get(run_id)
             audit = self.server.store.audit_history(run_id)
@@ -155,7 +179,8 @@ class AgentAPIServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
 
-    def __init__(self, address: tuple[str, int], *, database: str, auth_token: str) -> None:
+    def __init__(self, address: tuple[str, int], *, database: str, auth_token: str,
+                 evidence_session: OperatorEvidenceSession | None = None) -> None:
         if address[0] != "127.0.0.1":
             raise ValueError("agent API must bind to IPv4 loopback")
         if (
@@ -163,7 +188,12 @@ class AgentAPIServer(ThreadingHTTPServer):
             or not auth_token.isascii() or any(ord(x) < 33 or ord(x) > 126 for x in auth_token)
         ):
             raise ValueError("a 32–256 character ASCII operator token is required")
+        if evidence_session is not None and not isinstance(evidence_session, OperatorEvidenceSession):
+            raise ValueError("invalid operator evidence session")
         self.store = SQLiteRevisionStore(database)
+        if evidence_session is not None:
+            evidence_session.review(self.store, evidence_session.proposal.intent.run_id)
+        self.evidence_session = evidence_session
         self.auth_token = auth_token
         super().__init__(address, AgentAPIHandler)
 
@@ -172,11 +202,28 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Local authenticated agent proposal intake")
     parser.add_argument("--database", required=True)
     parser.add_argument("--port", type=int, default=8770)
+    parser.add_argument("--operator-proposal", type=Path)
+    parser.add_argument("--evidence-index", type=Path)
+    parser.add_argument("--recheck-index", type=Path)
+    parser.add_argument("--age-hours", type=int, default=24)
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
+    if bool(args.operator_proposal) != bool(args.evidence_index) or (
+        args.recheck_index and not args.evidence_index
+    ):
+        parser.error("operator proposal and evidence index must be configured together")
+    session = OperatorEvidenceSession.load(
+        proposal_path=args.operator_proposal,
+        evidence_index=args.evidence_index,
+        recheck_index=args.recheck_index,
+        age_hours=args.age_hours,
+    ) if args.operator_proposal is not None else None
     token = os.environ.get("OFC_AGENT_TOKEN", "")
-    with AgentAPIServer(("127.0.0.1", args.port), database=args.database, auth_token=token) as server:
+    with AgentAPIServer(
+        ("127.0.0.1", args.port), database=args.database,
+        auth_token=token, evidence_session=session,
+    ) as server:
         print(f"Agent API listening at http://127.0.0.1:{server.server_port}", flush=True)
         server.serve_forever()
 
