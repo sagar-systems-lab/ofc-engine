@@ -2,6 +2,16 @@
 
 A pre-execution cultural decision layer for autonomous agents. The public preview is a read-only synthetic demo; operator-only Qloo search, recorded affinity ranking, and revision-bound repair replay are separate. **Recorded ranking is not trusted live cultural approval or execution authorization.**
 
+## Product at a glance
+
+An agent proposes a choice. OFC checks its scoped Qloo affinity evidence, makes at most a justified candidate-only repair, records the change, and keeps execution locked until verification is complete. It can report **PASS / REPAIR / UNCERTAIN** for a narrow evidence-backed ranking; it does not equate a rank with cultural suitability or release authority.
+
+- [Product and Qloo integration](docs/PROJECT.md)
+- [Try the interface and reproduce the tests](docs/TRY_IT.md)
+- [Private operator evidence review](docs/agent_evidence_review.md)
+
+The public preview is **synthetic**; real Qloo responses remain private. The demo is not yet a publicly hosted live Qloo decision service.
+
 ## Current implementation
 
 - Strict, versioned contract candidates for plan/decision/evidence/review/repair.
