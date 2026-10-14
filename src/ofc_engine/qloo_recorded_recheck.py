@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from .contracts import PlanSnapshot
 from .durable import SQLiteRevisionStore, StorageIntegrityError
 from .intake import AgentProposal, freeze_proposal
 from .qloo import brand_affinity_probe
@@ -59,15 +60,20 @@ def inspect_recorded_recheck(
             raise AgentEvidenceRejected("STORED_PLAN_MISSING") from None
         except (StorageIntegrityError, sqlite3.Error):
             raise AgentEvidenceRejected("STORED_JOURNAL_INVALID") from None
+        if len(plan.decisions) != 1:
+            raise AgentEvidenceRejected("STORED_REPAIR_STATE_MISMATCH")
+        changed = plan.decisions[0]
+        expected = PlanSnapshot.model_validate(
+            baseline.model_copy(update={
+                "revision": 1,
+                "decisions": (original.model_copy(update={
+                    "candidate_id": changed.candidate_id,
+                }),),
+            }).model_dump()
+        )
         if (
-            plan.plan_id != baseline.plan_id
-            or plan.revision != 1
-            or plan.baseline_digest != baseline.baseline_digest
-            or plan.constraints_digest != baseline.constraints_digest
-            or len(plan.decisions) != 1
-            or plan.decisions[0].candidate_pool != original.candidate_pool
-            or plan.decisions[0].decision_id != decision_id
-            or plan.decisions[0].candidate_id == original.candidate_id
+            plan != expected
+            or changed.candidate_id == original.candidate_id
             or len(journal) != 2
             or journal[0].kind != "INSERT"
             or journal[0].after_digest != plan_digest(baseline)
