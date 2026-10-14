@@ -73,7 +73,8 @@ def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
         entity_id = entity.get("entity_id")
         if not isinstance(entity_id, str) or entity_id not in candidates:
             raise AffinityCaptureError("UNEXPECTED_RESULT_ENTITY")
-        if entity.get("type") != "urn:entity:brand":
+        # Insights returns the generic taxonomy; brand scope is query-bound.
+        if entity.get("type") != "urn:entity":
             raise AffinityCaptureError("RESULT_TYPE_MISMATCH")
         query = entity.get("query")
         if not isinstance(query, dict):
@@ -108,6 +109,7 @@ def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
         "ranking": ranking,
         "rank_metric": "query.affinity",
         "missing_candidate_ids": [],
+        "entity_taxonomy_independently_verified": False,
         "provider_policy_verified": False,
         "release_authorized": False,
         "external_action_executed": False,
