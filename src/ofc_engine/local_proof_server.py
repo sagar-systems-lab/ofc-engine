@@ -58,7 +58,9 @@ def load_manifest(path: Path) -> dict:
         raise LocalProofRejected("INVALID_PROOF_STRUCTURE")
     if (
         set(plan) != {"baseline_digest", "stored_digest", "revision", "journal_events", "decision_count"}
-        or plan["revision"] != 1 or plan["journal_events"] != 2 or plan["decision_count"] != 1
+        or type(plan["revision"]) is not int or plan["revision"] != 1
+        or type(plan["journal_events"]) is not int or plan["journal_events"] != 2
+        or type(plan["decision_count"]) is not int or plan["decision_count"] != 1
         or not all(isinstance(plan[k], str) and _HEX.fullmatch(plan[k])
                    for k in ("baseline_digest", "stored_digest"))
     ):
@@ -73,8 +75,8 @@ def load_manifest(path: Path) -> dict:
                    for k in ("initial", "replacement"))
         or decision["initial"] == decision["replacement"]
         or decision["changed"] is not True
-        or decision["repair_attempts"] != 1
-        or decision["affected_decision_count"] != 1
+        or type(decision["repair_attempts"]) is not int or decision["repair_attempts"] != 1
+        or type(decision["affected_decision_count"]) is not int or decision["affected_decision_count"] != 1
         or decision["structural_recheck"] != "STRUCTURAL_PASS"
         or decision["evidence_off"] != "UNCERTAIN"
         or decision["evidence_on_initial"] != "REPAIR"
@@ -103,7 +105,7 @@ def load_manifest(path: Path) -> dict:
         or type(recheck["same_capture"]) is not bool
         or type(recheck["later_capture_observed"]) is not bool
         or recheck["same_capture"] and recheck["later_capture_observed"]
-        or recheck["pending_count"] != 1
+        or type(recheck["pending_count"]) is not int or recheck["pending_count"] != 1
         or recheck["pending_recheck_cleared"] is not False
     ):
         raise LocalProofRejected("UNQUALIFIED_RECHECK")
@@ -118,6 +120,7 @@ def load_manifest(path: Path) -> dict:
             "provider_authenticated", "independent_recheck_completed",
             "overall_plan_verified", "release_authorized", "external_action_executed",
         ))
+        or type(qualifications["real_qloo_requests_this_export"]) is not int
         or qualifications["real_qloo_requests_this_export"] != 0
     ):
         raise LocalProofRejected("UNQUALIFIED_AUTHORITY")
