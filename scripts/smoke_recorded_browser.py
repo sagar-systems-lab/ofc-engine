@@ -96,6 +96,11 @@ def run(origin):
                 page.on("request", lambda request: requests.append(request.url))
                 try:
                     page.goto(origin + "/recorded", wait_until="networkidle")
+                    title = page.locator(".hero h1")
+                    if "See why a choice" not in title.inner_text():
+                        raise ProofBrowserError("recorded proof headline is unclear")
+                    if float(title.evaluate("el => getComputedStyle(el).fontWeight")) > 700:
+                        raise ProofBrowserError("recorded proof title remains too heavy")
                     if page.locator("#proof-result").is_visible():
                         raise ProofBrowserError("empty viewer exposed fake proof")
                     if page.locator("#proof-file").count() != 1:
