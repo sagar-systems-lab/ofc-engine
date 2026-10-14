@@ -41,13 +41,54 @@ def test_unexpected_search_schema_fails_closed():
 
 
 def test_insights_inspector_observes_only_shape():
-    data = {**SEARCH, "summary": {**SEARCH["summary"], "endpoint": "/v2/insights"},
-            "payload": {"entities": [{"entity_id": "x", "query": "private-data"}], "meta": {}}}
+    data = {
+        **SEARCH,
+        "summary": {**SEARCH["summary"], "endpoint": "/v2/insights"},
+        "payload": {
+            "success": True,
+            "query": {"explainability": {"warning": "secret"}},
+            "results": {
+                "entities": [{"entity_id": "brand-x", "query": {
+                    "affinity": 0.78, "explainability": {"score": 0.3, "detail": "secret"}
+                }}],
+            },
+        },
+    }
     result = inspect_capture(data)
     assert result["entity_count"] == 1
+    assert result["entity_ids"] == ["brand-x"]
+    assert result["results_fields"] == ["entities"]
     assert result["first_entity_fields"] == ["entity_id", "query"]
-    assert "private-data" not in json.dumps(result)
+    assert result["first_entity_query_fields"] == ["affinity", "explainability"]
+    assert result["query_explainability_fields"] == ["warning"]
+    assert result["first_entity_explainability_fields"] == ["detail", "score"]
+    assert "secret" not in json.dumps(result)
+    assert "0.78" not in json.dumps(result)
     assert result["provider_policy_verified"] is False
+    assert result["real_qloo_requests"] == 0
+
+
+def test_insights_empty_fails_closed():
+    payload = {"success": True, "results": {"entities": []}}
+    data = {**SEARCH, "summary": {**SEARCH["summary"], "endpoint": "/v2/insights"},
+            "payload": payload}
+    result = inspect_capture(data)
+    assert result["status"] == "INSIGHTS_EMPTY"
+    assert result["provider_policy_verified"] is False
+
+
+def test_insights_malformed_payload_rejected():
+    for payload, expected in [
+        ({"success": False, "results": {"entities": []}}, "INSIGHTS_NOT_SUCCESSFUL"),
+        ({"success": True, "results": []}, "UNEXPECTED_INSIGHTS_RESULTS"),
+        ({"success": True, "results": {}}, "UNEXPECTED_INSIGHTS_ENTITIES"),
+        ({"success": True, "results": {"entities": ["bad"]}}, "UNEXPECTED_INSIGHTS_ENTITY"),
+        ({"success": True, "results": {"entities": [{"name": "No ID"}]}}, "UNEXPECTED_INSIGHTS_ENTITY_ID"),
+    ]:
+        data = {**SEARCH, "summary": {**SEARCH["summary"], "endpoint": "/v2/insights"},
+                "payload": payload}
+        with pytest.raises(CaptureInvalid, match=expected):
+            inspect_capture(data)
 
 
 def test_capture_cli_reads_offline(tmp_path, capsys):
