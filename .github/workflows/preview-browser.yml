@@ -5,6 +5,7 @@ on:
       - ".github/workflows/preview-browser.yml"
       - "scripts/browser_smoke.py"
       - "scripts/smoke_recorded_browser.py"
+      - "scripts/capture_ui.py"
       - "scripts/accessibility_smoke.py"
       - "scripts/bench_preview.py"
       - "scripts/smoke_hosted.py"
@@ -50,3 +51,12 @@ jobs:
           python scripts/smoke_recorded_browser.py --base-url http://127.0.0.1:18080
           python scripts/accessibility_smoke.py --base-url http://127.0.0.1:18080
           python scripts/bench_preview.py --base-url http://127.0.0.1:18080 --samples 64 --workers 4 --warmup 8
+          python scripts/capture_ui.py --base-url http://127.0.0.1:18080 --output ui-review
+      - name: Archive synthetic UI review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ofc-ui-review
+          path: ui-review/*.png
+          if-no-files-found: ignore
+          retention-days: 7
