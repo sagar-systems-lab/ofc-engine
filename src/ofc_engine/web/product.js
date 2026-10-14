@@ -32,6 +32,8 @@
   function view(name, focus = false) {
     const selected = paths.has(name) ? name : "home";
     current = selected;
+    const more = $("more-tools");
+    if (more && ["map", "evidence", "history", "provider", "settings"].includes(selected)) more.open = true;
     for (const id of paths) {
       const el = $("view-" + id);
       if (el) el.hidden = id !== selected;
