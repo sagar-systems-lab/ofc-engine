@@ -130,6 +130,13 @@
     $("import-status").className = "import-status good";
   }
   let requested = 0;
+  async function showDocument(document, request) {
+    const report = verifyShape(document);
+    const computed = await sha256(report);
+    if (computed !== document.sha256) throw Error("Proof manifest checksum mismatch");
+    if (request !== requested) return;
+    render(report, computed);
+  }
   async function load(file) {
     const request = ++requested;
     $("proof-result").hidden = true;
@@ -138,12 +145,7 @@
     try {
       if (!file || file.size === 0 || file.size > MAX_FILE_BYTES)
         throw Error("Choose a JSON proof manifest smaller than 128 KB");
-      const document = JSON.parse(await file.text());
-      const report = verifyShape(document);
-      const computed = await sha256(report);
-      if (computed !== document.sha256) throw Error("Proof manifest checksum mismatch");
-      if (request !== requested) return;
-      render(report, computed);
+      await showDocument(JSON.parse(await file.text()), request);
     } catch (error) {
       if (request !== requested) return;
       $("proof-result").hidden = true;
@@ -170,4 +172,22 @@
       put("import-status", "Select exactly one private JSON manifest. No action authorized.");
     }
   });
+  if (document.documentElement.dataset.ofcLocalProof === "true") {
+    const request = ++requested;
+    put("import-status", "Opening local operator proof…");
+    fetch("/api/local-proof", {cache: "no-store", credentials: "same-origin"})
+      .then(async (response) => {
+        if (!response.ok) throw Error("Local proof session unavailable");
+        const raw = await response.text();
+        if (new TextEncoder().encode(raw).length > MAX_FILE_BYTES)
+          throw Error("Local proof manifest too large");
+        await showDocument(JSON.parse(raw), request);
+      })
+      .catch(() => {
+        if (request !== requested) return;
+        $("proof-result").hidden = true;
+        $("import-status").className = "import-status bad";
+        put("import-status", "Local proof session rejected. No action authorized.");
+      });
+  }
 })();
