@@ -139,6 +139,9 @@ def run_browser(origin: str) -> dict:
                     page.locator("#history-rows .history-row:not(.history-row-head) button").first.click()
                     if page.locator("#objective").input_value() != "Custom cultural decision proposal":
                         raise BrowserFailure("reopening saved draft lost user input")
+                    if page.locator("#more-tools").get_attribute("open") is not None:
+                        raise BrowserFailure("advanced tools remained open after returning to plan")
+                    page.locator("#more-tools summary").click()
                     page.locator('[data-view-link="map"]').click()
                     if page.locator("#map-nodes .map-node").count() != 6:
                         raise BrowserFailure("decision map did not reflect current proposal")
