@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from .durable import SQLiteRevisionStore, StorageIntegrityError
 from .intake import AgentProposal
 from .qloo import ProbeSpec, QlooProbeClient, QlooProbeError, brand_affinity_probe
-from .qloo_affinity import AffinityCaptureError
+from .qloo_affinity import AffinityCaptureError, normalize_affinity_capture
 from .qloo_agent_bridge import AgentEvidenceRejected, _read_private_json
 from .qloo_operator import _reserve_once
 from .qloo_probe import private_capture
@@ -42,12 +42,21 @@ def _preflight(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> tuple[ProbeSpec, dict[str, Any], str]:
+    if as_of.utcoffset() is None or max_evidence_age <= timedelta(0):
+        raise AgentEvidenceRejected("INVALID_EVIDENCE_CLOCK")
     spec = brand_affinity_probe(artist_id, brand_ids)
+    normalized = normalize_affinity_capture(original_capture, spec)
+    original_collected = datetime.fromisoformat(normalized["collected_at"])
+    if original_collected > as_of:
+        raise AgentEvidenceRejected("ORIGINAL_CAPTURE_FROM_FUTURE")
+    historical_original = as_of - original_collected > max_evidence_age
+    reference_as_of = original_collected if historical_original else as_of
     before = inspect_recorded_recheck(
         store, proposal, original_capture, original_capture,
         decision_id=decision_id, artist_id=artist_id, brand_ids=brand_ids,
-        as_of=as_of, max_evidence_age=max_evidence_age,
+        as_of=reference_as_of, max_evidence_age=max_evidence_age,
     )
+    before["historical_original_reference"] = historical_original
     if (
         before["status"] != "ORIGINAL_CAPTURE_REPLAY_ONLY"
         or before["stored_plan_revision"] != 1
@@ -129,6 +138,7 @@ def run_live_recheck(
             if result["status"] == "RECORDED_LATER_CAPTURE_RANK_PASS_ONLY"
             else "FRESH_QLOO_RANK_UNRESOLVED"
         ),
+        "historical_original_reference": before["historical_original_reference"],
         "fresh_provider_request_observed": True,
         "request_attempts_this_run": 1,
         "real_qloo_requests": 1,
@@ -186,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                 "plan_digest": before["stored_plan_digest"],
                 "query_fingerprint": spec.fingerprint,
                 "reservation_key": reservation_key,
+                "historical_original_reference": before["historical_original_reference"],
                 "pending_recheck_ids": before["pending_recheck_ids"],
                 "provider_authenticated": False,
                 "release_authorized": False,
