@@ -6,15 +6,6 @@ Use the private capture to build a compact proof of the **recorded** rank-repair
 python -m ofc_engine.qloo_proof_export \
   --capture "$HOME/.local/share/ofc-engine/private-qloo-probes/6481dd2708544107ad48cff73db3c073.json" \
   --artist-id "4BBEF799-A0C4-4110-AB01-39216993C312" \
-  --brands "C70CE2B8-0AD1-4150-BF18-5A6347F2E860,43A36E73-9BC7-7C556ADE3829"
-```
-
-Use the correct three-brand pool below (the abbreviated command above is *not* a valid pool):
-
-```bash
-python -m ofc_engine.qloo_proof_export \
-  --capture "$HOME/.local/share/ofc-engine/private-qloo-probes/6481dd2708544107ad48cff73db3c073.json" \
-  --artist-id "4BBEF799-A0C4-4110-AB01-39216993C312" \
   --brands "C70CE2B8-0AD1-4150-BF18-5A6347F2E860,43A36E73-9BC7-4B09-A116-78E51554C3E3,E26BC58D-18D2-405B-BC7B-7C556ADE3829" \
   --selected "C70CE2B8-0AD1-4150-BF18-5A6347F2E860"
 ```
