@@ -6,10 +6,12 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from stat import S_ISREG
+import sqlite3
 from typing import Any
 
 from pydantic import ValidationError
 
+from .durable import SQLiteRevisionStore, StorageIntegrityError
 from .intake import AgentProposal, freeze_proposal
 from .qloo import brand_affinity_probe
 from .qloo_flow import RecordedSource, compare_recorded_arms
@@ -80,6 +82,59 @@ def compare_agent_proposal(
     }
 
 
+
+
+def compare_stored_agent_proposal(
+    store: SQLiteRevisionStore,
+    proposal: AgentProposal,
+    capture: dict[str, Any],
+    *,
+    decision_id: str,
+    artist_id: str,
+    brand_ids: tuple[str, ...],
+    as_of: datetime,
+    max_evidence_age: timedelta,
+) -> dict[str, Any]:
+    """Review an existing revision-zero intake without applying the preview."""
+    baseline, _ = freeze_proposal(proposal)
+
+    def checked_state() -> tuple[str, str]:
+        try:
+            saved = store.get(baseline.plan_id)
+            history = store.audit_history(baseline.plan_id)
+            pending = store.pending_rechecks(baseline.plan_id)
+        except KeyError:
+            raise AgentEvidenceRejected("STORED_PLAN_MISSING") from None
+        except (StorageIntegrityError, sqlite3.Error):
+            raise AgentEvidenceRejected("STORED_JOURNAL_INVALID") from None
+        expected = plan_digest(baseline)
+        if saved != baseline or saved.revision != 0 or plan_digest(saved) != expected:
+            raise AgentEvidenceRejected("STORED_BASELINE_CONFLICT")
+        if (len(history) != 1 or history[0].kind != "INSERT"
+                or history[0].after_digest != expected or pending):
+            raise AgentEvidenceRejected("STORED_PLAN_NOT_CLEAN_BASELINE")
+        return expected, history[0].event_hash
+
+    digest_before, journal_before = checked_state()
+    result = compare_agent_proposal(
+        proposal, capture, decision_id=decision_id,
+        artist_id=artist_id, brand_ids=brand_ids,
+        as_of=as_of, max_evidence_age=max_evidence_age,
+    )
+    digest_after, journal_after = checked_state()
+    if (digest_before != digest_after or journal_before != journal_after
+            or result["baseline_plan_digest"] != digest_before):
+        raise AgentEvidenceRejected("STORED_STATE_CHANGED_DURING_REVIEW")
+    return {
+        **result,
+        "stored_baseline_matched": True,
+        "stored_plan_revision": 0,
+        "stored_journal_event_count": 1,
+        "stored_journal_head": journal_after,
+        "persisted_repair_committed": False,
+        "stored_plan_mutated": False,
+    }
+
 def _read_private_json(path: Path, *, max_bytes: int) -> dict[str, Any]:
     info = path.lstat()
     if not S_ISREG(info.st_mode) or not 0 < info.st_size <= max_bytes:
@@ -100,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artist-id", required=True)
     parser.add_argument("--brands", required=True)
     parser.add_argument("--age-hours", type=int, default=24)
+    parser.add_argument("--database", type=Path, help="existing SQLite proposal-intake database")
     args = parser.parse_args(argv)
     try:
         if not 1 <= args.age_hours <= 72:
@@ -107,15 +163,24 @@ def main(argv: list[str] | None = None) -> int:
         raw_proposal = _read_private_json(args.proposal, max_bytes=96 * 1024)
         proposal = AgentProposal.model_validate_json(json.dumps(raw_proposal, ensure_ascii=False))
         capture = _read_private_json(args.capture, max_bytes=1024 * 1024)
-        result = compare_agent_proposal(
-            proposal, capture,
-            decision_id=args.decision_id,
-            artist_id=args.artist_id,
-            brand_ids=tuple(args.brands.split(",")),
-            as_of=datetime.now(timezone.utc),
-            max_evidence_age=timedelta(hours=args.age_hours),
-        )
-    except (OSError, ValueError, TypeError, UnicodeError, ValidationError):
+        options = {
+            "decision_id": args.decision_id,
+            "artist_id": args.artist_id,
+            "brand_ids": tuple(args.brands.split(",")),
+            "as_of": datetime.now(timezone.utc),
+            "max_evidence_age": timedelta(hours=args.age_hours),
+        }
+        if args.database is None:
+            result = compare_agent_proposal(proposal, capture, **options)
+        else:
+            info = args.database.lstat()
+            if not S_ISREG(info.st_mode) or info.st_size == 0:
+                raise AgentEvidenceRejected("UNSAFE_DATABASE")
+            store = SQLiteRevisionStore(args.database)
+            result = compare_stored_agent_proposal(
+                store, proposal, capture, **options
+            )
+    except (OSError, ValueError, TypeError, UnicodeError, ValidationError, StorageIntegrityError, sqlite3.Error):
         print(json.dumps({
             "status": "BLOCKED", "release_authorized": False,
             "external_action_executed": False, "real_qloo_requests": 0,
