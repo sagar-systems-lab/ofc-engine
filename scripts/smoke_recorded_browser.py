@@ -6,9 +6,11 @@ from copy import deepcopy
 import json
 import os
 import sys
+from threading import Thread
 
 from playwright.sync_api import sync_playwright
 
+from ofc_engine.local_proof_server import LocalProofServer
 from ofc_engine.revisions import digest_obj
 from smoke_hosted import normalize_url
 
@@ -147,9 +149,44 @@ def run(origin):
                         raise ProofBrowserError("unexpected cross-origin request")
                 finally:
                     page.close()
+            local_server = LocalProofServer(
+                ("127.0.0.1", 0), manifest=manifest(sample_report())
+            )
+            local_url = f"http://127.0.0.1:{local_server.server_port}"
+            thread = Thread(target=local_server.serve_forever, daemon=True)
+            thread.start()
+            local_page = browser.new_page(
+                viewport={"width": 375, "height": 812}, reduced_motion="reduce"
+            )
+            local_requests = []
+            local_errors = []
+            local_page.on("request", lambda req: local_requests.append(req.url))
+            local_page.on("pageerror", lambda err: local_errors.append(str(err)))
+            try:
+                local_page.goto(local_url + "/", wait_until="networkidle")
+                local_page.locator("#proof-result").wait_for(
+                    state="visible", timeout=12000
+                )
+                if local_page.locator("#after-candidate").inner_text() != "Candidate 02":
+                    raise ProofBrowserError("local session failed to auto-load stored proof")
+                if local_page.locator("#pending").inner_text() != "1 PENDING":
+                    raise ProofBrowserError("local session wrongly cleared pending state")
+                if not any(uri == local_url + "/api/local-proof" for uri in local_requests):
+                    raise ProofBrowserError("local session did not fetch scoped manifest")
+                if any(not uri.startswith(local_url + "/") for uri in local_requests):
+                    raise ProofBrowserError("local proof session attempted external network")
+                if local_page.evaluate("document.documentElement.scrollWidth > window.innerWidth + 1"):
+                    raise ProofBrowserError("local proof session overflows mobile viewport")
+                if local_errors:
+                    raise ProofBrowserError("local session JavaScript errors")
+            finally:
+                local_page.close()
+                local_server.shutdown()
+                local_server.server_close()
+                thread.join(timeout=5)
         finally:
             browser.close()
-    return {"result": "PASS", "widths": list(widths), "local_file_only": True}
+    return {"result": "PASS", "widths": list(widths), "local_file_only": True, "loopback_auto_load": True}
 
 
 def main(argv=None):
