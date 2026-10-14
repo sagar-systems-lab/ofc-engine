@@ -163,22 +163,23 @@ def main(argv: list[str] | None = None) -> int:
         raw_proposal = _read_private_json(args.proposal, max_bytes=96 * 1024)
         proposal = AgentProposal.model_validate_json(json.dumps(raw_proposal, ensure_ascii=False))
         capture = _read_private_json(args.capture, max_bytes=1024 * 1024)
-        review = compare_agent_proposal
-        if args.database is not None:
+        options = {
+            "decision_id": args.decision_id,
+            "artist_id": args.artist_id,
+            "brand_ids": tuple(args.brands.split(",")),
+            "as_of": datetime.now(timezone.utc),
+            "max_evidence_age": timedelta(hours=args.age_hours),
+        }
+        if args.database is None:
+            result = compare_agent_proposal(proposal, capture, **options)
+        else:
             info = args.database.lstat()
             if not S_ISREG(info.st_mode) or info.st_size == 0:
                 raise AgentEvidenceRejected("UNSAFE_DATABASE")
-            review = lambda proposal, capture, **kwargs: compare_stored_agent_proposal(
-                SQLiteRevisionStore(args.database), proposal, capture, **kwargs
+            store = SQLiteRevisionStore(args.database)
+            result = compare_stored_agent_proposal(
+                store, proposal, capture, **options
             )
-        result = review(
-            proposal, capture,
-            decision_id=args.decision_id,
-            artist_id=args.artist_id,
-            brand_ids=tuple(args.brands.split(",")),
-            as_of=datetime.now(timezone.utc),
-            max_evidence_age=timedelta(hours=args.age_hours),
-        )
     except (OSError, ValueError, TypeError, UnicodeError, ValidationError, StorageIntegrityError, sqlite3.Error):
         print(json.dumps({
             "status": "BLOCKED", "release_authorized": False,
