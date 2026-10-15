@@ -8,7 +8,7 @@ from pathlib import Path
 from stat import S_ISREG
 
 from .agent_run import commit_rank_repair, review_run
-from .contracts import Verdict
+from .contracts import SourceMode
 from .durable import SQLiteRevisionStore
 from .intake import AgentProposal, freeze_proposal
 from .local_run_view import project_local_run
@@ -78,6 +78,7 @@ class HostedAgentFlow:
             snapshot = review_run(
                 self.store, self.proposal, sources,
                 as_of=now, max_evidence_age=timedelta(hours=24),
+                source_mode=SourceMode.LIVE_HTTP_UNVERIFIED,
             )
         else:
             snapshot = commit_rank_repair(
@@ -85,6 +86,7 @@ class HostedAgentFlow:
                 request_id="hosted-rank-" + self.proposal.intent.run_id,
                 acknowledgement=_COMMIT_ACK,
                 as_of=now, max_evidence_age=timedelta(hours=24),
+                source_mode=SourceMode.LIVE_HTTP_UNVERIFIED,
             )
         if snapshot.release_authorized or snapshot.external_action_executed:
             raise ValueError("unexpected release from Qloo rank observation")
@@ -96,9 +98,6 @@ class HostedAgentFlow:
                 ) == "OPERATOR_CONSTRUCTED_UNVERIFIED" else 0
             ),
         )
-        report["status"] = "HOSTED_AGENT_REVIEW"
-        report["source_mode"] = "LIVE_HTTP_UNVERIFIED"
-        report["real_qloo_requests"] = 1
         report["evidence_collected_at"] = observed["collected_at"]
         report["baseline_plan_digest"] = snapshot.baseline_plan_digest
         report["current_plan_digest"] = snapshot.plan_digest
