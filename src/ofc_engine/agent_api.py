@@ -85,18 +85,25 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             self._deny(404, "NOT_FOUND")
             return
         suffix = parts.path[len(prefix):]
-        is_review = suffix.endswith("/review")
-        run_id = suffix[:-len("/review")] if is_review else suffix
+        operation = next(
+            (name for name in ("review", "snapshot") if suffix.endswith("/" + name)),
+            None,
+        )
+        run_id = suffix[:-(len(operation) + 1)] if operation else suffix
         if not _RUN_ID.fullmatch(run_id):
             self._deny(404, "NOT_FOUND")
             return
-        if is_review:
+        if operation:
             session = self.server.evidence_session
             if session is None or session.proposal.intent.run_id != run_id:
                 self._deny(404, "NOT_FOUND")
                 return
             try:
-                result = session.review(self.server.store, run_id)
+                result = (
+                    session.snapshot(self.server.store, run_id)
+                    if operation == "snapshot"
+                    else session.review(self.server.store, run_id)
+                )
             except KeyError:
                 self._deny(404, "NOT_FOUND")
                 return
@@ -192,7 +199,7 @@ class AgentAPIServer(ThreadingHTTPServer):
             raise ValueError("invalid operator evidence session")
         self.store = SQLiteRevisionStore(database)
         if evidence_session is not None:
-            evidence_session.review(self.store, evidence_session.proposal.intent.run_id)
+            evidence_session.snapshot(self.store, evidence_session.proposal.intent.run_id)
         self.evidence_session = evidence_session
         self.auth_token = auth_token
         super().__init__(address, AgentAPIHandler)
