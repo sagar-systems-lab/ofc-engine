@@ -9,6 +9,7 @@ from http.server import ThreadingHTTPServer
 import json
 import os
 import re
+import sqlite3
 from threading import BoundedSemaphore
 from urllib.parse import parse_qs, urlsplit
 
@@ -79,10 +80,19 @@ class HostedFixtureHandler(DemoHandler):
             return
         if self.server.hosted_live is not None:
             if parts.path == "/api/qloo/status" and not parts.query:
-                self._send(200, _encoded(self.server.hosted_live.state()), "application/json")
+                try:
+                    state = self.server.hosted_live.state()
+                except (OSError, ValueError, sqlite3.Error):
+                    self._send(503, b'{"error":"LEDGER_UNAVAILABLE"}', "application/json")
+                    return
+                self._send(200, _encoded(state), "application/json")
                 return
             if parts.path == "/api/qloo/result" and not parts.query:
-                code, report = self.server.hosted_live.public_result()
+                try:
+                    code, report = self.server.hosted_live.public_result()
+                except (OSError, ValueError, sqlite3.Error):
+                    self._send(503, b'{"error":"LEDGER_UNAVAILABLE"}', "application/json")
+                    return
                 self._send(code, _encoded(report), "application/json")
                 return
             if parts.path == "/hosted-live.js" and not parts.query:
@@ -166,7 +176,7 @@ class HostedFixtureHandler(DemoHandler):
             return
         try:
             status, result = self.server.hosted_live.observe()
-        except (OSError, ValueError):
+        except (OSError, ValueError, sqlite3.Error):
             self._send(503, b'{"error":"LEDGER_UNAVAILABLE","release_authorized":false}', "application/json")
             return
         self._send(status, _encoded(result), "application/json")
