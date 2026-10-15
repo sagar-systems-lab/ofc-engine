@@ -244,7 +244,7 @@ def test_one_origin_rejects_rebinding_and_keeps_public_fixture_routes(tmp_path, 
     workspace = prepare(tmp_path, db, paths, auth_token=TOKEN)
     with running(workspace) as (base, same_base):
         assert base == same_base
-        for path in ("/", "/recorded", "/api/local-proof", "/api/demo?scenario=repair"):
+        for path in ("/", "/recorded", "/api/local-proof", "/api/local-run", "/local-run.js", "/api/demo?scenario=repair"):
             assert request(base + path)[0] == 200
             assert request(base + path, headers={"Host": "attacker.test"})[0] == 403
             assert request(base + path, headers={"Origin": "https://attacker.test"})[0] == 403
