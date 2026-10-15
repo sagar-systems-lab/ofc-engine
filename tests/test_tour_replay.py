@@ -293,3 +293,50 @@ def test_public_excerpt_cannot_be_rehashed_to_authorize_execution(tmp_path, monk
     tampered["sha256"] = "0" * 64
     with pytest.raises(ValueError, match="PUBLIC_EXCERPT_CHECKSUM_MISMATCH"):
         HostedFixtureServer(("127.0.0.1", 0), public_recorded_document=tampered)
+
+
+@pytest.mark.parametrize("mutation", ["peer_pass", "peer_off_pass", "peer_on_pass", "brand_review", "dependent_clear", "wrong_domain"])
+def test_public_excerpt_cannot_claim_unverified_tour_decisions_are_qualified(
+    tmp_path, monkeypatch, mutation
+):
+    from copy import deepcopy
+
+    from ofc_engine.hosted_preview import HostedFixtureServer
+    from ofc_engine.revisions import digest_obj
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    workspace, folder = prepare(inputs(tmp_path))
+    workspace.close()
+    draft = json.loads((folder / "public-excerpt-draft.json").read_text())
+    forged = deepcopy(draft)
+    payload = forged["payload"]
+    if mutation == "peer_pass":
+        payload["decisions"][1]["verdict"] = "PASS"
+    elif mutation == "peer_off_pass":
+        payload["off_on"]["off_verdicts"]["opener"] = "PASS"
+    elif mutation == "peer_on_pass":
+        payload["off_on"]["on_verdicts"]["chicago"] = "PASS"
+    elif mutation == "brand_review":
+        payload["decisions"][0]["verdict"] = "UNCERTAIN"
+    elif mutation == "dependent_clear":
+        payload["decisions"][-1]["reason_codes"] = ["RECORDED_TOP_AFFINITY_RANK"]
+    elif mutation == "wrong_domain":
+        payload["decisions"][2]["domain"] = "partner"
+    forged["sha256"] = digest_obj(payload)
+    with pytest.raises(ValueError):
+        HostedFixtureServer(("127.0.0.1", 0), public_recorded_document=forged)
+
+
+def test_recorded_studio_state_is_consistent_and_unverified_choices_are_labeled():
+    from importlib.resources import files
+
+    source = files("ofc_engine").joinpath("web", "local-run.js").read_text()
+    assert "RECORDED QLOO · HISTORICAL · RELEASE LOCKED" in source
+    assert "RANK PASS ONLY" in source
+    assert "ONE CHANGE RECORDED" in source
+    assert "REVIEW REQUIRED" in source
+    assert "UNCHANGED · UNVERIFIED" in source
+    assert "operator_constructed_unverified_decisions" in source
+    assert "innerHTML" not in source
+    assert "textContent" in source
+    assert ".provider-steps > article" in source
