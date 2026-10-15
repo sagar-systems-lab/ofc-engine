@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import re
 from typing import Mapping
 
 from .contracts import (
@@ -145,7 +146,6 @@ def commit_rank_repair(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> RunSnapshot:
-    import re
     if (
         acknowledgement != _ACK or not isinstance(request_id, str)
         or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", request_id)
