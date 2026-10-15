@@ -41,3 +41,20 @@ See [recorded decision gate](qloo_decision_gate.md), [live recheck](qloo_live_re
 ## Trust boundary
 
 A recorded top affinity rank can justify a **rank-only** candidate change. It does not authenticate the provider's response cryptographically, clear pending checks, establish a broader cultural policy, or authorize an external action. The public UI must not be described as a live Qloo-backed agent service until that capability has actually been deployed and qualified.
+
+## Private historical tour acceptance (saved real Qloo response)
+
+The local operator can turn the **existing single-decision brand proposal** plus its saved original and later private Qloo responses into a six-decision tour *replay*. No Qloo API call occurs. The original brand choice and immutable candidate pool are preserved. The opener, Chicago/Austin/Seattle venues and dependent afterparty are explicitly **operator-constructed, unverified hypotheses**—not Qloo recommendations or an independently generated full-tour plan.
+
+```bash
+python -m ofc_engine.tour_replay \\
+  --original-proposal "$ORIGINAL_PROPOSAL" \\
+  --original-capture "$ORIGINAL_CAPTURE" \\
+  --later-capture "$LATER_CAPTURE" \\
+  --artist-id "$ARTIST_ID" \\
+  --brands "$BRAND_IDS" --port 18080
+```
+
+Open only `http://127.0.0.1:18080/#provider` in the approved white studio. The run and proposal remain in a mode-0700 private directory outside the repository. Close the server with Ctrl+C. If another process occupies 18080, stop it before starting this command. The projection redacts real Qloo entity IDs and private captures. It never alters the already-qualified original SQLite journal.
+
+**Historical replay is not a fresh live session.** If the two saved captures fall outside the same evidence-age window, the engine may show the original reference as stale and refuse to assert a recorded rank recheck PASS. That does not erase the real observation; it prevents misleading freshness or release claims. No provider-authenticated verification, venue qualification, dependent clearance, or external action is authorized.
