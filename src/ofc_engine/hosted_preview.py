@@ -19,6 +19,7 @@ from .public_recorded import read_public_recorded_excerpt
 from .hosted_live import HostedLiveReview, configured_live_review
 from .hosted_preflight import preflight
 from .hosted_runs import HostedRunRegistry, RunCapacityReached
+from .hosted_tour import configured_tour
 from .postgres_store import PostgresRevisionStore
 
 _MAX_TARGET_LENGTH = 512
@@ -93,6 +94,13 @@ class HostedFixtureHandler(DemoHandler):
             script = files("ofc_engine").joinpath("web", "hosted-preflight.js").read_bytes()
             self._send(200, script, "text/javascript; charset=utf-8")
             return
+        if parts.path == "/hosted-tour.js" and not parts.query:
+            if self.server.tour_proposal is None or self.server.run_registry is None:
+                self._send(404, b'{"error":"TOUR_UNAVAILABLE"}', "application/json")
+                return
+            script = files("ofc_engine").joinpath("web", "hosted-tour.js").read_bytes()
+            self._send(200, script, "text/javascript; charset=utf-8")
+            return
         if parts.path == "/api/runs/status" and not parts.query:
             if not self._durable_ready():
                 self._send(503, b'{"error":"RUN_STORAGE_UNAVAILABLE","release_authorized":false}',
@@ -100,6 +108,7 @@ class HostedFixtureHandler(DemoHandler):
                 return
             self._send(200, _encoded({
                 "enabled": self.server.run_registry is not None,
+                "tour_available": self.server.tour_proposal is not None and self.server.run_registry is not None,
                 "release_authorized": False,
                 "real_qloo_requests": 0,
             }), "application/json")
@@ -220,7 +229,10 @@ class HostedFixtureHandler(DemoHandler):
                 self._studio_page("/local-run.js")
                 return
         if parts.path == "/" and not parts.query:
-            self._studio_page()
+            self._studio_page(
+                "/hosted-tour.js" if self.server.tour_proposal is not None
+                and self.server.run_registry is not None else None
+            )
             return
         # Keep the static allowlist inherited from the local viewer.
         super().do_GET()
@@ -236,9 +248,12 @@ class HostedFixtureHandler(DemoHandler):
         if self.command != "POST":
             self._send(405, b'{"error":"METHOD_NOT_ALLOWED"}', "application/json")
             return
-        if self.path == "/api/runs":
+        if self.path in ("/api/runs", "/api/runs/tour"):
             if self.server.run_registry is None:
                 self._send(405, b'{"error":"READ_ONLY"}', "application/json")
+                return
+            if self.path == "/api/runs/tour" and self.server.tour_proposal is None:
+                self._send(404, b'{"error":"TOUR_UNAVAILABLE"}', "application/json")
                 return
             host = self.headers.get("Host", "")
             expected = (
@@ -257,6 +272,10 @@ class HostedFixtureHandler(DemoHandler):
                 return
             try:
                 payload = json.loads(self.rfile.read(int(length)))
+                if self.path == "/api/runs/tour":
+                    if payload != {"confirm": "SAVE_SIX_DECISION_TOUR"}:
+                        raise ValueError("invalid tour confirmation")
+                    payload = self.server.tour_proposal.model_dump(mode="json")
                 result = self.server.run_registry.create(payload)
             except RunCapacityReached:
                 self._send(429, b'{"error":"REVIEW_CAPACITY_REACHED"}', "application/json")
@@ -357,6 +376,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
         public_recorded_document: dict | None = None,
         hosted_live: HostedLiveReview | None = None,
         run_registry: HostedRunRegistry | None = None,
+        tour_proposal=None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -367,7 +387,10 @@ class HostedFixtureServer(ThreadingHTTPServer):
         if hosted_live is not None and public_recorded_document is not None:
             raise ValueError("only one Qloo presentation mode may be enabled")
         self.run_registry = run_registry
+        self.tour_proposal = tour_proposal
         self.hosted_live = hosted_live
+        if tour_proposal is not None and run_registry is None:
+            raise ValueError("hosted tour requires durable run registry")
         self.public_excerpt_body = None
         if public_recorded_document is not None:
             payload = read_public_recorded_excerpt(public_recorded_document)
@@ -431,6 +454,10 @@ def main(argv: list[str] | None = None) -> None:
     except (ValueError, psycopg.Error):
         parser.error("invalid or incomplete hosted Qloo approval configuration")
     durable_mode = os.environ.get("OFC_DURABLE_RUNS_MODE", "")
+    try:
+        tour = configured_tour(os.environ)
+    except ValueError:
+        parser.error("invalid hosted tour scope")
     registry = None
     if durable_mode:
         if durable_mode != "ENABLED" or not os.environ.get("OFC_DATABASE_URL"):
@@ -444,7 +471,7 @@ def main(argv: list[str] | None = None) -> None:
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
-        run_registry=registry,
+        run_registry=registry, tour_proposal=tour,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
