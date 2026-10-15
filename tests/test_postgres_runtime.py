@@ -457,6 +457,10 @@ def test_ticketed_browser_run_receives_only_its_own_qloo_rank(pg_url):
     assert review["source_mode"] == "LIVE_HTTP_UNVERIFIED"
     assert review["revision"] == 1
     assert review["agent_run"]["changed_ids"] == ["brand"]
+    assert review["agent_run"]["off_on"]["same_baseline"] is True
+    assert review["agent_run"]["off_on"]["off_verdicts"]["brand"] == "UNCERTAIN"
+    assert review["agent_run"]["off_on"]["on_verdicts"]["brand"] == "REPAIR"
+    assert review["agent_run"]["off_on"]["real_causal_proof"] is False
     assert review["agent_run"]["provenance"]["journal_head"] == review["journal_head"]
     assert review["agent_run"]["provenance"]["current_plan_digest"] == review["plan_digest"]
     assert review["agent_run"]["provenance"]["baseline_digest"] == review["baseline_digest"]
@@ -586,9 +590,14 @@ def test_public_six_decision_tour_freezes_scope_and_requires_operator_for_qloo(
             assert b"/api/runs/tour" in script
             assert b'start.id = "start-hosted-tour"' in script
             assert b'#view-plan > .intro' in script
+            assert b'actions.className = "hosted-tour-actions"' in script
+            assert b'actions.style.alignItems = "center"' in script
+            assert b'actions.style.marginBottom = "16px"' in script
             assert b'getElementById("load-example")' not in script
             assert b"innerHTML" not in script
             assert b"QLOO_API_KEY" not in script
+            assert b'ofc-review-refresh' in script
+            assert b'ofc-tour-run-id' in script
             assert b"artist-ci" not in script
             assert save(origin="https://attacker.example")[0] == 403
             assert save(confirmation="RUN_PROVIDER_NOW")[0] == 422

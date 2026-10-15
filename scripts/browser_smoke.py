@@ -94,6 +94,23 @@ def run_browser(origin: str) -> dict:
                         tour.scroll_into_view_if_needed()
                         if not tour.is_enabled():
                             raise BrowserFailure("hosted tour action is inaccessible")
+                        alignment = tour.evaluate("""el => {
+                            const button = el.getBoundingClientRect();
+                            const strip = document.querySelector('#view-plan .state-strip').getBoundingClientRect();
+                            const actions = el.parentElement.getBoundingClientRect();
+                            return {
+                                centerDelta: Math.abs((button.left + button.right) / 2 -
+                                                     (strip.left + strip.right) / 2),
+                                aboveStrip: button.bottom < strip.top,
+                                spacing: strip.top - actions.bottom,
+                                fits: button.left >= 0 && button.right <= innerWidth
+                            };
+                        }""")
+                        if (alignment["centerDelta"] > 5 or
+                            not alignment["aboveStrip"] or
+                            not alignment["fits"] or
+                            alignment["spacing"] < 0 or alignment["spacing"] > 32):
+                            raise BrowserFailure("hosted tour action is not centered above progress")
                     if page.locator("#check-preflight").is_enabled():
                         raise BrowserFailure("unvalidated plan allowed preflight")
                     heading_style = page.locator("#draft-title").evaluate("""el => ({

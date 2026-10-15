@@ -6,18 +6,54 @@
   if (!intro || !panel) return;
 
   const actions = document.createElement("div");
-  actions.className = "editor-actions";
+  actions.className = "hosted-tour-actions";
+  actions.style.display = "flex";
+  actions.style.flexDirection = "column";
+  actions.style.alignItems = "center";
+  actions.style.gap = "6px";
+  actions.style.marginBottom = "16px";
+  intro.style.marginBottom = "10px";
   const start = document.createElement("button");
   start.id = "start-hosted-tour";
   start.type = "button";
   start.className = "primary";
+  start.style.width = "min(100%, 320px)";
   start.textContent = "Start six-decision tour review →";
   const status = document.createElement("p");
   status.className = "small-note";
+  status.style.margin = "0";
+  status.style.textAlign = "center";
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  actions.append(start, status);
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.id = "refresh-hosted-tour";
+  refresh.className = "export-button";
+  refresh.textContent = "Refresh Qloo evidence ↻";
+  refresh.hidden = true;
+  actions.append(start, refresh, status);
   intro.insertAdjacentElement("afterend", actions);
+
+  try {
+    const previous = JSON.parse(sessionStorage.getItem("ofc-last-review") || "null");
+    if (
+      previous?.run_id === sessionStorage.getItem("ofc-tour-run-id") &&
+      /^web-[0-9a-f]{32}$/.test(previous.run_id) &&
+      typeof previous.ticket === "string" && previous.ticket.length >= 32
+    ) {
+      refresh.hidden = false;
+      start.disabled = true;
+      start.textContent = "Tour saved · review required";
+      status.textContent = "Saved tour can be rechecked without spending another Qloo request.";
+    }
+  } catch {
+    // A corrupt local session must not unlock evidence or release.
+  }
+
+  refresh.addEventListener("click", () => {
+    status.textContent = "Checking saved evidence. This does not call Qloo.";
+    window.dispatchEvent(new Event("ofc-review-refresh"));
+  });
 
   start.addEventListener("click", async () => {
     if (start.disabled) return;
@@ -52,6 +88,7 @@
       sessionStorage.setItem("ofc-last-review", JSON.stringify({
         run_id: saved.run_id, ticket: saved.ticket
       }));
+      sessionStorage.setItem("ofc-tour-run-id", saved.run_id);
       panel.hidden = false;
       document.getElementById("preflight-state").textContent =
         "SIX-DECISION TOUR SAVED · REVIEW REQUIRED";
@@ -74,7 +111,8 @@
       location.hash = "#plan";
       panel.scrollIntoView({block: "nearest", behavior: "auto"});
       start.textContent = "Tour saved · review required";
-      status.textContent = "Six decisions saved. Provider evidence and handoff remain blocked.";
+      refresh.hidden = false;
+      status.textContent = "Six decisions saved on the server; the editor below is a separate draft.";
     } catch {
       start.disabled = false;
       start.textContent = "Retry six-decision tour review";

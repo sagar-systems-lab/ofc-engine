@@ -53,6 +53,11 @@
   savedButton.hidden = true;
   const panel = get("preflight-panel");
   if (panel) panel.append(savedButton);
+  const proof = document.createElement("section");
+  proof.id = "hosted-qloo-proof";
+  proof.className = "preflight-record";
+  proof.hidden = true;
+  if (panel) panel.append(proof);
 
   function identity(request) {
     return JSON.stringify(request.decisions) +
@@ -88,7 +93,13 @@
         !Array.isArray(run.changed_ids) ||
         !Array.isArray(run.pending_rechecks) ||
         !Array.isArray(run.decisions) ||
-        run.decisions.length !== review.decisions.length
+        run.decisions.length !== review.decisions.length ||
+        run.off_on?.same_baseline !== true ||
+        run.off_on.real_causal_proof !== false ||
+        !Array.isArray(run.preserved_ids) ||
+        !Array.isArray(run.invalidated_ids) ||
+        !Array.isArray(run.blockers) ||
+        !Array.isArray(run.handoff?.blockers)
       ) throw new Error("Unbound Qloo review");
     }
   }
@@ -105,6 +116,8 @@
       const review = await response.json();
       validateStored(review);
       if (panel) panel.hidden = false;
+      proof.replaceChildren();
+      proof.hidden = true;
       const live = review.source_mode === "LIVE_HTTP_UNVERIFIED";
       get("preflight-state").textContent = live
         ? "QLOO RANK OBSERVED · REVIEW REQUIRED"
@@ -130,11 +143,48 @@
           row.append(name, detail);
           list.append(row);
         }
+        const run = review.agent_run;
+        const label = document.createElement("strong");
+        label.textContent = "Qloo OFF / ON · Same frozen baseline";
+        const comparison = document.createElement("p");
+        comparison.textContent = "Brand: " +
+          (run.off_on.off_verdicts.brand || "UNCERTAIN") + " → " +
+          (run.off_on.on_verdicts.brand || "UNCERTAIN") +
+          ". Selective repairs: " + run.changed_ids.length +
+          "; preserved decisions: " + run.preserved_ids.length +
+          "; invalidated dependents: " + run.invalidated_ids.length + ".";
+        const safety = document.createElement("p");
+        safety.textContent = "Revision " + run.revision +
+          " · Rechecks pending: " + run.pending_rechecks.length +
+          " · Handoff WITHHELD · Provider attestation not established.";
+        const evidence = document.createElement("p");
+        evidence.textContent = "Source: LIVE_HTTP_UNVERIFIED. " +
+          "One observed Qloo rank request. This is not a verified full-tour plan.";
+        proof.append(label, comparison, safety, evidence);
+        proof.hidden = false;
+        const disclaimer = document.querySelector("#view-plan > .intro p");
+        if (disclaimer) disclaimer.textContent =
+          "One operator-authorized Qloo rank observation is recorded for this " +
+          "tour. Independent verification and action handoff remain blocked.";
+        const step = document.querySelector(".state-strip .state-item:nth-child(2) small");
+        if (step) step.textContent = "RANK OBSERVED";
+        const boundary = document.querySelector("#view-plan .boundary-panel");
+        if (boundary) {
+          const heading = boundary.querySelector("strong");
+          const description = boundary.querySelector("p");
+          if (heading) heading.textContent = "Rank observed · verification pending";
+          if (description) description.textContent =
+            "Qloo supplied one scoped rank observation. Unsupported decisions, " +
+            "dependent rechecks and plan release remain blocked. " +
+            "No external action has occurred.";
+        }
       }
     } catch {
       // The original plan editor remains usable without session storage.
     }
   }
+
+  window.addEventListener("ofc-review-refresh", () => { void restore(); });
 
   fetch("/api/runs/status", {cache: "no-store"})
     .then(response => response.ok ? response.json() : null)
