@@ -491,6 +491,65 @@ def test_ticketed_browser_run_receives_only_its_own_qloo_rank(pg_url):
     assert inspect(restarted)[1]["agent_run"] == review["agent_run"]
     assert restarted.observe()[1]["requests_this_call"] == 0
 
+    from ofc_engine.published_tour import PublishedTourReview
+
+    published = PublishedTourReview(registry, run_id)
+    preview = published.review()
+    assert preview["status"] == "OBSERVED_QLOO_REVIEW_REQUIRED"
+    assert preview["off_on"]["off_brand"] == "UNCERTAIN"
+    assert preview["off_on"]["on_brand"] == "REPAIR"
+    assert preview["changed_ids"] == ["brand"]
+    assert preview["handoff"] == "WITHHELD"
+    assert preview["additional_provider_requests"] == 0
+    assert preview["provider_authenticated"] is False
+    assert len(preview["decisions"]) == 6
+    assert "ticket" not in json.dumps(preview)
+    for secret in ("fake-ci-only", "artist-ci", "brand-a", "brand-b", "operator-"):
+        assert secret not in json.dumps(preview)
+
+    with HostedFixtureServer(
+        ("127.0.0.1", 0), run_registry=registry,
+        public_showcase=published,
+    ) as server:
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        base = "http://127.0.0.1:" + str(server.server_port)
+        try:
+            with urlopen(base + "/", timeout=5) as response:
+                assert b"/hosted-showcase.js" in response.read()
+            with urlopen(base + "/hosted-showcase.js", timeout=5) as response:
+                js = response.read()
+                assert b"/api/showcase" in js
+                assert b"innerHTML" not in js
+            with urlopen(base + "/api/showcase", timeout=5) as response:
+                assert json.loads(response.read()) == preview
+            with pytest.raises(HTTPError) as denied:
+                urlopen(base + "/api/showcase?unapproved=1", timeout=5)
+            assert denied.value.code in (400, 404)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=5)
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            "update ofc_private.browser_runs "
+            "set expires_at=now()-interval '2 hours' where plan_id=%s",
+            (run_id,),
+        )
+    with pytest.raises(ValueError):
+        registry.operator_proposal(run_id)
+    assert published.review() == preview
+    with pytest.raises(ValueError):
+        PublishedTourReview(registry, other["run_id"])
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            "update ofc_private.provider_attempt set scope=%s where id=1",
+            ("f" * 64,),
+        )
+    with pytest.raises(ValueError):
+        published.review()
+
 
 def test_private_browser_proposal_rejects_expiry_and_scope_tampering(pg_url):
     from ofc_engine.hosted_runs import HostedRunRegistry
