@@ -42,6 +42,12 @@
     sheet.append(element("p", "", state.historical_replay
       ? "Historical point-in-time replay. Not a current live approval."
       : "Recorded Qloo evidence. No new provider call or action."));
+    if (state.operator_constructed_unverified_decisions > 0) {
+      sheet.append(element("p", "privacy-caption",
+        state.operator_constructed_unverified_decisions +
+        " additional tour choices are unverified operator hypotheses. " +
+        "Only the original brand decision was imported from the saved agent proposal."));
+    }
     sheet.append(element("p", "privacy-caption",
       "Qloo OFF / ON share the same frozen baseline: " +
       (state.off_on.same_baseline ? "yes" : "no") +
