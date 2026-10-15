@@ -260,16 +260,18 @@ def test_cli_reads_private_files_and_never_calls_qloo(tmp_path, monkeypatch, cap
     source_file = tmp_path / "original.json"
     later_file = tmp_path / "later.json"
     proposal_file.write_text(p.model_dump_json())
-    source_file.write_text(json.dumps(source["brand"].capture))
+    wall_clock = datetime.now(timezone.utc)
+    source_file.write_text(json.dumps(capture(
+        at=wall_clock - timedelta(hours=5)
+    )))
     later_file.write_text(json.dumps(capture(
-        at=NOW - timedelta(minutes=2), scores=(0.96, 0.72, 0.24)
+        at=wall_clock - timedelta(hours=2), scores=(0.96, 0.72, 0.24)
     )))
     args = [
         "--database", str(database), "--proposal", str(proposal_file),
         "--original-capture", str(source_file), "--artist-id", ARTIST,
         "--brands", ",".join(BRANDS),
     ]
-    # CLI uses the real wall clock and refuses to claim a stale observation is current.
     assert run_cli(args + ["--historical"]) == 0
     frozen = json.loads(capsys.readouterr().out)
     assert frozen["plan_revision"] == 0 and frozen["release_authorized"] is False
