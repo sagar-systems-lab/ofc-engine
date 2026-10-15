@@ -110,6 +110,13 @@ class HostedFixtureHandler(DemoHandler):
                 return
             self._send(200, self.server.health_body, "application/json")
             return
+        if parts.path == "/api/runs/status" and not parts.query:
+            self._send(200, _encoded({
+                "enabled": self.server.run_registry is not None,
+                "release_authorized": False,
+                "real_qloo_requests": 0,
+            }), "application/json")
+            return
         if parts.path == "/api/demo":
             params = parse_qs(parts.query, keep_blank_values=True)
             if set(params) != {"scenario"} or len(params["scenario"]) != 1:
