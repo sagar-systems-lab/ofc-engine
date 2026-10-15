@@ -11,6 +11,7 @@ import secrets
 from stat import S_ISDIR, S_ISREG
 
 from .agent_evidence_session import OperatorEvidenceSession
+from .agent_run import RunSnapshot
 from .connected_local import ConnectedLocalServer
 from .durable import SQLiteRevisionStore
 from .local_proof_server import load_manifest
@@ -21,7 +22,7 @@ from .qloo_operator_workspace import _save, build_workspace
 class ConnectedWorkspace:
     server: ConnectedLocalServer
     token_file: Path | None
-    proof_file: Path
+    proof_file: Path | None
     run_id: str
     rank_status: str
     historical: bool
@@ -85,24 +86,38 @@ def prepare_workspace(
         age_hours=age_hours, historical=historical,
     )
     store = SQLiteRevisionStore(database)
-    review = session.review(store, session.proposal.intent.run_id)
-    report = build_workspace(
-        store, session.proposal, session.original[decision_id].capture,
-        artist_id=artist_id, brand_ids=brand_ids, decision_id=decision_id,
-        now=datetime.now(timezone.utc), historical=historical,
-        recheck_capture=session.later[decision_id].capture,
+    snapshot = RunSnapshot.model_validate(
+        session.snapshot(store, session.proposal.intent.run_id)
     )
     if (
-        review["revision"] != report["plan"]["revision"]
-        or review["plan_digest"] != report["plan"]["stored_digest"]
-        or not review["pending_recheck_ids"]
-        or report["recheck"]["pending_recheck_cleared"]
-        or review["release_authorized"]
-        or report["qualifications"]["release_authorized"]
+        snapshot.plan_revision != 1
+        or snapshot.changed_ids != (decision_id,)
+        or not snapshot.pending_rechecks
+        or snapshot.release_authorized
+        or snapshot.handoff.verification_status != "REVIEW_REQUIRED"
     ):
-        raise ValueError("agent and proof revision mismatch")
-    manifest_path, _ = _save(report)
-    manifest = load_manifest(manifest_path)
+        raise ValueError("agent run not review-ready")
+
+    manifest_path = None
+    manifest = None
+    if len(session.proposal.decisions) == 1:
+        review = session.review(store, session.proposal.intent.run_id)
+        report = build_workspace(
+            store, session.proposal, session.original[decision_id].capture,
+            artist_id=artist_id, brand_ids=brand_ids, decision_id=decision_id,
+            now=datetime.now(timezone.utc), historical=historical,
+            recheck_capture=session.later[decision_id].capture,
+        )
+        if (
+            review["revision"] != report["plan"]["revision"]
+            or snapshot.plan_digest != report["plan"]["stored_digest"]
+            or review["plan_digest"] != snapshot.plan_digest
+            or report["recheck"]["pending_recheck_cleared"]
+            or report["qualifications"]["release_authorized"]
+        ):
+            raise ValueError("agent and proof revision mismatch")
+        manifest_path, _ = _save(report)
+        manifest = load_manifest(manifest_path)
 
     token_file = None
     token = auth_token
@@ -119,7 +134,8 @@ def prepare_workspace(
         raise
     return ConnectedWorkspace(
         server, token_file, manifest_path, session.proposal.intent.run_id,
-        review["status"], historical,
+        "RECORDED_RANK_RECHECK_PASS_NO_RELEASE" if snapshot.recorded_rank_recheck_pass else "REVIEW_REQUIRED",
+        historical,
     )
 
 
