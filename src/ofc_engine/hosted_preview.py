@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sqlite3
+import psycopg
 from threading import BoundedSemaphore
 from urllib.parse import parse_qs, urlsplit
 
@@ -17,6 +18,8 @@ from .webdemo import DemoHandler, SCENARIOS, demo_snapshot
 from .public_recorded import read_public_recorded_excerpt
 from .hosted_live import HostedLiveReview, configured_live_review
 from .hosted_preflight import preflight
+from .hosted_runs import HostedRunRegistry, RunCapacityReached
+from .postgres_store import PostgresRevisionStore
 
 _MAX_TARGET_LENGTH = 512
 _MAX_CONNECTIONS = 16
@@ -81,6 +84,33 @@ class HostedFixtureHandler(DemoHandler):
             script = files("ofc_engine").joinpath("web", "hosted-preflight.js").read_bytes()
             self._send(200, script, "text/javascript; charset=utf-8")
             return
+        if parts.path == "/api/runs/status" and not parts.query:
+            self._send(200, _encoded({
+                "enabled": self.server.run_registry is not None,
+                "release_authorized": False,
+                "real_qloo_requests": 0,
+            }), "application/json")
+            return
+        if parts.path.startswith("/api/runs/"):
+            match = re.fullmatch(r"/api/runs/(web-[0-9a-f]{32})/review", parts.path)
+            if (
+                match is None or parts.query or self.server.run_registry is None
+                or not self.headers.get("Authorization", "").startswith("Bearer ")
+            ):
+                self._send(404, b'{"error":"RUN_UNAVAILABLE"}', "application/json")
+                return
+            try:
+                result = self.server.run_registry.review(
+                    match.group(1), self.headers["Authorization"][7:]
+                )
+            except KeyError:
+                self._send(404, b'{"error":"RUN_UNAVAILABLE"}', "application/json")
+                return
+            except (ValueError, psycopg.Error, sqlite3.Error):
+                self._send(503, b'{"error":"RUN_REVIEW_UNAVAILABLE"}', "application/json")
+                return
+            self._send(200, _encoded(result), "application/json")
+            return
         if parts.path in ("/healthz", "/readyz"):
             if parts.query:
                 self._send(400, b'{"error":"INVALID_QUERY"}', "application/json")
@@ -102,7 +132,7 @@ class HostedFixtureHandler(DemoHandler):
             if parts.path == "/api/qloo/status" and not parts.query:
                 try:
                     state = self.server.hosted_live.state()
-                except (OSError, ValueError, sqlite3.Error):
+                except (OSError, ValueError, sqlite3.Error, psycopg.Error):
                     self._send(503, b'{"error":"LEDGER_UNAVAILABLE"}', "application/json")
                     return
                 self._send(200, _encoded(state), "application/json")
@@ -110,7 +140,7 @@ class HostedFixtureHandler(DemoHandler):
             if parts.path == "/api/qloo/result" and not parts.query:
                 try:
                     code, report = self.server.hosted_live.public_result()
-                except (OSError, ValueError, sqlite3.Error):
+                except (OSError, ValueError, sqlite3.Error, psycopg.Error):
                     self._send(503, b'{"error":"LEDGER_UNAVAILABLE"}', "application/json")
                     return
                 self._send(code, _encoded(report), "application/json")
@@ -147,6 +177,42 @@ class HostedFixtureHandler(DemoHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        if self.command != "POST":
+            self._send(405, b'{"error":"METHOD_NOT_ALLOWED"}', "application/json")
+            return
+        if self.path == "/api/runs":
+            if self.server.run_registry is None:
+                self._send(405, b'{"error":"READ_ONLY"}', "application/json")
+                return
+            host = self.headers.get("Host", "")
+            expected = (
+                "http://" + host if host.startswith(("127.0.0.1:", "localhost:"))
+                else "https://" + host
+            )
+            length = self.headers.get("Content-Length", "")
+            if (
+                not host or self.headers.get("Origin", "") != expected
+                or self.headers.get("Sec-Fetch-Site") not in (None, "same-origin")
+                or self.headers.get("Content-Type") != "application/json"
+                or not length.isascii() or not length.isdecimal()
+                or not 1 <= int(length) <= 96 * 1024
+            ):
+                self._send(403, b'{"error":"INVALID_REQUEST"}', "application/json")
+                return
+            try:
+                payload = json.loads(self.rfile.read(int(length)))
+                result = self.server.run_registry.create(payload)
+            except RunCapacityReached:
+                self._send(429, b'{"error":"REVIEW_CAPACITY_REACHED"}', "application/json")
+                return
+            except (ValueError, TypeError, UnicodeError, OverflowError):
+                self._send(422, b'{"error":"INVALID_PROPOSAL"}', "application/json")
+                return
+            except (psycopg.Error, sqlite3.Error):
+                self._send(503, b'{"error":"RUN_STORAGE_UNAVAILABLE"}', "application/json")
+                return
+            self._send(201, _encoded(result), "application/json")
+            return
         if self.path == "/api/preflight":
             host = self.headers.get("Host", "")
             expected_origin = (
@@ -214,7 +280,7 @@ class HostedFixtureHandler(DemoHandler):
             return
         try:
             status, result = self.server.hosted_live.observe()
-        except (OSError, ValueError, sqlite3.Error):
+        except (OSError, ValueError, sqlite3.Error, psycopg.Error):
             self._send(503, b'{"error":"LEDGER_UNAVAILABLE","release_authorized":false}', "application/json")
             return
         self._send(status, _encoded(result), "application/json")
@@ -234,6 +300,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
         self, address: tuple[str, int], *, build_sha: str = "unknown",
         public_recorded_document: dict | None = None,
         hosted_live: HostedLiveReview | None = None,
+        run_registry: HostedRunRegistry | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -243,6 +310,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
             raise ValueError("build SHA must be a lowercase hex revision or unknown")
         if hosted_live is not None and public_recorded_document is not None:
             raise ValueError("only one Qloo presentation mode may be enabled")
+        self.run_registry = run_registry
         self.hosted_live = hosted_live
         self.public_excerpt_body = None
         if public_recorded_document is not None:
@@ -304,11 +372,23 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("invalid recorded proof pack")
     try:
         live = configured_live_review(os.environ)
-    except ValueError:
+    except (ValueError, psycopg.Error):
         parser.error("invalid or incomplete hosted Qloo approval configuration")
+    durable_mode = os.environ.get("OFC_DURABLE_RUNS_MODE", "")
+    registry = None
+    if durable_mode:
+        if durable_mode != "ENABLED" or not os.environ.get("OFC_DATABASE_URL"):
+            parser.error("durable runs require an explicitly configured PostgreSQL URL")
+        try:
+            registry = HostedRunRegistry(
+                PostgresRevisionStore(os.environ["OFC_DATABASE_URL"])
+            )
+        except (ValueError, psycopg.Error):
+            parser.error("durable runs unavailable")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
+        run_registry=registry,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()

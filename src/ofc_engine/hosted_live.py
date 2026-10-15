@@ -2,16 +2,21 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import base64
+import binascii
 import hmac
 from pathlib import Path
 import sqlite3
+import psycopg
 from threading import Lock
 from typing import Callable, Mapping
 
 from .qloo import ProbeSpec, QlooProbeClient, QlooProbeError, brand_affinity_probe
 from .qloo_affinity import AffinityCaptureError, normalize_affinity_capture
 from .hosted_attempt import HostedAttemptLedger
-from .hosted_agent import HostedAgentFlow, load_hosted_proposal
+from .hosted_agent import HostedAgentFlow, load_hosted_proposal, validate_hosted_proposal
+from .postgres_attempt import PostgresAttemptLedger
+from .postgres_store import PostgresRevisionStore
 from .intake import freeze_proposal
 from .revisions import plan_digest
 
@@ -20,7 +25,7 @@ class HostedLiveReview:
     def __init__(
         self, *, api_key: str, artist_id: str, brand_ids: tuple[str, ...],
         selected_brand_id: str, client: QlooProbeClient | None = None,
-        ledger: HostedAttemptLedger | None = None,
+        ledger: HostedAttemptLedger | PostgresAttemptLedger | None = None,
         operator_token: str | None = None,
         agent_evaluator: Callable[[dict, ProbeSpec], dict] | None = None,
     ) -> None:
@@ -160,7 +165,7 @@ class HostedLiveReview:
             if self._ledger is not None:
                 try:
                     self._ledger.complete(report)
-                except (OSError, ValueError, sqlite3.Error):
+                except (OSError, ValueError, sqlite3.Error, psycopg.Error):
                     return 503, self._error("RESULT_PERSISTENCE_UNAVAILABLE", attempt_reserved=True)
             self._finished = report
         return code, report
@@ -185,7 +190,7 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         "OFC_HOSTED_QLOO_MODE", "OFC_HOSTED_QLOO_ARTIST_ID",
         "OFC_HOSTED_QLOO_BRAND_IDS", "OFC_HOSTED_QLOO_SELECTED_ID",
         "OFC_HOSTED_OPERATOR_TOKEN", "OFC_HOSTED_QLOO_LEDGER_PATH",
-        "OFC_HOSTED_AGENT_PROPOSAL_PATH",
+        "OFC_HOSTED_AGENT_PROPOSAL_PATH", "OFC_HOSTED_AGENT_PROPOSAL_B64",
     )
     if not enabled:
         if any(environment.get(field) for field in fields[1:]):
@@ -197,25 +202,51 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         raise ValueError("server-side Qloo API key missing")
     token = environment.get("OFC_HOSTED_OPERATOR_TOKEN", "")
     ledger_path = environment.get("OFC_HOSTED_QLOO_LEDGER_PATH", "")
-    if not token or not ledger_path or not Path(ledger_path).is_absolute():
-        raise ValueError("operator authorization and persistent ledger required")
+    postgres_url = environment.get("OFC_DATABASE_URL", "")
+    if not token or bool(postgres_url) == bool(ledger_path):
+        raise ValueError("one private persistent store and operator token are required")
+    if ledger_path and not Path(ledger_path).is_absolute():
+        raise ValueError("persistent ledger path must be absolute")
+    if ledger_path and environment.get("RENDER_SERVICE_ID"):
+        raise ValueError("ephemeral Render volumes cannot host a provider ledger")
     artist = environment.get("OFC_HOSTED_QLOO_ARTIST_ID", "")
     brands = tuple(environment.get("OFC_HOSTED_QLOO_BRAND_IDS", "").split(","))
     selected = environment.get("OFC_HOSTED_QLOO_SELECTED_ID", "")
     spec = brand_affinity_probe(artist, brands)
-    proposal_path = Path(environment.get("OFC_HOSTED_AGENT_PROPOSAL_PATH", ""))
-    if not proposal_path.is_absolute():
-        raise ValueError("private hosted agent proposal is required")
-    proposal = load_hosted_proposal(
-        proposal_path, artist_id=artist, brand_ids=brands,
-        selected_brand_id=selected,
-    )
+    private_path = environment.get("OFC_HOSTED_AGENT_PROPOSAL_PATH", "")
+    encoded = environment.get("OFC_HOSTED_AGENT_PROPOSAL_B64", "")
+    if bool(private_path) == bool(encoded):
+        raise ValueError("exactly one private frozen proposal is required")
+    if encoded:
+        if len(encoded) > 132000:
+            raise ValueError("private hosted proposal too large")
+        try:
+            payload = base64.b64decode(encoded, validate=True)
+        except binascii.Error as exc:
+            raise ValueError("invalid encoded agent proposal") from exc
+        proposal = validate_hosted_proposal(
+            payload, artist_id=artist, brand_ids=brands,
+            selected_brand_id=selected,
+        )
+    else:
+        path = Path(private_path)
+        if not path.is_absolute():
+            raise ValueError("private hosted agent proposal is required")
+        proposal = load_hosted_proposal(
+            path, artist_id=artist, brand_ids=brands,
+            selected_brand_id=selected,
+        )
     baseline, _ = freeze_proposal(proposal)
     scope = sha256((
         spec.fingerprint + ":" + selected + ":" + plan_digest(baseline)
     ).encode("utf-8")).hexdigest()
-    ledger = HostedAttemptLedger(Path(ledger_path), scope=scope)
-    flow = HostedAgentFlow(proposal=proposal, database=ledger.path)
+    if postgres_url:
+        durable_store = PostgresRevisionStore(postgres_url)
+        ledger = PostgresAttemptLedger(postgres_url, scope=scope)
+        flow = HostedAgentFlow(proposal=proposal, store=durable_store)
+    else:
+        ledger = HostedAttemptLedger(Path(ledger_path), scope=scope)
+        flow = HostedAgentFlow(proposal=proposal, database=ledger.path)
     return HostedLiveReview(
         api_key=environment["QLOO_API_KEY"],
         artist_id=artist, brand_ids=brands,

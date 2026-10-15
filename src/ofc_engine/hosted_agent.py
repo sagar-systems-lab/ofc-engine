@@ -19,16 +19,13 @@ from .revisions import RevisionConflict
 _COMMIT_ACK = "COMMIT_RECORDED_REPAIR_WITH_RECHECK_NO_RELEASE"
 
 
-def load_hosted_proposal(
-    path: Path, *, artist_id: str, brand_ids: tuple[str, ...],
+def validate_hosted_proposal(
+    raw: bytes, *, artist_id: str, brand_ids: tuple[str, ...],
     selected_brand_id: str,
 ) -> AgentProposal:
-    info = path.lstat()
-    if not S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
-        raise ValueError("unsafe hosted proposal file")
-    if info.st_size > 96 * 1024 or info.st_size == 0:
+    if not 0 < len(raw) <= 96 * 1024:
         raise ValueError("invalid hosted proposal size")
-    proposal = AgentProposal.model_validate_json(path.read_bytes())
+    proposal = AgentProposal.model_validate_json(raw)
     baseline, _ = freeze_proposal(proposal)
     brand = next((d for d in baseline.decisions if d.decision_id == "brand"), None)
     if (
@@ -46,10 +43,28 @@ def load_hosted_proposal(
     return proposal
 
 
+def load_hosted_proposal(
+    path: Path, *, artist_id: str, brand_ids: tuple[str, ...],
+    selected_brand_id: str,
+) -> AgentProposal:
+    info = path.lstat()
+    if not S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise ValueError("unsafe hosted proposal file")
+    return validate_hosted_proposal(
+        path.read_bytes(), artist_id=artist_id,
+        brand_ids=brand_ids, selected_brand_id=selected_brand_id,
+    )
+
+
 class HostedAgentFlow:
-    def __init__(self, *, proposal: AgentProposal, database: Path) -> None:
+    def __init__(
+        self, *, proposal: AgentProposal,
+        database: Path | None = None, store=None,
+    ) -> None:
+        if (store is None) == (database is None):
+            raise ValueError("select exactly one durable plan store")
         self.proposal = proposal
-        self.store = SQLiteRevisionStore(database)
+        self.store = store if store is not None else SQLiteRevisionStore(database)
         baseline, _ = freeze_proposal(proposal)
         try:
             self.store.insert(baseline)
