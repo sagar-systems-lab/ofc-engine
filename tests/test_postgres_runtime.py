@@ -524,3 +524,130 @@ def test_private_browser_proposal_rejects_expiry_and_scope_tampering(pg_url):
         )
     with pytest.raises(ValueError):
         registry.operator_proposal(run_id)
+
+
+def test_public_six_decision_tour_freezes_scope_and_requires_operator_for_qloo(
+    pg_url, monkeypatch
+):
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from ofc_engine.hosted_live import configured_live_review
+    from ofc_engine.hosted_preview import HostedFixtureServer
+    from ofc_engine.hosted_runs import HostedRunRegistry
+    from ofc_engine.hosted_tour import configured_tour
+
+    scope = {
+        "OFC_TOUR_ARTIST_ID": "artist-ci",
+        "OFC_TOUR_BRAND_IDS": "brand-a,brand-b",
+        "OFC_TOUR_SELECTED_ID": "brand-a",
+    }
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute("update ofc_private.browser_budget set writes=0 where id=1")
+        db.execute("delete from ofc_private.provider_attempt")
+        db.execute("delete from ofc_private.provider_scope")
+
+    registry = HostedRunRegistry(
+        PostgresRevisionStore(pg_url, insecure_local_test=True)
+    )
+    with HostedFixtureServer(
+        ("127.0.0.1", 0),
+        run_registry=registry,
+        tour_proposal=configured_tour(scope),
+    ) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = "http://127.0.0.1:" + str(server.server_port)
+
+        def save(*, origin=None, confirmation="SAVE_SIX_DECISION_TOUR"):
+            request = Request(
+                base + "/api/runs/tour",
+                method="POST",
+                headers={
+                    "Origin": origin or base,
+                    "Content-Type": "application/json",
+                },
+                data=json.dumps({"confirm": confirmation}).encode(),
+            )
+            try:
+                with urlopen(request, timeout=5) as response:
+                    return response.status, json.loads(response.read())
+            except HTTPError as error:
+                return error.code, json.loads(error.read())
+
+        try:
+            with urlopen(base + "/", timeout=5) as response:
+                page = response.read()
+            assert b"/hosted-tour.js" in page
+            assert b"/hosted-live.js" not in page
+            with urlopen(base + "/hosted-tour.js", timeout=5) as response:
+                script = response.read()
+            assert b"/api/runs/tour" in script
+            assert b"innerHTML" not in script
+            assert b"QLOO_API_KEY" not in script
+            assert b"artist-ci" not in script
+            assert save(origin="https://attacker.example")[0] == 403
+            assert save(confirmation="RUN_PROVIDER_NOW")[0] == 422
+            status, saved = save()
+            assert status == 201
+            assert saved["review"]["release_authorized"] is False
+            assert saved["review"]["real_qloo_requests"] == 0
+            assert len(saved["review"]["decisions"]) == 6
+            assert "artist-ci" not in json.dumps(saved)
+            assert "brand-a" not in json.dumps(saved)
+            review_url = base + "/api/runs/" + saved["run_id"] + "/review"
+            req = Request(review_url, headers={
+                "Authorization": "Bearer " + saved["ticket"]
+            })
+            with urlopen(req, timeout=5) as response:
+                assert json.loads(response.read())["plan_digest"] == (
+                    saved["review"]["plan_digest"]
+                )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    frozen = registry.operator_proposal(saved["run_id"])
+    brand = next(d for d in frozen.decisions if d.decision_id == "brand")
+    assert frozen.intent.taste_context["artist_id"] == "artist-ci"
+    assert brand.candidate_pool == ("brand-a", "brand-b")
+    assert brand.candidate_id == "brand-a"
+    assert len(registry.store.audit_history(saved["run_id"])) == 1
+
+    monkeypatch.setattr(
+        "ofc_engine.hosted_live.PostgresRevisionStore",
+        lambda dsn: PostgresRevisionStore(dsn, insecure_local_test=True),
+    )
+    monkeypatch.setattr(
+        "ofc_engine.hosted_live.PostgresAttemptLedger",
+        lambda dsn, *, scope: PostgresAttemptLedger(
+            dsn, scope=scope, insecure_local_test=True
+        ),
+    )
+    environment = {
+        "OFC_HOSTED_QLOO_MODE": "ONE_REQUEST_EXPLICITLY_APPROVED",
+        "QLOO_API_KEY": "fake-ci-only",
+        "OFC_HOSTED_OPERATOR_TOKEN": "operator-" + "x" * 40,
+        "OFC_DATABASE_URL": pg_url,
+        "OFC_HOSTED_BROWSER_RUN_ID": saved["run_id"],
+    }
+    from ofc_engine.qloo import brand_affinity_probe
+
+    approved = configured_live_review(environment)
+    assert approved is not None
+    assert approved.bound_run_id == saved["run_id"]
+    assert approved.spec.fingerprint == brand_affinity_probe(
+        "artist-ci", ("brand-a", "brand-b")
+    ).fingerprint
+    assert approved.state()["status"] == "READY"
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        assert db.execute(
+            "select count(*) from ofc_private.provider_attempt"
+        ).fetchone()[0] == 0
+
+    with pytest.raises(ValueError, match="conflicts"):
+        configured_live_review({
+            **environment, "OFC_HOSTED_QLOO_ARTIST_ID": "other-artist"
+        })
