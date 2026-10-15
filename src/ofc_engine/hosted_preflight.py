@@ -28,13 +28,15 @@ def preflight(payload: Any) -> dict:
         and proposal.decisions == canonical.decisions
     )
     return {
-        "status": "SYNTHETIC_FIXTURE_AVAILABLE" if matched else "REVIEW_REQUIRED",
-        "source_mode": "SYNTHETIC" if matched else "EVIDENCE_UNAVAILABLE",
+        "status": "REVIEW_REQUIRED",
+        "source_mode": "EVIDENCE_UNAVAILABLE",
         "revision": plan.revision,
         "plan_digest": plan_digest(plan),
         "baseline_digest": plan.baseline_digest,
         "decision_count": len(plan.decisions),
         "synthetic_fixture_available": matched,
+        "same_run_as_fixture": matched and proposal.intent.run_id == canonical.intent.run_id
+            and proposal.intent.client_request_id == canonical.intent.client_request_id,
         "decisions": [
             {
                 "decision_id": decision.decision_id,
