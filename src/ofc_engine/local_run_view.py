@@ -55,7 +55,7 @@ def project_local_run(
             "depends_on": list(item.depends_on),
             "reason_codes": list(item.reason_codes),
         })
-    return {
+    result = {
         "status": ("HOSTED_AGENT_REVIEW" if snapshot.source_mode == SourceMode.LIVE_HTTP_UNVERIFIED
                    else "RECORDED_AGENT_REVIEW"),
         "source_mode": snapshot.source_mode.value,
@@ -81,7 +81,15 @@ def project_local_run(
             "real_causal_proof": False,
         },
         "blockers": list(snapshot.blockers),
-        "provenance": {
+        "release_state": "REVIEW_REQUIRED",
+        "provider_authenticated": False,
+        "independent_recheck_completed": False,
+        "release_authorized": False,
+        "external_action_executed": False,
+        "real_qloo_requests": snapshot.real_qloo_requests,
+    }
+    if snapshot.source_mode == SourceMode.LIVE_HTTP_UNVERIFIED:
+        result["provenance"] = {
             "baseline_digest": snapshot.baseline_digest,
             "baseline_plan_digest": snapshot.baseline_plan_digest,
             "current_plan_digest": snapshot.plan_digest,
@@ -90,8 +98,8 @@ def project_local_run(
             "journal_head": snapshot.events[-1].journal_hash,
             "journal_event_count": len(snapshot.events),
             "evidence_ref_count": len(snapshot.evidence_refs),
-        },
-        "handoff": {
+        }
+        result["handoff"] = {
             "status": "WITHHELD",
             "reviewed_revision": snapshot.plan_revision,
             "reviewed_plan_digest": snapshot.plan_digest,
@@ -100,11 +108,5 @@ def project_local_run(
             "pending_rechecks": list(snapshot.pending_rechecks),
             "blockers": list(snapshot.blockers),
             "external_action_executed": False,
-        },
-        "release_state": "REVIEW_REQUIRED",
-        "provider_authenticated": False,
-        "independent_recheck_completed": False,
-        "release_authorized": False,
-        "external_action_executed": False,
-        "real_qloo_requests": snapshot.real_qloo_requests,
-    }
+        }
+    return result
