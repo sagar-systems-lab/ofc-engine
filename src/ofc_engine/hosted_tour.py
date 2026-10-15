@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from .contracts import Decision
 from .hosted_agent import validate_hosted_proposal
 from .intake import AgentProposal
 from .qloo import brand_affinity_probe
