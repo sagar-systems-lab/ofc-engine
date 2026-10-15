@@ -454,7 +454,9 @@ def test_public_run_handoff_rejects_proof_detached_from_revision(tmp_path):
     from ofc_engine.local_run_view import project_local_run
 
     store, _, p, _, sources = seeded(tmp_path)
-    snapshot = commit(store, p, sources)
+    from ofc_engine.contracts import SourceMode
+
+    snapshot = commit(store, p, sources, source_mode=SourceMode.LIVE_HTTP_UNVERIFIED)
     legitimate = project_local_run(snapshot)
     assert legitimate["handoff"]["status"] == "WITHHELD"
     assert legitimate["handoff"]["reviewed_plan_digest"] == snapshot.plan_digest
