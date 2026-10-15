@@ -99,28 +99,32 @@ class PostgresRevisionStore:
         return latest
 
     def insert(self, plan: PlanSnapshot) -> None:
+        with self._connect() as db:
+            self.insert_in_transaction(db, plan)
+
+    def insert_in_transaction(self, db, plan: PlanSnapshot) -> None:
         plan = PlanSnapshot.model_validate(plan.model_dump())
         if plan.revision != 0:
             raise ValueError("initial plan must be revision zero")
         digest = plan_digest(plan)
-        with self._connect() as db:
-            row = db.execute(
-                "insert into ofc_private.plans "
-                "(plan_id,revision,digest,snapshot,journal_head,pending_rechecks) "
-                "values (%s,0,%s,%s,%s,'[]') "
-                "on conflict (plan_id) do nothing returning plan_id",
-                (plan.plan_id, digest, plan.model_dump_json(), _ZERO),
-            ).fetchone()
-            if row is None:
-                raise RevisionConflict("plan already exists")
-            entry = SQLiteRevisionStore._event_payload(
-                plan.plan_id, 0, "INSERT", None, None, 0, None, digest, ()
-            )
-            head = self._append(db, entry, _ZERO)
-            db.execute(
-                "update ofc_private.plans set journal_head=%s where plan_id=%s",
-                (head, plan.plan_id),
-            )
+
+        row = db.execute(
+            "insert into ofc_private.plans "
+            "(plan_id,revision,digest,snapshot,journal_head,pending_rechecks) "
+            "values (%s,0,%s,%s,%s,'[]') "
+            "on conflict (plan_id) do nothing returning plan_id",
+            (plan.plan_id, digest, plan.model_dump_json(), _ZERO),
+        ).fetchone()
+        if row is None:
+            raise RevisionConflict("plan already exists")
+        entry = SQLiteRevisionStore._event_payload(
+            plan.plan_id, 0, "INSERT", None, None, 0, None, digest, ()
+        )
+        head = self._append(db, entry, _ZERO)
+        db.execute(
+            "update ofc_private.plans set journal_head=%s where plan_id=%s",
+            (head, plan.plan_id),
+        )
 
     def get(self, plan_id: str) -> PlanSnapshot:
         with self._connect() as db:
