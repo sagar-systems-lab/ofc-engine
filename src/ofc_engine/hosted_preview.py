@@ -84,6 +84,13 @@ class HostedFixtureHandler(DemoHandler):
             script = files("ofc_engine").joinpath("web", "hosted-preflight.js").read_bytes()
             self._send(200, script, "text/javascript; charset=utf-8")
             return
+        if parts.path == "/api/runs/status" and not parts.query:
+            self._send(200, _encoded({
+                "enabled": self.server.run_registry is not None,
+                "release_authorized": False,
+                "real_qloo_requests": 0,
+            }), "application/json")
+            return
         if parts.path.startswith("/api/runs/"):
             match = re.fullmatch(r"/api/runs/(web-[0-9a-f]{32})/review", parts.path)
             if (
@@ -109,13 +116,6 @@ class HostedFixtureHandler(DemoHandler):
                 self._send(400, b'{"error":"INVALID_QUERY"}', "application/json")
                 return
             self._send(200, self.server.health_body, "application/json")
-            return
-        if parts.path == "/api/runs/status" and not parts.query:
-            self._send(200, _encoded({
-                "enabled": self.server.run_registry is not None,
-                "release_authorized": False,
-                "real_qloo_requests": 0,
-            }), "application/json")
             return
         if parts.path == "/api/demo":
             params = parse_qs(parts.query, keep_blank_values=True)
@@ -182,7 +182,7 @@ class HostedFixtureHandler(DemoHandler):
             return
         if self.path == "/api/runs":
             if self.server.run_registry is None:
-                self._send(503, b'{"error":"DURABLE_RUNS_DISABLED"}', "application/json")
+                self._send(405, b'{"error":"READ_ONLY"}', "application/json")
                 return
             host = self.headers.get("Host", "")
             expected = (
