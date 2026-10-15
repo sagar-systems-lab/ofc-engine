@@ -81,7 +81,9 @@ class HostedRunRegistry:
             "review": self.review(run_id, ticket),
         }
 
-    def operator_proposal(self, run_id: str) -> AgentProposal:
+    def operator_proposal(self, run_id: str, *, allow_expired: bool = False) -> AgentProposal:
+        if type(allow_expired) is not bool:
+            raise ValueError("invalid operator scope")
         if (
             not isinstance(run_id, str)
             or len(run_id) != 36
@@ -94,7 +96,9 @@ class HostedRunRegistry:
                 "select r.proposal_snapshot,p.snapshot,p.revision,p.digest "
                 "from ofc_private.browser_runs r "
                 "join ofc_private.plans p on p.plan_id=r.plan_id "
-                "where r.plan_id=%s and r.expires_at>now()",
+                "where r.plan_id=%s" + (
+                    "" if allow_expired else " and r.expires_at>now()"
+                ),
                 (run_id,),
             ).fetchone()
             if row is None or row[0] is None:

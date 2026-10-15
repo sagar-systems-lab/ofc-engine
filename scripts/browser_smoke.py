@@ -84,6 +84,17 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("home should open before the plan editor")
                     page.locator("#home-create").click()
                     page.locator("#objective").wait_for(state="visible", timeout=40_000)
+                    published = page.request.get(origin + "/api/showcase")
+                    if published.status == 200:
+                        shown = page.locator("#published-qloo-review")
+                        shown.wait_for(state="visible", timeout=10_000)
+                        message = shown.inner_text()
+                        if ("Qloo changed one decision" not in message or
+                            "Handoff WITHHELD" not in message or
+                            "Provider" not in message):
+                            raise BrowserFailure("published Qloo proof lacks source or safety boundary")
+                    elif published.status not in (404,):
+                        raise BrowserFailure("public Qloo showcase did not fail closed")
                     run_status = page.request.get(origin + "/api/runs/status")
                     if run_status.ok and run_status.json().get("tour_available") is True:
                         tour = page.locator("#start-hosted-tour")

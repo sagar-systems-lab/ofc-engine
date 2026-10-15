@@ -225,7 +225,13 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         if not postgres_url:
             raise ValueError("browser-bound Qloo requires private Postgres")
         registry = HostedRunRegistry(PostgresRevisionStore(postgres_url))
-        proposal = registry.operator_proposal(browser_run)
+        proposal = registry.operator_proposal(
+            browser_run,
+            allow_expired=(
+                environment.get("OFC_PUBLIC_QLOO_SHOWCASE") == "APPROVED"
+                and environment.get("OFC_PUBLIC_QLOO_RUN_ID") == browser_run
+            ),
+        )
         brand = next(
             (item for item in proposal.decisions if item.decision_id == "brand"), None
         )
