@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from hashlib import sha256
+import json
 import hmac
 import secrets
 
 from .durable import SQLiteRevisionStore, StorageIntegrityError
 from .intake import AgentProposal, freeze_proposal
 from .postgres_store import PostgresRevisionStore
-from .revisions import plan_digest
 
 
 class RunCapacityReached(RuntimeError):
@@ -25,7 +25,9 @@ class HostedRunRegistry:
             db.execute("select id from ofc_private.browser_budget where id=1")
 
     def create(self, submitted: dict) -> dict:
-        proposal = AgentProposal.model_validate(submitted)
+        proposal = AgentProposal.model_validate_json(
+            json.dumps(submitted, allow_nan=False, separators=(",", ":"))
+        )
         if proposal.intent.constraints.get("external_action") is True:
             raise ValueError("external actions cannot be requested")
         run_id = "web-" + secrets.token_hex(16)
