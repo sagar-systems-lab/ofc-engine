@@ -1,7 +1,6 @@
 """One explicitly approved, server-side Qloo rank observation per process."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from threading import Lock
 from typing import Mapping
 
@@ -91,7 +90,7 @@ class HostedLiveReview:
             }
             code = 200
         except (QlooProbeError, AffinityCaptureError, ValueError, TypeError):
-            report = self._error("PROVIDER_RANK_UNAVAILABLE")
+            report = self._error("PROVIDER_RANK_UNAVAILABLE", attempt_reserved=True)
             code = 503
         except Exception:
             report = self._error("PROVIDER_RANK_UNAVAILABLE")
@@ -101,7 +100,7 @@ class HostedLiveReview:
         return code, report
 
     @staticmethod
-    def _error(reason: str) -> dict:
+    def _error(reason: str, *, attempt_reserved: bool = False) -> dict:
         return {
             "status": "BLOCKED",
             "reason": reason,
@@ -109,7 +108,8 @@ class HostedLiveReview:
             "independent_recheck_completed": False,
             "release_authorized": False,
             "external_action_executed": False,
-            "requests_this_call": 0,
+            "requests_this_call": 1 if attempt_reserved else 0,
+            "attempt_outcome_unknown": attempt_reserved,
         }
 
 
