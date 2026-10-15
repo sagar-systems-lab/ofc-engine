@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
+from .agent_run import RunSnapshot, review_run
 from .durable import SQLiteRevisionStore
 from .intake import AgentProposal, freeze_proposal
 from .qloo_agent_bridge import _read_private_json
@@ -91,17 +92,19 @@ class OperatorEvidenceSession:
             raise ValueError("capture from the future")
         return min(now, max(collected) + timedelta(minutes=1))
 
-    def snapshot(self, store: SQLiteRevisionStore, run_id: str) -> dict:
+    def snapshot_model(self, store: SQLiteRevisionStore, run_id: str) -> RunSnapshot:
         if run_id != self.proposal.intent.run_id:
             raise KeyError("unknown evidence session")
-        from .agent_run import review_run
         return review_run(
             store, self.proposal, self.original,
             as_of=self._as_of(),
             max_evidence_age=self.max_evidence_age,
             later_sources=self.later,
             historical=self.historical,
-        ).model_dump(mode="json")
+        )
+
+    def snapshot(self, store: SQLiteRevisionStore, run_id: str) -> dict:
+        return self.snapshot_model(store, run_id).model_dump(mode="json")
 
     def review(self, store: SQLiteRevisionStore, run_id: str) -> dict:
         if run_id != self.proposal.intent.run_id:
