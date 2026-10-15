@@ -1,6 +1,8 @@
 # OFC Engine
 
-A pre-execution cultural decision layer for autonomous agents. The public preview is a read-only synthetic demo; operator-only Qloo search, recorded affinity ranking, and revision-bound repair replay are separate. **Recorded ranking is not trusted live cultural approval or execution authorization.**
+A pre-execution cultural decision layer for autonomous agents. The hosted Studio supports durable six-decision tour reviews, a narrowly scoped operator-approved Qloo brand-ranking integration, and an explicitly approved, read-only Qloo evidence showcase. Without approved evidence, the public site remains a synthetic or evidence-unavailable preview. **A brand ranking is not full-tour cultural approval or execution authorization.**
+
+**Live Studio:** https://ofc-fixture-preview.onrender.com — **[Hosted Qloo tour setup and limitations](docs/HOSTED_QLOO_TOUR.md)**. The public Qloo showcase is opt-in and must not be claimed live until a genuine, revision-bound observation is qualified.
 
 ## Product at a glance
 
@@ -10,7 +12,7 @@ An agent proposes a choice. OFC checks its scoped Qloo affinity evidence, makes 
 - [Try the interface and reproduce the tests](docs/TRY_IT.md)
 - [Private operator evidence review](docs/agent_evidence_review.md)
 
-The public preview is **synthetic**; real Qloo responses remain private. The demo is not yet a publicly hosted live Qloo decision service.
+The default public preview uses **synthetic** fixtures and evidence-unavailable reviews. The optional public Qloo showcase uses only previously acquired, operator-approved **redacted** decision evidence: it makes no Qloo network requests and never authorizes a plan. Raw Qloo responses remain private.
 
 ## Current implementation
 
