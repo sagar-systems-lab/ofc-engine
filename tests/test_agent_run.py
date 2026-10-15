@@ -358,3 +358,14 @@ def test_authenticated_agent_snapshot_exposes_six_decisions_without_private_capt
         server.server_close()
         thread.join(timeout=5)
     assert len(store.audit_history(p.intent.run_id)) == 2
+
+
+def test_artist_signal_cannot_be_swapped_across_frozen_agent_context(tmp_path):
+    store, _, p, _, _ = seeded(tmp_path)
+    mismatched = brand_affinity_probe("other-artist", BRANDS)
+    wrong = {"brand": RecordedSource(capture(
+        fingerprint=mismatched.fingerprint
+    ), mismatched)}
+    with pytest.raises(AgentEvidenceRejected, match="ARTIST_EVIDENCE_SCOPE_MISMATCH"):
+        commit(store, p, wrong)
+    assert store.get(p.intent.run_id).revision == 0
