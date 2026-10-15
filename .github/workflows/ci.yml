@@ -56,3 +56,30 @@ jobs:
             | python -c 'import json,sys; p=json.load(sys.stdin); assert p["demo_mode"]=="SYNTHETIC" and p["release_authorized"] is False and p["provider_authenticated"] is False'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             -X POST http://127.0.0.1:18080/api/runs)" = "405"
+
+  durable_postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: ofc_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ofc_ci"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - name: Verify atomic Postgres agent lifecycle
+        env:
+          OFC_TEST_POSTGRES_URL: postgresql://postgres:ci-only@127.0.0.1:5432/ofc_ci
+        run: python -m pytest tests/test_postgres_runtime.py
