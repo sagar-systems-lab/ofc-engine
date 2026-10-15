@@ -25,6 +25,58 @@
       state.external_action_executed !== false
     ) throw new Error("Unqualified local review");
 
+    const hypothetical = state.operator_constructed_unverified_decisions;
+    if (
+      !Number.isInteger(hypothetical) || hypothetical < 0 ||
+      hypothetical > state.decision_count - 1 ||
+      state.off_on?.same_baseline !== true ||
+      !Array.isArray(state.decisions) ||
+      state.decisions.length !== state.decision_count ||
+      !Array.isArray(state.pending_rechecks) ||
+      !Array.isArray(state.blockers) ||
+      state.release_state !== "REVIEW_REQUIRED" ||
+      state.provider_authenticated !== false ||
+      state.independent_recheck_completed !== false
+    ) throw new Error("Inconsistent recorded evidence state");
+
+    const rank = state.recorded_rank_recheck_pass;
+    const changed = state.changed_ids.length;
+    const status = document.querySelector(".status-label");
+    if (status) status.textContent = state.historical_replay
+      ? "● RECORDED QLOO · HISTORICAL · RELEASE LOCKED"
+      : "● RECORDED QLOO · REVIEW REQUIRED";
+    const rail = document.querySelector(".rail-status");
+    if (rail) {
+      const name = rail.querySelector("strong");
+      const detail = rail.querySelector("small");
+      if (name) name.textContent = "Recorded agent evidence";
+      if (detail) detail.textContent = state.historical_replay
+        ? "Historical rank only · not live"
+        : "Saved Qloo rank · review pending";
+    }
+    const eyebrow = provider.querySelector(".page-intro .eyebrow");
+    if (eyebrow) eyebrow.textContent = state.historical_replay
+      ? "RECORDED QLOO / HISTORICAL REVIEW"
+      : "RECORDED QLOO / REVIEW REQUIRED";
+
+    const stages = [...provider.querySelectorAll(":scope > .provider-steps > article")];
+    if (stages.length !== 4) throw new Error("Missing decision stages");
+    const updates = [
+      ["FROZEN", "Agent choices and immutable candidate pools were recorded."],
+      [rank ? "RANK PASS ONLY" : "RANK UNRESOLVED",
+       "Saved Qloo affinity was assessed; independent provider verification is not established."],
+      [changed === 1 ? "ONE CHANGE RECORDED" : "NO REPAIR",
+       "Only the evidence-supported brand choice was changed; other choices remain unverified."],
+      ["REVIEW REQUIRED",
+       state.pending_rechecks.length + " pending decisions. No verified-plan handoff or external action."]
+    ];
+    stages.forEach((card, index) => {
+      const description = card.querySelector("p");
+      const badge = card.querySelector("b");
+      if (description) description.textContent = updates[index][1];
+      if (badge) badge.textContent = updates[index][0];
+    });
+
     const intro = provider.querySelector(".page-intro");
     intro.querySelector("h1").textContent = "An evidenced repair. Execution still locked.";
     intro.querySelector("p").textContent =
@@ -58,7 +110,9 @@
     const rows = element("div", "provider-steps");
     for (const item of state.decisions) {
       const card = element("article");
-      card.append(element("span", "", item.changed ? "CHANGED" : item.preserved ? "PRESERVED" : "REVIEW"));
+      const unverified = hypothetical > 0 && item.decision_id !== "brand";
+      card.append(element("span", "", item.changed ? "CHANGED" : unverified
+        ? "UNCHANGED · UNVERIFIED" : item.preserved ? "UNCHANGED" : "REVIEW"));
       card.append(element("h3", "", item.decision_id.replaceAll("_", " ")));
       card.append(element("p", "",
         item.domain + " · " + item.verdict +
@@ -73,7 +127,13 @@
       state.blockers.join(" · ").replaceAll("_", " ").toLowerCase()));
     sheet.append(element("p", "privacy-caption",
       "No raw Qloo response, candidate entity IDs, private credentials or execution permission are exposed here."));
-    provider.append(sheet);
+    const syntheticLink = provider.querySelector(".provider-link");
+    if (syntheticLink) {
+      syntheticLink.textContent = "Explore the separate synthetic proof ↗";
+      provider.insertBefore(sheet, syntheticLink);
+    } else {
+      provider.append(sheet);
+    }
   }
 
   show().catch(() => {

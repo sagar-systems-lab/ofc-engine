@@ -66,6 +66,14 @@ def validate_public_recorded_excerpt(payload: Any) -> None:
         or len(payload["decisions"]) != 6
     ):
         raise ValueError("INVALID_EXCERPT_LINEAGE")
+    expected_domains = {
+        "brand": ("partner", "brand"),
+        "opener": ("artist",),
+        "chicago": ("venue",),
+        "austin": ("venue",),
+        "seattle": ("venue",),
+        "afterparty": ("experience",),
+    }
     for expected, item in zip(_IDS, payload["decisions"]):
         if not isinstance(item, dict) or set(item) != {
             "decision_id", "domain", "verdict", "changed", "preserved",
@@ -73,15 +81,18 @@ def validate_public_recorded_excerpt(payload: Any) -> None:
         }:
             raise ValueError("INVALID_EXCERPT_DECISION")
         if (
-            item["decision_id"] != expected or item["domain"] not in (
-                "partner", "brand", "artist", "venue", "experience"
-            )
-            or item["verdict"] not in ("PASS", "REPAIR", "UNCERTAIN")
+            item["decision_id"] != expected
+            or item["domain"] not in expected_domains[expected]
+            or item["verdict"] != ("PASS" if expected == "brand" else "UNCERTAIN")
             or item["changed"] is not (expected == "brand")
             or item["preserved"] is not (expected != "brand")
             or item["pending_recheck"] is not (expected in ("brand", "afterparty"))
             or item["depends_on"] != (["brand"] if expected == "afterparty" else [])
             or not _codes(item["reason_codes"])
+            or (
+                expected == "afterparty"
+                and "DEPENDENCY_INVALIDATED" not in item["reason_codes"]
+            )
         ):
             raise ValueError("INVALID_EXCERPT_DECISION_STATE")
     comparison = payload["off_on"]
@@ -100,8 +111,11 @@ def validate_public_recorded_excerpt(payload: Any) -> None:
         or set(comparison["on_verdicts"]) != set(_IDS)
         or comparison["off_verdicts"]["brand"] != "UNCERTAIN"
         or comparison["on_verdicts"]["brand"] != "REPAIR"
-        or any(x not in ("PASS", "REPAIR", "UNCERTAIN")
-               for x in (*comparison["off_verdicts"].values(), *comparison["on_verdicts"].values()))
+        or any(
+            comparison["off_verdicts"][decision_id] != "UNCERTAIN"
+            or comparison["on_verdicts"][decision_id] != "UNCERTAIN"
+            for decision_id in _IDS[1:]
+        )
     ):
         raise ValueError("UNQUALIFIED_EXCERPT_COMPARISON")
 
