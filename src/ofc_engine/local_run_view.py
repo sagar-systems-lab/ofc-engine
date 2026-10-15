@@ -5,7 +5,11 @@ from .contracts import SourceMode
 from .agent_run import RunSnapshot
 
 
-def project_local_run(snapshot: RunSnapshot) -> dict:
+def project_local_run(
+    snapshot: RunSnapshot, *, operator_constructed_hypotheses: int = 0,
+) -> dict:
+    if type(operator_constructed_hypotheses) is not int or not 0 <= operator_constructed_hypotheses <= 63:
+        raise ValueError("invalid hypothesis count")
     if (
         snapshot.source_mode != SourceMode.RECORDED_REDACTED
         or snapshot.release_state != "REVIEW_REQUIRED"
@@ -35,6 +39,7 @@ def project_local_run(snapshot: RunSnapshot) -> dict:
         "historical_replay": snapshot.historical_replay,
         "revision": snapshot.plan_revision,
         "decision_count": len(decisions),
+        "operator_constructed_unverified_decisions": operator_constructed_hypotheses,
         "decisions": decisions,
         "changed_ids": list(snapshot.changed_ids),
         "preserved_ids": list(snapshot.preserved_ids),
