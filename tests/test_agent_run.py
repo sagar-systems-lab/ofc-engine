@@ -279,3 +279,82 @@ def test_cli_reads_private_files_and_never_calls_qloo(tmp_path, monkeypatch, cap
                            "--request-id", "id"]) == 2
     assert json.loads(capsys.readouterr().out)["status"] == "BLOCKED"
     assert store.get(p.intent.run_id).revision == 0
+
+
+def test_fresh_later_rank_cannot_rescue_expired_original(tmp_path):
+    store, _, p, _, sources = seeded(tmp_path)
+    commit(store, p, sources)
+    later = {"brand": RecordedSource(capture(
+        at=NOW + timedelta(hours=2, minutes=57),
+        scores=(0.96, 0.72, 0.21),
+    ), SPEC)}
+    result = inspect(
+        store, p, sources, as_of=NOW + timedelta(hours=3), later_sources=later,
+    )
+    assert result.recorded_rank_recheck_pass is False
+    assert "ORIGINAL_EVIDENCE_UNQUALIFIED" in result.blockers
+    assert result.verification.status == "REVIEW_REQUIRED"
+    assert result.release_authorized is False
+
+
+def test_authenticated_agent_snapshot_exposes_six_decisions_without_private_captures(
+    tmp_path,
+):
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from ofc_engine.agent_api import AgentAPIServer
+    from ofc_engine.agent_evidence_session import OperatorEvidenceSession
+
+    store, database, p, _, sources = seeded(tmp_path)
+    commit(store, p, sources)
+    path = tmp_path / "proposal.json"
+    path.write_text(p.model_dump_json())
+    original = tmp_path / "original.json"
+    original.write_text(json.dumps(sources["brand"].capture))
+    index = tmp_path / "sources.json"
+    index.write_text(json.dumps({"decisions": {"brand": {
+        "artist_id": ARTIST, "brand_ids": list(BRANDS),
+        "capture_file": str(original),
+    }}}))
+    session = OperatorEvidenceSession.load(
+        proposal_path=path, evidence_index=index,
+    )
+    token = "operator-only-" + "a" * 40
+    server = AgentAPIServer(
+        ("127.0.0.1", 0), database=str(database),
+        auth_token=token, evidence_session=session,
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/api/proposals/{p.intent.run_id}/snapshot"
+    try:
+        with urlopen(Request(url, headers={
+            "Authorization": "Bearer " + token,
+        }), timeout=5) as response:
+            assert response.status == 200
+            body = response.read()
+        report = json.loads(body)
+        assert report["run_id"] == p.intent.run_id
+        assert len(report["decision_verdicts"]) == 6
+        assert report["changed_ids"] == ["brand"]
+        assert report["invalidated_ids"] == ["brand", "afterparty"]
+        assert report["handoff"]["verification_status"] == "REVIEW_REQUIRED"
+        assert report["release_authorized"] is False
+        assert ARTIST.encode() not in body
+        assert "query.affinity" not in body.decode()
+        with pytest.raises(HTTPError) as exc:
+            urlopen(url, timeout=5)
+        assert exc.value.code == 401
+        with pytest.raises(HTTPError) as exc:
+            urlopen(Request(url, headers={
+                "Authorization": "Bearer " + token,
+                "Origin": "https://hostile.example",
+            }), timeout=5)
+        assert exc.value.code == 403
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    assert len(store.audit_history(p.intent.run_id)) == 2
