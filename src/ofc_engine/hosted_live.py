@@ -6,11 +6,14 @@ import hmac
 from pathlib import Path
 import sqlite3
 from threading import Lock
-from typing import Mapping
+from typing import Callable, Mapping
 
 from .qloo import ProbeSpec, QlooProbeClient, QlooProbeError, brand_affinity_probe
 from .qloo_affinity import AffinityCaptureError, normalize_affinity_capture
 from .hosted_attempt import HostedAttemptLedger
+from .hosted_agent import HostedAgentFlow, load_hosted_proposal
+from .intake import freeze_proposal
+from .revisions import plan_digest
 
 
 class HostedLiveReview:
@@ -19,6 +22,7 @@ class HostedLiveReview:
         selected_brand_id: str, client: QlooProbeClient | None = None,
         ledger: HostedAttemptLedger | None = None,
         operator_token: str | None = None,
+        agent_evaluator: Callable[[dict, ProbeSpec], dict] | None = None,
     ) -> None:
         self.spec: ProbeSpec = brand_affinity_probe(artist_id, brand_ids)
         if selected_brand_id not in brand_ids:
@@ -34,6 +38,7 @@ class HostedLiveReview:
             raise ValueError("unsafe operator token")
         self._operator_token = operator_token
         self._ledger = ledger
+        self._agent_evaluator = agent_evaluator
         self._lock = Lock()
         self._used = False
         self._finished: dict | None = None
@@ -100,7 +105,7 @@ class HostedLiveReview:
 
         try:
             result = self._client.probe(self.spec)
-            observed = normalize_affinity_capture({
+            capture = {
                 "summary": {
                     "endpoint": result.path,
                     "query_fingerprint": result.query_fingerprint,
@@ -110,7 +115,8 @@ class HostedLiveReview:
                     "mode": "LIVE_RESPONSE_UNQUALIFIED",
                 },
                 "payload": result.payload,
-            }, self.spec)
+            }
+            observed = normalize_affinity_capture(capture, self.spec)
             order = tuple(item["entity_id"] for item in observed["ranking"])
             current_rank = order.index(self._selected) + 1
             report = {
@@ -134,6 +140,15 @@ class HostedLiveReview:
                 "cached": False,
                 "requests_this_call": 1,
             }
+            if self._agent_evaluator is not None:
+                journey = self._agent_evaluator(capture, self.spec)
+                if (
+                    journey.get("status") != "HOSTED_AGENT_REVIEW"
+                    or journey.get("release_authorized") is not False
+                    or journey.get("source_mode") != "LIVE_HTTP_UNVERIFIED"
+                ):
+                    raise ValueError("unqualified hosted agent result")
+                report["agent_run"] = journey
             code = 200
         except (QlooProbeError, AffinityCaptureError, ValueError, TypeError):
             report = self._error("PROVIDER_RANK_UNAVAILABLE", attempt_reserved=True)
@@ -170,6 +185,7 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         "OFC_HOSTED_QLOO_MODE", "OFC_HOSTED_QLOO_ARTIST_ID",
         "OFC_HOSTED_QLOO_BRAND_IDS", "OFC_HOSTED_QLOO_SELECTED_ID",
         "OFC_HOSTED_OPERATOR_TOKEN", "OFC_HOSTED_QLOO_LEDGER_PATH",
+        "OFC_HOSTED_AGENT_PROPOSAL_PATH",
     )
     if not enabled:
         if any(environment.get(field) for field in fields[1:]):
@@ -187,10 +203,22 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
     brands = tuple(environment.get("OFC_HOSTED_QLOO_BRAND_IDS", "").split(","))
     selected = environment.get("OFC_HOSTED_QLOO_SELECTED_ID", "")
     spec = brand_affinity_probe(artist, brands)
-    scope = sha256((spec.fingerprint + ":" + selected).encode("utf-8")).hexdigest()
+    proposal_path = Path(environment.get("OFC_HOSTED_AGENT_PROPOSAL_PATH", ""))
+    if not proposal_path.is_absolute():
+        raise ValueError("private hosted agent proposal is required")
+    proposal = load_hosted_proposal(
+        proposal_path, artist_id=artist, brand_ids=brands,
+        selected_brand_id=selected,
+    )
+    baseline, _ = freeze_proposal(proposal)
+    scope = sha256((
+        spec.fingerprint + ":" + selected + ":" + plan_digest(baseline)
+    ).encode("utf-8")).hexdigest()
     ledger = HostedAttemptLedger(Path(ledger_path), scope=scope)
+    flow = HostedAgentFlow(proposal=proposal, database=ledger.path)
     return HostedLiveReview(
         api_key=environment["QLOO_API_KEY"],
         artist_id=artist, brand_ids=brands,
         selected_brand_id=selected, ledger=ledger, operator_token=token,
+        agent_evaluator=flow.evaluate,
     )
