@@ -20,6 +20,7 @@ from .hosted_live import HostedLiveReview, configured_live_review
 from .hosted_preflight import preflight
 from .hosted_runs import HostedRunRegistry, RunCapacityReached
 from .hosted_tour import configured_tour
+from .intake import AgentProposal
 from .postgres_store import PostgresRevisionStore
 
 _MAX_TARGET_LENGTH = 512
@@ -375,7 +376,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
         public_recorded_document: dict | None = None,
         hosted_live: HostedLiveReview | None = None,
         run_registry: HostedRunRegistry | None = None,
-        tour_proposal=None,
+        tour_proposal: AgentProposal | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
