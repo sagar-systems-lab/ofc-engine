@@ -60,16 +60,37 @@
   }
 
   function validateStored(review) {
+    const live = review.source_mode === "LIVE_HTTP_UNVERIFIED";
     if (
       review.verification_status !== "REVIEW_REQUIRED" ||
-      review.source_mode !== "EVIDENCE_UNAVAILABLE" ||
       review.release_authorized !== false ||
       review.external_action_executed !== false ||
-      review.real_qloo_requests !== 0 ||
+      review.provider_authenticated !== false ||
+      review.independent_recheck_completed !== false ||
       !/^[0-9a-f]{64}$/.test(review.plan_digest) ||
       !Array.isArray(review.decisions) ||
-      review.decisions.some(decision => decision.verdict !== "UNCERTAIN")
+      (live ? review.real_qloo_requests !== 1 :
+        review.source_mode !== "EVIDENCE_UNAVAILABLE" ||
+        review.real_qloo_requests !== 0 ||
+        review.decisions.some(decision => decision.verdict !== "UNCERTAIN"))
     ) throw new Error("Invalid stored review");
+    if (live) {
+      const run = review.agent_run;
+      if (
+        !run || run.release_authorized !== false ||
+        run.verification_status !== "REVIEW_REQUIRED" ||
+        run.source_mode !== "LIVE_HTTP_UNVERIFIED" ||
+        run.provenance?.baseline_digest !== review.baseline_digest ||
+        run.provenance?.current_plan_digest !== review.plan_digest ||
+        run.provenance?.journal_head !== review.journal_head ||
+        run.handoff?.status !== "WITHHELD" ||
+        run.revision !== review.revision ||
+        !Array.isArray(run.changed_ids) ||
+        !Array.isArray(run.pending_rechecks) ||
+        !Array.isArray(run.decisions) ||
+        run.decisions.length !== review.decisions.length
+      ) throw new Error("Unbound Qloo review");
+    }
   }
 
   async function restore() {
@@ -84,10 +105,32 @@
       const review = await response.json();
       validateStored(review);
       if (panel) panel.hidden = false;
-      get("preflight-state").textContent = "SAVED RUN · REVIEW REQUIRED";
-      get("preflight-description").textContent =
-        "Restored durable review " + review.run_id + " at revision " +
-        review.revision + ". No Qloo evidence or external action was approved.";
+      const live = review.source_mode === "LIVE_HTTP_UNVERIFIED";
+      get("preflight-state").textContent = live
+        ? "QLOO RANK OBSERVED · REVIEW REQUIRED"
+        : "SAVED RUN · REVIEW REQUIRED";
+      get("preflight-description").textContent = live
+        ? "One scoped Qloo rank observation changed " +
+          review.agent_run.changed_ids.length + " decision(s). " +
+          review.agent_run.pending_rechecks.length +
+          " rechecks remain pending. Provider attestation and safe handoff are withheld."
+        : "Restored durable review " + review.run_id + " at revision " +
+          review.revision + ". No Qloo evidence or external action was approved.";
+      if (live) {
+        const list = get("preflight-decisions");
+        list.replaceChildren();
+        for (const item of review.decisions) {
+          const row = document.createElement("li");
+          const name = document.createElement("strong");
+          const detail = document.createElement("span");
+          name.textContent = item.decision_id;
+          detail.textContent = item.verdict +
+            (item.pending_recheck ? " · RECHECK PENDING" : " · RANK-ONLY REVIEW");
+          row.className = "preflight-record";
+          row.append(name, detail);
+          list.append(row);
+        }
+      }
     } catch {
       // The original plan editor remains usable without session storage.
     }

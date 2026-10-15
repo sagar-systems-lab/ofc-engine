@@ -33,6 +33,7 @@ def pg_url():
             db.execute(f"do $$ begin if not exists (select from pg_roles where rolname = '{role}') then create role {role}; end if; end $$")
         sql = (Path(__file__).resolve().parents[1] / "sql/001_private_runtime.sql").read_text()
         db.execute(sql)
+        db.execute((Path(__file__).resolve().parents[1] / "sql/002_browser_proposal_scope.sql").read_text())
         allowed = db.execute(
             "select has_schema_privilege('anon','ofc_private','USAGE'),"
             "has_schema_privilege('authenticated','ofc_private','USAGE')"
@@ -367,3 +368,159 @@ def test_durable_run_survives_new_server_and_storage_outage(pg_url, monkeypatch)
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
+
+
+def test_ticketed_browser_run_receives_only_its_own_qloo_rank(pg_url):
+    from hashlib import sha256
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from ofc_engine.hosted_preview import HostedFixtureServer
+    from ofc_engine.hosted_runs import HostedRunRegistry
+    from ofc_engine.qloo import brand_affinity_probe
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute("delete from ofc_private.provider_attempt")
+        db.execute("delete from ofc_private.provider_scope")
+        db.execute("update ofc_private.browser_budget set writes=0 where id=1")
+
+    proposal = plan_for_test()
+    registry = HostedRunRegistry(
+        PostgresRevisionStore(pg_url, insecure_local_test=True)
+    )
+    saved = registry.create(proposal.model_dump(mode="json"))
+    run_id = saved["run_id"]
+    restored = registry.operator_proposal(run_id)
+    baseline, _ = freeze_proposal(restored)
+    assert baseline.plan_id == run_id
+    assert plan_digest(baseline) == saved["review"]["plan_digest"]
+    assert restored.intent.taste_context["artist_id"] == "artist-ci"
+    assert registry.review(run_id, saved["ticket"])["real_qloo_requests"] == 0
+
+    spec = brand_affinity_probe("artist-ci", ("brand-a", "brand-b"))
+    scope = sha256((
+        spec.fingerprint + ":brand-a:" + plan_digest(baseline)
+    ).encode()).hexdigest()
+    transport = FixedTransport()
+    first = HostedLiveReview(
+        api_key="fake-ci-only",
+        artist_id="artist-ci", brand_ids=("brand-a", "brand-b"),
+        selected_brand_id="brand-a",
+        ledger=PostgresAttemptLedger(pg_url, scope=scope, insecure_local_test=True),
+        operator_token="operator-" + "x" * 40,
+        client=QlooProbeClient(api_key="fake-ci-only", transport=transport),
+        agent_evaluator=HostedAgentFlow(
+            proposal=restored, store=registry.store
+        ).evaluate,
+        bound_run_id=run_id,
+    )
+    status, result = first.observe()
+    assert status == 200 and transport.calls == 1
+    assert result["agent_run"]["changed_ids"] == ["brand"]
+    assert result["agent_run"]["pending_rechecks"] == ["brand", "afterparty"]
+    assert result["agent_run"]["handoff"]["status"] == "WITHHELD"
+    assert registry.store.get(run_id).revision == 1
+
+    def inspect(live, *, ticket=saved["ticket"], requested_run=run_id):
+        registry_copy = HostedRunRegistry(
+            PostgresRevisionStore(pg_url, insecure_local_test=True)
+        )
+        with HostedFixtureServer(
+            ("127.0.0.1", 0), hosted_live=live, run_registry=registry_copy
+        ) as server:
+            worker = Thread(target=server.serve_forever, daemon=True)
+            worker.start()
+            try:
+                base = "http://127.0.0.1:" + str(server.server_port)
+                with pytest.raises(HTTPError) as error:
+                    urlopen(base + "/api/qloo/result", timeout=5)
+                assert error.value.code == 404
+                with urlopen(base + "/", timeout=5) as response:
+                    assert b"/hosted-live.js" not in response.read()
+                endpoint = base + "/api/runs/" + requested_run + "/review"
+                req = Request(endpoint, headers={
+                    "Authorization": "Bearer " + ticket
+                })
+                try:
+                    with urlopen(req, timeout=5) as response:
+                        return response.status, json.loads(response.read())
+                except HTTPError as error:
+                    return error.code, json.loads(error.read())
+            finally:
+                server.shutdown()
+                server.server_close()
+                worker.join(timeout=5)
+
+    code, review = inspect(first)
+    assert code == 200
+    assert review["source_mode"] == "LIVE_HTTP_UNVERIFIED"
+    assert review["revision"] == 1
+    assert review["agent_run"]["changed_ids"] == ["brand"]
+    assert review["agent_run"]["provenance"]["journal_head"] == review["journal_head"]
+    assert review["agent_run"]["provenance"]["current_plan_digest"] == review["plan_digest"]
+    assert review["agent_run"]["provenance"]["baseline_digest"] == review["baseline_digest"]
+    assert review["agent_run"]["release_authorized"] is False
+    assert review["release_authorized"] is False
+    assert review["provider_authenticated"] is False
+    assert review["independent_recheck_completed"] is False
+    assert review["real_qloo_requests"] == 1
+    assert [d["verdict"] for d in review["decisions"][1:]] == ["UNCERTAIN"] * 5
+    for secret in ("fake-ci-only", "artist-ci", "brand-a", "brand-b"):
+        assert secret not in json.dumps(review)
+    assert inspect(first, ticket="x" * 50)[0] == 404
+
+    other = registry.create(plan_for_test().model_dump(mode="json"))
+    assert inspect(first, ticket=other["ticket"],
+                   requested_run=other["run_id"])[1]["source_mode"] == "EVIDENCE_UNAVAILABLE"
+
+    restarted = HostedLiveReview(
+        api_key="fake-ci-only",
+        artist_id="artist-ci", brand_ids=("brand-a", "brand-b"),
+        selected_brand_id="brand-a",
+        ledger=PostgresAttemptLedger(pg_url, scope=scope, insecure_local_test=True),
+        operator_token="operator-" + "x" * 40,
+        client=QlooProbeClient(api_key="fake-ci-only", transport=FixedTransport()),
+        bound_run_id=run_id,
+    )
+    assert restarted.public_result()[1]["agent_run"] == result["agent_run"]
+    assert inspect(restarted)[1]["agent_run"] == review["agent_run"]
+    assert restarted.observe()[1]["requests_this_call"] == 0
+
+
+def test_private_browser_proposal_rejects_expiry_and_scope_tampering(pg_url):
+    from ofc_engine.hosted_runs import HostedRunRegistry
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute("update ofc_private.browser_budget set writes=0 where id=1")
+    registry = HostedRunRegistry(
+        PostgresRevisionStore(pg_url, insecure_local_test=True)
+    )
+    proposal = plan_for_test()
+    saved = registry.create(proposal.model_dump(mode="json"))
+    run_id = saved["run_id"]
+    with pytest.raises(ValueError):
+        registry.operator_proposal("not-a-browser-run")
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            "update ofc_private.browser_runs set proposal_snapshot=%s "
+            "where plan_id=%s",
+            (plan_for_test().model_dump_json(), run_id),
+        )
+    with pytest.raises(StorageIntegrityError):
+        registry.operator_proposal(run_id)
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            "update ofc_private.browser_runs set proposal_snapshot=null "
+            "where plan_id=%s", (run_id,),
+        )
+    with pytest.raises(ValueError, match="unavailable"):
+        registry.operator_proposal(run_id)
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            "update ofc_private.browser_runs "
+            "set expires_at=now()-interval '1 second' where plan_id=%s",
+            (run_id,),
+        )
+    with pytest.raises(ValueError):
+        registry.operator_proposal(run_id)

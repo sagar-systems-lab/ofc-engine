@@ -10,6 +10,7 @@ import secrets
 from .durable import SQLiteRevisionStore, StorageIntegrityError
 from .intake import AgentProposal, freeze_proposal
 from .postgres_store import PostgresRevisionStore
+from .revisions import plan_digest
 
 
 class RunCapacityReached(RuntimeError):
@@ -68,9 +69,10 @@ class HostedRunRegistry:
             self.store.insert_in_transaction(db, baseline)
             db.execute(
                 "insert into ofc_private.browser_runs "
-                "(plan_id,ticket_digest,expires_at) "
-                "values (%s,%s,now()+interval '24 hours')",
-                (run_id, sha256(ticket.encode()).hexdigest()),
+                "(plan_id,ticket_digest,expires_at,proposal_snapshot) "
+                "values (%s,%s,now()+interval '24 hours',%s)",
+                (run_id, sha256(ticket.encode()).hexdigest(),
+                 proposal.model_dump_json()),
             )
         return {
             "run_id": run_id,
@@ -78,6 +80,38 @@ class HostedRunRegistry:
             "expires_in_hours": 24,
             "review": self.review(run_id, ticket),
         }
+
+    def operator_proposal(self, run_id: str) -> AgentProposal:
+        if (
+            not isinstance(run_id, str)
+            or len(run_id) != 36
+            or not run_id.startswith("web-")
+            or any(c not in "0123456789abcdef" for c in run_id[4:])
+        ):
+            raise ValueError("invalid browser run ID")
+        with self.store._connect() as db:
+            row = db.execute(
+                "select r.proposal_snapshot,p.snapshot,p.revision,p.digest "
+                "from ofc_private.browser_runs r "
+                "join ofc_private.plans p on p.plan_id=r.plan_id "
+                "where r.plan_id=%s and r.expires_at>now()",
+                (run_id,),
+            ).fetchone()
+            if row is None or row[0] is None:
+                raise ValueError("original browser proposal unavailable")
+            proposal = AgentProposal.model_validate_json(row[0])
+            baseline, _ = freeze_proposal(proposal)
+            current = SQLiteRevisionStore._decode(row[1], row[2], row[3])
+            history = self.store._history(db, run_id)
+            if (
+                baseline.plan_id != run_id
+                or baseline.baseline_digest != current.baseline_digest
+                or baseline.constraints_digest != current.constraints_digest
+                or history[0].after_digest != plan_digest(baseline)
+                or current.revision not in (0, 1)
+            ):
+                raise StorageIntegrityError("browser proposal baseline conflict")
+        return proposal
 
     def review(self, run_id: str, ticket: str) -> dict:
         if (
@@ -105,6 +139,7 @@ class HostedRunRegistry:
             "run_id": run_id,
             "revision": revision,
             "plan_digest": digest,
+            "baseline_digest": plan.baseline_digest,
             "journal_head": history[-1].event_hash,
             "source_mode": "EVIDENCE_UNAVAILABLE",
             "verification_status": "REVIEW_REQUIRED",

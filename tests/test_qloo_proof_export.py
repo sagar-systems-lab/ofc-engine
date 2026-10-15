@@ -171,10 +171,10 @@ def test_cli_round_trip_never_prints_provider_payload(monkeypatch, tmp_path, cap
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "PRIVATE_PROOF_EXPORTED"
     assert output["real_qloo_requests"] == 0
-    assert "0.9" not in json.dumps(output)
+    assert '"affinity":' not in json.dumps(output)
     path = Path(output["path"])
     document = json.loads(path.read_text())
-    assert "0.9" not in json.dumps(document)
+    assert '"affinity":' not in json.dumps(document)
     assert main(["--verify", str(path)]) == 0
     verification = json.loads(capsys.readouterr().out)
     assert verification["status"] == "LOCAL_DIGEST_VALID"
