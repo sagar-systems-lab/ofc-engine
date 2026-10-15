@@ -6,7 +6,6 @@ from importlib.resources import files
 from urllib.parse import urlsplit
 
 from .agent_api import AgentAPIHandler
-from .agent_run import RunSnapshot
 from .local_run_view import project_local_run
 from .agent_evidence_session import OperatorEvidenceSession
 from .durable import SQLiteRevisionStore
@@ -39,9 +38,9 @@ class ConnectedLocalHandler(AgentAPIHandler, HostedFixtureHandler):
         parts = urlsplit(self.path)
         if parts.path == "/api/local-run" and not parts.query:
             try:
-                snapshot = RunSnapshot.model_validate(self.server.evidence_session.snapshot(
+                snapshot = self.server.evidence_session.snapshot_model(
                     self.server.store, self.server.evidence_session.proposal.intent.run_id
-                ))
+                )
                 result = project_local_run(snapshot)
             except Exception:
                 self._send(503, b'{"error":"EVIDENCE_UNAVAILABLE","release_authorized":false}', "application/json")
