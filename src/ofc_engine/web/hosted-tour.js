@@ -25,8 +25,19 @@
   status.style.textAlign = "center";
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  actions.append(start, status);
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.id = "refresh-hosted-tour";
+  refresh.className = "export-button";
+  refresh.textContent = "Refresh Qloo evidence ↻";
+  refresh.hidden = true;
+  actions.append(start, refresh, status);
   intro.insertAdjacentElement("afterend", actions);
+
+  refresh.addEventListener("click", () => {
+    status.textContent = "Checking saved evidence. This does not call Qloo.";
+    window.dispatchEvent(new Event("ofc-review-refresh"));
+  });
 
   start.addEventListener("click", async () => {
     if (start.disabled) return;
@@ -83,6 +94,7 @@
       location.hash = "#plan";
       panel.scrollIntoView({block: "nearest", behavior: "auto"});
       start.textContent = "Tour saved · review required";
+      refresh.hidden = false;
       status.textContent = "Six decisions saved. Provider evidence and handoff remain blocked.";
     } catch {
       start.disabled = false;
