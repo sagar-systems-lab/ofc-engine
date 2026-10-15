@@ -140,8 +140,21 @@ def test_connected_session_exposes_authenticated_review_and_existing_proof(
 
         code, page, _ = request(proof + "/")
         assert code == 200
-        assert page == package_files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+        assert b'<script defer src="/local-run.js"></script>' in page
+        frozen = package_files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+        assert page.replace(b'<script defer src="/local-run.js"></script>\\n', b"") == frozen
         assert b"Decision Workspace" in page
+        status, local_js, _ = request(proof + "/local-run.js")
+        assert status == 200 and b"/api/local-run" in local_js
+        status, projected_raw, _ = request(proof + "/api/local-run")
+        assert status == 200
+        projected = json.loads(projected_raw)
+        assert projected["status"] == "RECORDED_AGENT_REVIEW"
+        assert projected["release_authorized"] is False
+        assert projected["source_mode"] == "RECORDED_REDACTED"
+        assert projected["decision_count"] == 1
+        for private in (ARTIST, *BRANDS, str(paths[1]), TOKEN):
+            assert private.encode() not in projected_raw
         code, recorded_page, _ = request(proof + "/recorded")
         assert code == 200 and b'data-ofc-local-proof="true"' in recorded_page
         assert b"Recorded Proof" in recorded_page
