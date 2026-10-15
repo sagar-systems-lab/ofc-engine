@@ -91,6 +91,15 @@ def _stored(
 ):
     baseline, _ = freeze_proposal(proposal)
     _sources(baseline, sources)
+    artist = proposal.intent.taste_context.get("artist_id")
+    if artist is not None and (
+        not isinstance(artist, str) or not artist
+        or any(
+            dict(source.spec.params).get("signal.interests.entities") != artist
+            for source in sources.values()
+        )
+    ):
+        raise AgentEvidenceRejected("ARTIST_EVIDENCE_SCOPE_MISMATCH")
     plan = store.get(baseline.plan_id)
     history = store.audit_history(baseline.plan_id)
     pending = store.pending_rechecks(baseline.plan_id)
