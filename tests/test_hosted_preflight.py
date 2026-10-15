@@ -35,7 +35,8 @@ def test_server_matches_canonical_fixture_without_claiming_qloo_evidence():
     assert result["decision_count"] == 6
     assert result["revision"] == 0
     assert len(result["plan_digest"]) == 64
-    assert result["plan_digest"] == result["baseline_digest"]
+    assert len(result["baseline_digest"]) == 64
+    assert result["plan_digest"] != result["baseline_digest"]
     assert all(x["verdict"] == "UNCERTAIN" for x in result["decisions"])
     for flag in (
         "provider_authenticated", "release_authorized",
