@@ -42,6 +42,105 @@
   }
 
   let latest = 0;
+  let validatedRequest = null;
+  let validatedSignature = null;
+  let storageAvailable = false;
+
+  const savedButton = document.createElement("button");
+  savedButton.type = "button";
+  savedButton.className = "export-button";
+  savedButton.textContent = "Save this review for 24 hours ↗";
+  savedButton.hidden = true;
+  const panel = get("preflight-panel");
+  if (panel) panel.append(savedButton);
+
+  function identity(request) {
+    return JSON.stringify(request.decisions) +
+      JSON.stringify(request.intent.constraints) + request.intent.objective;
+  }
+
+  function validateStored(review) {
+    if (
+      review.verification_status !== "REVIEW_REQUIRED" ||
+      review.source_mode !== "EVIDENCE_UNAVAILABLE" ||
+      review.release_authorized !== false ||
+      review.external_action_executed !== false ||
+      review.real_qloo_requests !== 0 ||
+      !/^[0-9a-f]{64}$/.test(review.plan_digest) ||
+      !Array.isArray(review.decisions) ||
+      review.decisions.some(decision => decision.verdict !== "UNCERTAIN")
+    ) throw new Error("Invalid stored review");
+  }
+
+  async function restore() {
+    try {
+      const record = JSON.parse(sessionStorage.getItem("ofc-last-review") || "null");
+      if (!record || !/^web-[0-9a-f]{32}$/.test(record.run_id)) return;
+      const response = await fetch("/api/runs/" + record.run_id + "/review", {
+        cache: "no-store",
+        headers: {"Authorization": "Bearer " + record.ticket}
+      });
+      if (!response.ok) return;
+      const review = await response.json();
+      validateStored(review);
+      if (panel) panel.hidden = false;
+      get("preflight-state").textContent = "SAVED RUN · REVIEW REQUIRED";
+      get("preflight-description").textContent =
+        "Restored durable review " + review.run_id + " at revision " +
+        review.revision + ". No Qloo evidence or external action was approved.";
+    } catch {
+      // The original plan editor remains usable without session storage.
+    }
+  }
+
+  fetch("/api/runs/status", {cache: "no-store"})
+    .then(response => response.ok ? response.json() : null)
+    .then(result => {
+      storageAvailable = result?.enabled === true &&
+        result.release_authorized === false;
+      if (storageAvailable) restore();
+    }).catch(() => {});
+
+  savedButton.addEventListener("click", async () => {
+    if (!validatedRequest || !storageAvailable || savedButton.disabled) return;
+    if (identity(proposal()) !== validatedSignature) {
+      savedButton.hidden = true;
+      validatedRequest = null;
+      return;
+    }
+    savedButton.disabled = true;
+    const state = get("preflight-state");
+    state.textContent = "SAVING DURABLE REVIEW";
+    try {
+      const response = await fetch("/api/runs", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(validatedRequest)
+      });
+      if (!response.ok) throw new Error("Run storage unavailable");
+      const stored = await response.json();
+      if (!/^web-[0-9a-f]{32}$/.test(stored.run_id) ||
+        typeof stored.ticket !== "string" ||
+        stored.review?.run_id !== stored.run_id) {
+        throw new Error("Invalid run receipt");
+      }
+      validateStored(stored.review);
+      sessionStorage.setItem("ofc-last-review", JSON.stringify({
+        run_id: stored.run_id, ticket: stored.ticket
+      }));
+      state.textContent = "DURABLE RUN SAVED · REVIEW REQUIRED";
+      get("preflight-description").textContent =
+        "Run " + stored.run_id + " is frozen for 24 hours. Its revision and " +
+        "journal can be rechecked after reload. Evidence and action stay blocked.";
+      savedButton.textContent = "Run saved for this browser session";
+    } catch {
+      state.textContent = "DURABLE SAVE UNAVAILABLE";
+      get("preflight-description").textContent =
+        "The plan was validated but could not be saved. No evidence or action was approved.";
+      savedButton.disabled = false;
+    }
+  });
+
   button.addEventListener("click", async () => {
     if (button.disabled) return;
     const request = proposal();
@@ -51,8 +150,12 @@
     const decisions = get("preflight-decisions");
     const fixture = get("open-fixture");
     if (!state || !description || !decisions || !fixture) return;
-    const signature = JSON.stringify(request.decisions) +
-      JSON.stringify(request.intent.constraints) + request.intent.objective;
+    const signature = identity(request);
+    validatedRequest = null;
+    validatedSignature = null;
+    savedButton.hidden = true;
+    savedButton.disabled = false;
+    savedButton.textContent = "Save this review for 24 hours ↗";
     state.textContent = "SERVER REVIEW IN PROGRESS";
     fixture.hidden = true;
     try {
@@ -67,8 +170,7 @@
       const result = await response.json();
       if (number !== latest || button.disabled) return;
       const current = proposal();
-      if (signature !== JSON.stringify(current.decisions) +
-        JSON.stringify(current.intent.constraints) + current.intent.objective) return;
+      if (signature !== identity(current)) return;
       if (
         !Array.isArray(result.decisions) ||
         result.decisions.length !== request.decisions.length ||
@@ -103,6 +205,9 @@
         decisions.append(row);
       }
       fixture.hidden = !canonical;
+      validatedRequest = request;
+      validatedSignature = signature;
+      savedButton.hidden = !storageAvailable;
     } catch {
       if (number !== latest) return;
       state.textContent = "SERVER REVIEW UNAVAILABLE";
