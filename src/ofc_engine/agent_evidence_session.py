@@ -76,6 +76,17 @@ class OperatorEvidenceSession:
         _sources(plan, later)
         return cls(proposal, original, later, timedelta(hours=age_hours), historical)
 
+    def snapshot(self, store: SQLiteRevisionStore, run_id: str) -> dict:
+        if run_id != self.proposal.intent.run_id:
+            raise KeyError("unknown evidence session")
+        from .agent_run import review_run
+        return review_run(
+            store, self.proposal, self.original,
+            as_of=datetime.now(timezone.utc),
+            max_evidence_age=self.max_evidence_age,
+            later_sources=self.later,
+        ).model_dump(mode="json")
+
     def review(self, store: SQLiteRevisionStore, run_id: str) -> dict:
         if run_id != self.proposal.intent.run_id:
             raise KeyError("unknown evidence session")
