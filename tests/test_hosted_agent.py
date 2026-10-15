@@ -19,6 +19,7 @@ from ofc_engine.hosted_live import HostedLiveReview, configured_live_review
 from ofc_engine.hosted_preview import HostedFixtureServer
 from ofc_engine.intake import AgentProposal
 from ofc_engine.qloo import QlooProbeClient, TransportReply
+from ofc_engine.revisions import plan_digest
 
 ARTIST = "artist-example"
 BRANDS = ("first-brand", "second-brand", "third-brand")
@@ -129,6 +130,15 @@ def test_one_real_format_qloo_result_revises_actual_six_decision_plan(tmp_path):
     assert report["independent_recheck_completed"] is False
     assert report["provider_authenticated"] is False
     assert report["real_qloo_requests"] == 1
+    assert report["handoff"]["status"] == "WITHHELD"
+    assert report["handoff"]["reviewed_revision"] == report["revision"]
+    assert report["handoff"]["reviewed_plan_digest"] == report["provenance"]["current_plan_digest"]
+    assert report["handoff"]["journal_head"] == report["provenance"]["journal_head"]
+    assert report["handoff"]["pending_rechecks"] == ["brand", "afterparty"]
+    assert report["handoff"]["external_action_executed"] is False
+    assert report["provenance"]["journal_event_count"] == 2
+    assert len(report["provenance"]["qloo_rank_observation"]["capture_digest"]) == 64
+    assert report["provenance"]["qloo_rank_observation"]["provider_attestation"] == "NOT_ESTABLISHED"
     assert all(d["verdict"] == "UNCERTAIN" for d in report["decisions"][1:])
 
     store = SQLiteRevisionStore(ledger.path)
@@ -138,6 +148,8 @@ def test_one_real_format_qloo_result_revises_actual_six_decision_plan(tmp_path):
     assert all(a == b for a, b in zip(frozen.decisions[1:], repaired.decisions[1:]))
     assert store.pending_rechecks("hosted-tour-001") == ("brand", "afterparty")
     assert len(store.audit_history("hosted-tour-001")) == 2
+    assert report["provenance"]["journal_head"] == store.audit_history("hosted-tour-001")[-1].event_hash
+    assert report["provenance"]["current_plan_digest"] == plan_digest(store.get("hosted-tour-001"))
 
     status, saved = controller.public_result()
     assert status == 200 and saved["cached"] is True

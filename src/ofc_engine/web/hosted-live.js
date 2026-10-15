@@ -21,7 +21,21 @@
       run.verification_status !== "REVIEW_REQUIRED" ||
       !Array.isArray(run.decisions) ||
       run.decision_count !== run.decisions.length ||
-      run.off_on?.same_baseline !== true
+      run.off_on?.same_baseline !== true ||
+      !run.provenance || !run.handoff ||
+      run.handoff.status !== "WITHHELD" ||
+      run.handoff.reviewed_revision !== run.revision ||
+      run.handoff.reviewed_plan_digest !== run.provenance.current_plan_digest ||
+      run.handoff.journal_head !== run.provenance.journal_head ||
+      run.handoff.external_action_executed !== false ||
+      !Array.isArray(run.handoff.blockers) ||
+      !Array.isArray(run.handoff.pending_rechecks) ||
+      !/^[a-f0-9]{64}$/.test(run.provenance.baseline_plan_digest) ||
+      !/^[a-f0-9]{64}$/.test(run.provenance.current_plan_digest) ||
+      !/^[a-f0-9]{64}$/.test(run.provenance.journal_head) ||
+      run.provenance.qloo_rank_observation?.source_mode !== "LIVE_HTTP_UNVERIFIED" ||
+      run.provenance.qloo_rank_observation?.provider_attestation !== "NOT_ESTABLISHED" ||
+      !/^[a-f0-9]{64}$/.test(run.provenance.qloo_rank_observation?.capture_digest || "")
     ) throw new Error("Unqualified agent run");
 
     const stages = [...provider.querySelectorAll(":scope > .provider-steps > article")];
@@ -69,8 +83,14 @@
       decisions.append(card);
     }
     sheet.append(decisions);
+    const proof = run.provenance;
     sheet.append(node("p",
-      "Handoff withheld: " + run.blockers.join(" · ").replaceAll("_", " ").toLowerCase(),
+      "Revision " + proof.reviewed_revision + " · policy " + proof.policy_version +
+      " · journal " + proof.journal_head.slice(0, 12) + "… · capture " +
+      proof.qloo_rank_observation.capture_digest.slice(0, 12) + "…",
+      "privacy-caption"));
+    sheet.append(node("p",
+      "Handoff withheld: " + run.handoff.blockers.join(" · ").replaceAll("_", " ").toLowerCase(),
       "privacy-caption"));
     sheet.append(node("p",
       "No booking, payment, raw entity identifiers, or action permission is supplied.",

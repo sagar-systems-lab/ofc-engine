@@ -14,7 +14,7 @@ from .local_run_view import project_local_run
 from .qloo import ProbeSpec
 from .qloo_affinity import normalize_affinity_capture
 from .qloo_flow import RecordedSource
-from .revisions import RevisionConflict
+from .revisions import RevisionConflict, digest_obj
 
 _COMMIT_ACK = "COMMIT_RECORDED_REPAIR_WITH_RECHECK_NO_RELEASE"
 
@@ -112,6 +112,14 @@ class HostedAgentFlow:
                 ) == "OPERATOR_CONSTRUCTED_UNVERIFIED" else 0
             ),
         )
+        report["provenance"]["qloo_rank_observation"] = {
+            "endpoint": spec.path,
+            "query_fingerprint": spec.fingerprint,
+            "capture_digest": digest_obj(capture),
+            "collected_at": observed["collected_at"],
+            "source_mode": "LIVE_HTTP_UNVERIFIED",
+            "provider_attestation": "NOT_ESTABLISHED",
+        }
         report["evidence_collected_at"] = observed["collected_at"]
         report["baseline_plan_digest"] = snapshot.baseline_plan_digest
         report["current_plan_digest"] = snapshot.plan_digest
