@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sqlite3
+import psycopg
 from threading import BoundedSemaphore
 from urllib.parse import parse_qs, urlsplit
 
@@ -102,7 +103,7 @@ class HostedFixtureHandler(DemoHandler):
             if parts.path == "/api/qloo/status" and not parts.query:
                 try:
                     state = self.server.hosted_live.state()
-                except (OSError, ValueError, sqlite3.Error):
+                except (OSError, ValueError, sqlite3.Error, psycopg.Error):
                     self._send(503, b'{"error":"LEDGER_UNAVAILABLE"}', "application/json")
                     return
                 self._send(200, _encoded(state), "application/json")
@@ -110,7 +111,7 @@ class HostedFixtureHandler(DemoHandler):
             if parts.path == "/api/qloo/result" and not parts.query:
                 try:
                     code, report = self.server.hosted_live.public_result()
-                except (OSError, ValueError, sqlite3.Error):
+                except (OSError, ValueError, sqlite3.Error, psycopg.Error):
                     self._send(503, b'{"error":"LEDGER_UNAVAILABLE"}', "application/json")
                     return
                 self._send(code, _encoded(report), "application/json")
@@ -214,7 +215,7 @@ class HostedFixtureHandler(DemoHandler):
             return
         try:
             status, result = self.server.hosted_live.observe()
-        except (OSError, ValueError, sqlite3.Error):
+        except (OSError, ValueError, sqlite3.Error, psycopg.Error):
             self._send(503, b'{"error":"LEDGER_UNAVAILABLE","release_authorized":false}', "application/json")
             return
         self._send(status, _encoded(result), "application/json")
@@ -304,7 +305,7 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("invalid recorded proof pack")
     try:
         live = configured_live_review(os.environ)
-    except ValueError:
+    except (ValueError, psycopg.Error):
         parser.error("invalid or incomplete hosted Qloo approval configuration")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
