@@ -159,7 +159,9 @@ def test_cli_outputs_private_read_only_bundle_without_network(tmp_path, monkeypa
         "--capture", str(cap), "--artist-id", ARTIST,
         "--brands", ",".join(BRANDS), "--decision-id", "brand",
     ]
-    assert main(args) == 0
+    assert main(args) == 2
+    assert json.loads(capsys.readouterr().out)["status"] == "BLOCKED"
+    assert main(args + ["--historical"]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "PRIVATE_RECORDED_PROOF_CREATED"
     assert output["real_qloo_requests"] == 0
