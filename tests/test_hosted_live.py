@@ -19,7 +19,7 @@ from ofc_engine.qloo import (
 ARTIST = "fixed-artist-id"
 POOL = ("brand-first", "brand-second", "brand-third")
 KEY = "fake-ci-key-never-real"
-OPERATOR = "operator-demo-key-" + "x".repeat(40)
+OPERATOR = "operator-demo-key-" + "x" * 40
 
 
 class FakeTransport:
