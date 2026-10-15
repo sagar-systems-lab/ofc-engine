@@ -432,10 +432,13 @@ def test_ticketed_browser_run_receives_only_its_own_qloo_rank(pg_url):
             worker = Thread(target=server.serve_forever, daemon=True)
             worker.start()
             try:
-                endpoint = (
-                    "http://127.0.0.1:" + str(server.server_port)
-                    + "/api/runs/" + requested_run + "/review"
-                )
+                base = "http://127.0.0.1:" + str(server.server_port)
+                with pytest.raises(HTTPError) as error:
+                    urlopen(base + "/api/qloo/result", timeout=5)
+                assert error.value.code == 404
+                with urlopen(base + "/", timeout=5) as response:
+                    assert b"/hosted-live.js" not in response.read()
+                endpoint = base + "/api/runs/" + requested_run + "/review"
                 req = Request(endpoint, headers={
                     "Authorization": "Bearer " + ticket
                 })
