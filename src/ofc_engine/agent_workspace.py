@@ -11,7 +11,6 @@ import secrets
 from stat import S_ISDIR, S_ISREG
 
 from .agent_evidence_session import OperatorEvidenceSession
-from .agent_run import RunSnapshot
 from .connected_local import ConnectedLocalServer
 from .durable import SQLiteRevisionStore
 from .local_proof_server import load_manifest
@@ -86,9 +85,7 @@ def prepare_workspace(
         age_hours=age_hours, historical=historical,
     )
     store = SQLiteRevisionStore(database)
-    snapshot = RunSnapshot.model_validate(
-        session.snapshot(store, session.proposal.intent.run_id)
-    )
+    snapshot = session.snapshot_model(store, session.proposal.intent.run_id)
     if (
         snapshot.plan_revision != 1
         or snapshot.changed_ids != (decision_id,)
