@@ -2,14 +2,23 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlsplit
 
 import psycopg
 
 
 class PostgresAttemptLedger:
-    def __init__(self, dsn: str, *, scope: str):
+    def __init__(
+        self, dsn: str, *, scope: str, insecure_local_test: bool = False,
+    ): 
         if len(scope) != 64 or any(c not in "0123456789abcdef" for c in scope):
             raise ValueError("invalid frozen Qloo scope")
+        if not isinstance(dsn, str) or not dsn.startswith(("postgresql://", "postgres://")):
+            raise ValueError("Postgres connection required")
+        parsed = urlsplit(dsn)
+        if insecure_local_test and parsed.hostname not in ("127.0.0.1", "localhost"):
+            raise ValueError("insecure test transport requires loopback")
+        self._sslmode = "disable" if insecure_local_test else "require"
         self._dsn = dsn
         self.scope = scope
         with self._connect() as db:
@@ -29,7 +38,7 @@ class PostgresAttemptLedger:
                 raise ValueError("provider reservation scope conflict")
 
     def _connect(self):
-        return psycopg.connect(self._dsn, connect_timeout=5)
+        return psycopg.connect(self._dsn, connect_timeout=5, sslmode=self._sslmode)
 
     def get(self) -> tuple[str, dict | None]:
         with self._connect() as db:
