@@ -41,7 +41,19 @@ class ConnectedLocalHandler(AgentAPIHandler, HostedFixtureHandler):
                 snapshot = self.server.evidence_session.snapshot_model(
                     self.server.store, self.server.evidence_session.proposal.intent.run_id
                 )
-                result = project_local_run(snapshot)
+                hypothesis_source = (
+                    self.server.evidence_session.proposal.intent.taste_context.get(
+                        "supplemental_decisions"
+                    )
+                )
+                count = (
+                    max(0, len(snapshot.decision_verdicts) - 1)
+                    if hypothesis_source == "OPERATOR_CONSTRUCTED_UNVERIFIED"
+                    else 0
+                )
+                result = project_local_run(
+                    snapshot, operator_constructed_hypotheses=count
+                )
             except Exception:
                 self._send(503, b'{"error":"EVIDENCE_UNAVAILABLE","release_authorized":false}', "application/json")
                 return
