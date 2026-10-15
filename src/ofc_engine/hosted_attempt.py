@@ -1,6 +1,7 @@
 """Atomic Qloo request reservation on one operator-managed persistent volume."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -47,8 +48,13 @@ class HostedAttemptLedger:
             if row is not None and row[0] != scope:
                 raise ValueError("ledger belongs to another frozen Qloo scope")
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(str(self.path), timeout=5, isolation_level=None)
+    @contextmanager
+    def _connect(self):
+        db = sqlite3.connect(str(self.path), timeout=5, isolation_level=None)
+        try:
+            yield db
+        finally:
+            db.close()
 
     def _row(self, db: sqlite3.Connection):
         row = db.execute(
