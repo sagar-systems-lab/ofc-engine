@@ -33,6 +33,7 @@ def pg_url():
             db.execute(f"do $$ begin if not exists (select from pg_roles where rolname = '{role}') then create role {role}; end if; end $$")
         sql = (Path(__file__).resolve().parents[1] / "sql/001_private_runtime.sql").read_text()
         db.execute(sql)
+        db.execute((Path(__file__).resolve().parents[1] / "sql/002_browser_proposal_scope.sql").read_text())
         allowed = db.execute(
             "select has_schema_privilege('anon','ofc_private','USAGE'),"
             "has_schema_privilege('authenticated','ofc_private','USAGE')"
