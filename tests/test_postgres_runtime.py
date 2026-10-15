@@ -586,6 +586,9 @@ def test_public_six_decision_tour_freezes_scope_and_requires_operator_for_qloo(
             assert b"/api/runs/tour" in script
             assert b'start.id = "start-hosted-tour"' in script
             assert b'#view-plan > .intro' in script
+            assert b'actions.className = "hosted-tour-actions"' in script
+            assert b'actions.style.alignItems = "center"' in script
+            assert b'actions.style.marginBottom = "16px"' in script
             assert b'getElementById("load-example")' not in script
             assert b"innerHTML" not in script
             assert b"QLOO_API_KEY" not in script
