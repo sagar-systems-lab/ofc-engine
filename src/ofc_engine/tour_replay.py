@@ -107,7 +107,7 @@ def prepare_tour_replay(
     brand_ids: tuple[str, ...],
     port: int = 18080,
 ):
-    if not 1 <= port <= 65535:
+    if not 0 <= port <= 65535:
         raise TourReplayRejected("INVALID_PORT")
     source_proposal = AgentProposal.model_validate_json(json.dumps(
         _read_private_json(original_proposal, max_bytes=96 * 1024)
