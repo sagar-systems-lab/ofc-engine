@@ -154,6 +154,7 @@ def commit_rank_repair(
     acknowledgement: str,
     as_of: datetime,
     max_evidence_age: timedelta,
+    source_mode: SourceMode = SourceMode.RECORDED_REDACTED,
 ) -> RunSnapshot:
     if (
         acknowledgement != _ACK or not isinstance(request_id, str)
@@ -205,6 +206,7 @@ def commit_rank_repair(
     return review_run(
         store, proposal, sources, as_of=as_of,
         max_evidence_age=max_evidence_age,
+        source_mode=source_mode,
     )
 
 
@@ -217,7 +219,12 @@ def review_run(
     max_evidence_age: timedelta,
     later_sources: Mapping[str, RecordedSource] | None = None,
     historical: bool = False,
+    source_mode: SourceMode = SourceMode.RECORDED_REDACTED,
 ) -> RunSnapshot:
+    if source_mode not in (SourceMode.RECORDED_REDACTED, SourceMode.LIVE_HTTP_UNVERIFIED):
+        raise ValueError("unsupported rank evidence origin")
+    if source_mode == SourceMode.LIVE_HTTP_UNVERIFIED and historical:
+        raise ValueError("live evidence cannot be historical")
     if as_of.utcoffset() is None or max_evidence_age <= timedelta(0):
         raise ValueError("invalid evidence clock")
     baseline, plan, history, pending, changed = _stored(store, proposal, sources)
@@ -319,13 +326,14 @@ def review_run(
         plan_id=plan.plan_id, revision=plan.revision,
         verified_plan_digest=plan_digest(plan),
         verification_status="REVIEW_REQUIRED",
-        source_mode=SourceMode.RECORDED_REDACTED,
+        source_mode=source_mode,
     )
     return RunSnapshot(
         run_id=plan.plan_id, baseline_digest=baseline.baseline_digest,
         baseline_plan_digest=plan_digest(baseline),
         plan_revision=plan.revision, plan_digest=plan_digest(plan),
-        historical_replay=historical,
+        historical_replay=historical, source_mode=source_mode,
+        real_qloo_requests=1 if source_mode == SourceMode.LIVE_HTTP_UNVERIFIED else 0,
         decision_verdicts=recorded,
         evidence_refs=tuple(sorted({
             ref for item in on.verdicts for ref in item.evidence_refs
