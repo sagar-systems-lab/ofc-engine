@@ -7,6 +7,7 @@ import binascii
 import hmac
 from pathlib import Path
 import sqlite3
+import psycopg
 from threading import Lock
 from typing import Callable, Mapping
 
@@ -164,7 +165,7 @@ class HostedLiveReview:
             if self._ledger is not None:
                 try:
                     self._ledger.complete(report)
-                except (OSError, ValueError, sqlite3.Error):
+                except (OSError, ValueError, sqlite3.Error, psycopg.Error):
                     return 503, self._error("RESULT_PERSISTENCE_UNAVAILABLE", attempt_reserved=True)
             self._finished = report
         return code, report
