@@ -185,6 +185,9 @@ class HostedFixtureHandler(DemoHandler):
                 self._send(200, _encoded(state), "application/json")
                 return
             if parts.path == "/api/qloo/result" and not parts.query:
+                if self.server.hosted_live.bound_run_id is not None:
+                    self._send(404, b'{"error":"RUN_UNAVAILABLE"}', "application/json")
+                    return
                 try:
                     code, report = self.server.hosted_live.public_result()
                 except (OSError, ValueError, sqlite3.Error, psycopg.Error):
@@ -193,11 +196,17 @@ class HostedFixtureHandler(DemoHandler):
                 self._send(code, _encoded(report), "application/json")
                 return
             if parts.path == "/hosted-live.js" and not parts.query:
+                if self.server.hosted_live.bound_run_id is not None:
+                    self._send(404, b'{"error":"RUN_UNAVAILABLE"}', "application/json")
+                    return
                 script = files("ofc_engine").joinpath("web", "hosted-live.js").read_bytes()
                 self._send(200, script, "text/javascript; charset=utf-8")
                 return
             if parts.path == "/" and not parts.query:
-                self._studio_page("/hosted-live.js")
+                self._studio_page(
+                    None if self.server.hosted_live.bound_run_id is not None
+                    else "/hosted-live.js"
+                )
                 return
         if self.server.public_excerpt_body is not None:
             if parts.path == "/api/local-run" and not parts.query:
