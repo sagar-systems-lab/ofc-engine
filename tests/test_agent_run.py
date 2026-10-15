@@ -369,3 +369,82 @@ def test_artist_signal_cannot_be_swapped_across_frozen_agent_context(tmp_path):
     with pytest.raises(AgentEvidenceRejected, match="ARTIST_EVIDENCE_SCOPE_MISMATCH"):
         commit(store, p, wrong)
     assert store.get(p.intent.run_id).revision == 0
+
+
+def test_six_decision_saved_qloo_run_is_visible_from_one_studio_origin(
+    tmp_path, monkeypatch,
+):
+    from threading import Thread
+    from urllib.request import urlopen
+    from ofc_engine.agent_workspace import prepare_workspace
+
+    now = datetime.now(timezone.utc)
+    database = tmp_path / "six-studio.sqlite3"
+    store = SQLiteRevisionStore(database)
+    p = proposal()
+    accept_proposal(store, p)
+    early = capture(at=now - timedelta(hours=4))
+    late = capture(at=now - timedelta(hours=1), scores=(0.97, 0.67, 0.22))
+    src = {"brand": RecordedSource(early, SPEC)}
+    committed = commit_rank_repair(
+        store, p, src, request_id="tour-ui-001", acknowledgement=ACK,
+        as_of=now, max_evidence_age=timedelta(hours=24),
+    )
+    assert committed.invalidated_ids == ("brand", "afterparty")
+    proposal_path = tmp_path / "proposal.json"
+    first_path = tmp_path / "first.json"
+    second_path = tmp_path / "second.json"
+    proposal_path.write_text(p.model_dump_json())
+    first_path.write_text(json.dumps(early))
+    second_path.write_text(json.dumps(late))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        QlooProbeClient, "from_environment",
+        lambda: (_ for _ in ()).throw(AssertionError("Qloo request forbidden")),
+    )
+    workspace = prepare_workspace(
+        database=database, proposal=proposal_path,
+        original_capture=first_path, later_capture=second_path,
+        artist_id=ARTIST, brand_ids=BRANDS, historical=True,
+        auth_token="private-demo-" + "x" * 40,
+    )
+    assert workspace.proof_file is None
+    assert workspace.rank_status == "RECORDED_RANK_RECHECK_PASS_NO_RELEASE"
+    thread = Thread(target=workspace.server.serve_forever, daemon=True)
+    thread.start()
+    base = "http://127.0.0.1:" + str(workspace.server.server_port)
+    try:
+        with urlopen(base + "/", timeout=5) as response:
+            page = response.read()
+        assert b"Decision Workspace" in page
+        assert b'<script defer src="/local-run.js"></script>' in page
+        with urlopen(base + "/api/local-run", timeout=5) as response:
+            raw = response.read()
+        summary = json.loads(raw)
+        assert summary["decision_count"] == 6
+        assert summary["source_mode"] == "RECORDED_REDACTED"
+        assert summary["historical_replay"] is True
+        assert summary["changed_ids"] == ["brand"]
+        assert summary["preserved_ids"] == [
+            "opener", "chicago", "austin", "seattle", "afterparty",
+        ]
+        assert summary["pending_rechecks"] == ["brand", "afterparty"]
+        assert summary["recorded_rank_recheck_pass"] is True
+        assert summary["off_on"]["off_verdicts"]["brand"] == "UNCERTAIN"
+        assert summary["off_on"]["on_verdicts"]["brand"] == "REPAIR"
+        assert summary["release_authorized"] is False
+        assert "HISTORICAL_REPLAY_ONLY" in summary["blockers"]
+        assert ARTIST.encode() not in raw
+        assert all(v.encode() not in raw for v in BRANDS)
+        assert b"affinity" not in raw
+        with urlopen(base + "/recorded", timeout=5) as response:
+            assert response.url.endswith("/#provider")
+        with urlopen(base + "/local-run.js", timeout=5) as response:
+            script = response.read()
+        assert b"innerHTML" not in script
+        assert b"textContent" in script
+    finally:
+        workspace.server.shutdown()
+        thread.join(timeout=5)
+        workspace.close()
+    assert len(store.audit_history(p.intent.run_id)) == 2
