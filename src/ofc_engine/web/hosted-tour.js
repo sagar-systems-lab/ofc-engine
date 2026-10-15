@@ -6,14 +6,23 @@
   if (!intro || !panel) return;
 
   const actions = document.createElement("div");
-  actions.className = "editor-actions";
+  actions.className = "hosted-tour-actions";
+  actions.style.display = "flex";
+  actions.style.flexDirection = "column";
+  actions.style.alignItems = "center";
+  actions.style.gap = "6px";
+  actions.style.marginBottom = "16px";
+  intro.style.marginBottom = "10px";
   const start = document.createElement("button");
   start.id = "start-hosted-tour";
   start.type = "button";
   start.className = "primary";
+  start.style.width = "min(100%, 320px)";
   start.textContent = "Start six-decision tour review →";
   const status = document.createElement("p");
   status.className = "small-note";
+  status.style.margin = "0";
+  status.style.textAlign = "center";
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
   actions.append(start, status);
