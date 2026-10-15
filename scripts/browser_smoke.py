@@ -84,6 +84,16 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("home should open before the plan editor")
                     page.locator("#home-create").click()
                     page.locator("#objective").wait_for(state="visible", timeout=40_000)
+                    run_status = page.request.get(origin + "/api/runs/status")
+                    if run_status.ok and run_status.json().get("tour_available") is True:
+                        tour = page.locator("#start-hosted-tour")
+                        if not tour.is_visible():
+                            raise BrowserFailure("hosted tour action missing from visible plan")
+                        if tour.evaluate("el => !el.closest('#view-plan') || !!el.closest('.sidebar')"):
+                            raise BrowserFailure("hosted tour action is outside the plan")
+                        tour.scroll_into_view_if_needed()
+                        if not tour.is_enabled():
+                            raise BrowserFailure("hosted tour action is inaccessible")
                     if page.locator("#check-preflight").is_enabled():
                         raise BrowserFailure("unvalidated plan allowed preflight")
                     heading_style = page.locator("#draft-title").evaluate("""el => ({
