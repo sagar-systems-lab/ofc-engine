@@ -66,3 +66,24 @@ When private replay produces `public-excerpt-draft.json`, the file contains **on
 The hosted preview remains synthetic-only by default. Its optional recorded excerpt mode requires both `OFC_PUBLISH_RECORDED_PROOF=APPROVED` and an operator-supplied, base64-encoded validated draft under `OFC_PUBLIC_RECORDED_PACK_B64` at deployment. No provider request is issued by either the hosted preview or this feature. When approved and present, the existing white Studio displays this historical recorded evidence in its Provider section, while fixture scenarios remain labeled synthetic. There is no upload endpoint.
 
 **Publication is not yet authorized or deployed.** A locally generated draft is not consent to expose Qloo-derived data. This historical excerpt does not qualify live Qloo integration, independent verification, dependent decisions, or release authority.
+
+
+## Hosted Qloo rank inspection — disabled until separately authorized
+
+The public preview can run a **single fixed-scope live Qloo rank inspection** through the server, without sending the API key or raw Qloo entity IDs to browser JavaScript. It does not replace the recorded tour workflow or certify a verified plan.
+
+This feature is **OFF by default**. Merely deploying OFC or configuring `QLOO_API_KEY` does not enable requests. An operator must separately authorize a provider call and explicitly configure:
+
+- `OFC_HOSTED_QLOO_MODE=ONE_REQUEST_EXPLICITLY_APPROVED`
+- `OFC_HOSTED_QLOO_ARTIST_ID` — resolved artist entity ID
+- `OFC_HOSTED_QLOO_BRAND_IDS` — the exact 2–5 ID shortlist (comma-separated)
+- `OFC_HOSTED_QLOO_SELECTED_ID` — initial choice within that shortlist
+- `QLOO_API_KEY` — server secret, **never** in browser JavaScript or repository
+
+No Qloo request occurs at startup, on health checks, page loads, refreshes, or synthetic fixtures. Only an explicitly confirmed POST from the same-origin browser can reserve a request. The response contains the initial choice's **rank position and rank-only verdict**. It never applies a financial action, issues a verified plan, or claims independent provider attestation. The fixed pool is configured by the operator and cannot be replaced by browser input.
+
+The process reserves one request attempt before contacting Qloo, without retries or refunds on failure. Subsequent attempts reuse the in-memory observed result, or remain blocked after error. **This is only a per-process limit, not a provider-side spending cap**: process restarts, multiple replicas, different services or external users can cause more calls once enabled. For a real public service, qualify an external shared quota and provider billing limits first. Do not enable the mode while the operator's current no-new-Qloo-calls restriction applies.
+
+The existing public fixture mode and separately approved historical recorded-excerpt mode remain unchanged. Live inspection and the historical excerpt cannot both be enabled in the same server instance. No hosting deployment or publication is performed by this implementation.
+
+**Remaining product work:** a Qloo rank observation still needs provider-origin qualification, downstream dependent evidence, broader artist/tour suitability policy, durable run lifecycle, independently validated rechecks and a safe verification/handoff policy. Neither this one-call inspection nor the historical replay satisfies those full-plan requirements.

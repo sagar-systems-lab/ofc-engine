@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .webdemo import DemoHandler, SCENARIOS, demo_snapshot
 from .public_recorded import read_public_recorded_excerpt
+from .hosted_live import HostedLiveReview, configured_live_review
 
 _MAX_TARGET_LENGTH = 512
 _MAX_CONNECTIONS = 16
@@ -76,6 +77,23 @@ class HostedFixtureHandler(DemoHandler):
                 return
             self._send(200, body, "application/json")
             return
+        if self.server.hosted_live is not None:
+            if parts.path == "/api/qloo/status" and not parts.query:
+                self._send(200, _encoded(self.server.hosted_live.state()), "application/json")
+                return
+            if parts.path == "/hosted-live.js" and not parts.query:
+                script = files("ofc_engine").joinpath("web", "hosted-live.js").read_bytes()
+                self._send(200, script, "text/javascript; charset=utf-8")
+                return
+            if parts.path == "/" and not parts.query:
+                page = files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+                marker = b"</head>"
+                if page.count(marker) != 1:
+                    self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
+                    return
+                page = page.replace(marker, b'<script defer src="/hosted-live.js"></script>\n</head>', 1)
+                self._send(200, page, "text/html; charset=utf-8")
+                return
         if self.server.public_excerpt_body is not None:
             if parts.path == "/api/local-run" and not parts.query:
                 self._send(200, self.server.public_excerpt_body, "application/json")
@@ -106,7 +124,39 @@ class HostedFixtureHandler(DemoHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        self._send(405, b'{"error":"READ_ONLY"}', "application/json")
+        if self.path != "/api/qloo/live-rank" or self.server.hosted_live is None:
+            self._send(405, b'{"error":"READ_ONLY"}', "application/json")
+            return
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin", "")
+        expected_origin = (
+            "http://" + host if host.startswith(("127.0.0.1:", "localhost:"))
+            else "https://" + host
+        )
+        if (
+            not host or
+            origin != expected_origin
+            or self.headers.get("Sec-Fetch-Site") not in (
+                None, "same-origin"
+            )
+            or self.headers.get("Content-Type") != "application/json"
+        ):
+            self._send(403, b'{"error":"ORIGIN_REJECTED"}', "application/json")
+            return
+        length = self.headers.get("Content-Length", "")
+        if not length.isascii() or not length.isdecimal() or not 1 <= int(length) <= 256:
+            self._send(400, b'{"error":"INVALID_REQUEST"}', "application/json")
+            return
+        try:
+            body = json.loads(self.rfile.read(int(length)))
+        except (ValueError, UnicodeDecodeError):
+            self._send(400, b'{"error":"INVALID_REQUEST"}', "application/json")
+            return
+        if body != {"confirm": "SPEND_ONE_HOSTED_QLOO_REQUEST"}:
+            self._send(400, b'{"error":"INVALID_REQUEST"}', "application/json")
+            return
+        status, result = self.server.hosted_live.observe()
+        self._send(status, _encoded(result), "application/json")
 
     do_PUT = do_POST
     do_PATCH = do_POST
@@ -122,6 +172,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
     def __init__(
         self, address: tuple[str, int], *, build_sha: str = "unknown",
         public_recorded_document: dict | None = None,
+        hosted_live: HostedLiveReview | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -129,6 +180,9 @@ class HostedFixtureServer(ThreadingHTTPServer):
             build_sha != "unknown" and not _HEX_SHA.fullmatch(build_sha)
         ):
             raise ValueError("build SHA must be a lowercase hex revision or unknown")
+        if hosted_live is not None and public_recorded_document is not None:
+            raise ValueError("only one Qloo presentation mode may be enabled")
+        self.hosted_live = hosted_live
         self.public_excerpt_body = None
         if public_recorded_document is not None:
             payload = read_public_recorded_excerpt(public_recorded_document)
@@ -187,9 +241,13 @@ def main(argv: list[str] | None = None) -> None:
             read_public_recorded_excerpt(document)
         except (binascii.Error, UnicodeError, ValueError, TypeError):
             parser.error("invalid recorded proof pack")
+    try:
+        live = configured_live_review(os.environ)
+    except ValueError:
+        parser.error("invalid or incomplete hosted Qloo approval configuration")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
-        public_recorded_document=document,
+        public_recorded_document=document, hosted_live=live,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
