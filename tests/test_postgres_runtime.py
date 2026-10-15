@@ -584,6 +584,9 @@ def test_public_six_decision_tour_freezes_scope_and_requires_operator_for_qloo(
             with urlopen(base + "/hosted-tour.js", timeout=5) as response:
                 script = response.read()
             assert b"/api/runs/tour" in script
+            assert b'start.id = "start-hosted-tour"' in script
+            assert b'#view-plan > .intro' in script
+            assert b'getElementById("load-example")' not in script
             assert b"innerHTML" not in script
             assert b"QLOO_API_KEY" not in script
             assert b"artist-ci" not in script
