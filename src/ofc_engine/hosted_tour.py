@@ -37,13 +37,13 @@ def configured_tour(environment: Mapping[str, str]) -> AgentProposal | None:
             "supplemental_decisions": "OPERATOR_CONSTRUCTED_UNVERIFIED",
         },
     })
-    proposal = AgentProposal.model_validate({
-        "intent": intent.model_dump(),
-        "decisions": [
-            (scoped if decision.decision_id == "brand" else decision).model_dump()
+    proposal = AgentProposal(
+        intent=intent,
+        decisions=tuple(
+            scoped if decision.decision_id == "brand" else decision
             for decision in example.decisions
-        ],
-    })
+        ),
+    )
     return validate_hosted_proposal(
         proposal.model_dump_json().encode("utf-8"),
         artist_id=artist, brand_ids=brands, selected_brand_id=selected,
