@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import urlsplit
 
 import psycopg
 
@@ -12,15 +13,19 @@ from .store import IdempotencyConflict
 
 
 class PostgresRevisionStore:
-    def __init__(self, dsn: str):
-        if not dsn.startswith(("postgresql://", "postgres://")):
+    def __init__(self, dsn: str, *, insecure_local_test: bool = False):
+        if not isinstance(dsn, str) or not dsn.startswith(("postgresql://", "postgres://")):
             raise ValueError("a PostgreSQL connection URL is required")
+        parsed = urlsplit(dsn)
+        if insecure_local_test and parsed.hostname not in ("127.0.0.1", "localhost"):
+            raise ValueError("insecure test transport requires loopback")
+        self._sslmode = "disable" if insecure_local_test else "require"
         self._dsn = dsn
         with self._connect() as conn:
             conn.execute("select 1 from ofc_private.plans limit 1")
 
     def _connect(self):
-        return psycopg.connect(self._dsn, connect_timeout=5)
+        return psycopg.connect(self._dsn, connect_timeout=5, sslmode=self._sslmode)
 
     def _history(self, db, plan_id: str) -> tuple[RevisionEvent, ...]:
         row = db.execute(
