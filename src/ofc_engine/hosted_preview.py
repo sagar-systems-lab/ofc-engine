@@ -22,6 +22,7 @@ from .hosted_runs import HostedRunRegistry, RunCapacityReached
 from .hosted_tour import configured_tour
 from .intake import AgentProposal
 from .postgres_store import PostgresRevisionStore
+from .published_tour import PublishedTourReview
 
 _MAX_TARGET_LENGTH = 512
 _MAX_CONNECTIONS = 16
@@ -71,6 +72,8 @@ class HostedFixtureHandler(DemoHandler):
         names = ["/hosted-preflight.js"]
         if self.server.tour_proposal is not None and self.server.run_registry is not None:
             names.append("/hosted-tour.js")
+        if self.server.public_showcase is not None:
+            names.append("/hosted-showcase.js")
         if extra_script:
             names.append(extra_script)
         scripts = "".join(
@@ -103,6 +106,24 @@ class HostedFixtureHandler(DemoHandler):
                 return
             script = files("ofc_engine").joinpath("web", "hosted-tour.js").read_bytes()
             self._send(200, script, "text/javascript; charset=utf-8")
+            return
+        if parts.path == "/hosted-showcase.js" and not parts.query:
+            if self.server.public_showcase is None:
+                self._send(404, b'{"error":"SHOWCASE_UNAVAILABLE"}', "application/json")
+                return
+            script = files("ofc_engine").joinpath("web", "hosted-showcase.js").read_bytes()
+            self._send(200, script, "text/javascript; charset=utf-8")
+            return
+        if parts.path == "/api/showcase" and not parts.query:
+            if self.server.public_showcase is None:
+                self._send(404, b'{"error":"SHOWCASE_UNAVAILABLE"}', "application/json")
+                return
+            try:
+                report = self.server.public_showcase.review()
+            except (ValueError, KeyError, psycopg.Error, sqlite3.Error):
+                self._send(503, b'{"error":"SHOWCASE_UNAVAILABLE"}', "application/json")
+                return
+            self._send(200, _encoded(report), "application/json")
             return
         if parts.path == "/api/runs/status" and not parts.query:
             if not self._durable_ready():
@@ -377,6 +398,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
         hosted_live: HostedLiveReview | None = None,
         run_registry: HostedRunRegistry | None = None,
         tour_proposal: AgentProposal | None = None,
+        public_showcase: PublishedTourReview | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -388,6 +410,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
             raise ValueError("only one Qloo presentation mode may be enabled")
         self.run_registry = run_registry
         self.tour_proposal = tour_proposal
+        self.public_showcase = public_showcase
         self.hosted_live = hosted_live
         if tour_proposal is not None and run_registry is None:
             raise ValueError("hosted tour requires durable run registry")
@@ -468,10 +491,24 @@ def main(argv: list[str] | None = None) -> None:
             )
         except (ValueError, psycopg.Error):
             parser.error("durable runs unavailable")
+    showcase = None
+    published_mode = os.environ.get("OFC_PUBLIC_QLOO_SHOWCASE", "")
+    published_id = os.environ.get("OFC_PUBLIC_QLOO_RUN_ID", "")
+    if published_mode or published_id:
+        if (
+            published_mode != "APPROVED" or not published_id
+            or live is None or registry is None
+            or live.bound_run_id != published_id
+        ):
+            parser.error("public Qloo review requires explicit matched operator approval")
+        try:
+            showcase = PublishedTourReview(registry, published_id)
+        except (ValueError, KeyError, psycopg.Error):
+            parser.error("published Qloo review is unavailable or unqualified")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
-        run_registry=registry, tour_proposal=tour,
+        run_registry=registry, tour_proposal=tour, public_showcase=showcase,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
