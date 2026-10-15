@@ -419,7 +419,11 @@ class HostedFixtureServer(ThreadingHTTPServer):
             payload = read_public_recorded_excerpt(public_recorded_document)
             self.public_excerpt_body = _encoded(payload)
         self.fixtures = {scenario: _verified_fixture(scenario) for scenario in SCENARIOS}
-        self.health_body = _encoded({"status": "ok", "mode": "SYNTHETIC", "build_sha": build_sha})
+        self.health_body = _encoded({
+            "status": "ok",
+            "mode": "PUBLIC_REDACTED_QLOO_REVIEW" if public_showcase is not None else "SYNTHETIC",
+            "build_sha": build_sha,
+        })
         self._slots = BoundedSemaphore(_MAX_CONNECTIONS)
         super().__init__(address, HostedFixtureHandler)
 
