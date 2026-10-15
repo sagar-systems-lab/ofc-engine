@@ -448,3 +448,34 @@ def test_six_decision_saved_qloo_run_is_visible_from_one_studio_origin(
         thread.join(timeout=5)
         workspace.close()
     assert len(store.audit_history(p.intent.run_id)) == 2
+
+
+def test_public_run_handoff_rejects_proof_detached_from_revision(tmp_path):
+    from ofc_engine.local_run_view import project_local_run
+
+    store, _, p, _, sources = seeded(tmp_path)
+    snapshot = commit(store, p, sources)
+    legitimate = project_local_run(snapshot)
+    assert legitimate["handoff"]["status"] == "WITHHELD"
+    assert legitimate["handoff"]["reviewed_plan_digest"] == snapshot.plan_digest
+    assert legitimate["provenance"]["journal_head"] == snapshot.events[-1].journal_hash
+
+    wrong_revision = snapshot.model_copy(update={
+        "handoff": snapshot.handoff.model_copy(update={"revision": 0})
+    })
+    wrong_digest = snapshot.model_copy(update={
+        "verification": snapshot.verification.model_copy(update={
+            "verified_plan_digest": "f" * 64
+        })
+    })
+    wrong_journal = snapshot.model_copy(update={
+        "events": snapshot.events[:-1]
+    })
+    wrong_baseline = snapshot.model_copy(update={
+        "comparison": snapshot.comparison.model_copy(update={
+            "baseline_plan_digest": "0" * 64
+        })
+    })
+    for altered in (wrong_revision, wrong_digest, wrong_journal, wrong_baseline):
+        with pytest.raises(ValueError, match="not bound"):
+            project_local_run(altered)
