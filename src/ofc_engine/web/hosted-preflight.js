@@ -79,17 +79,16 @@
         result.stored_on_server !== false ||
         !/^[a-f0-9]{64}$/.test(result.plan_digest)
       ) throw new Error("Unqualified review");
-      const canonical = result.synthetic_fixture_available === true &&
-        result.status === "SYNTHETIC_FIXTURE_AVAILABLE" &&
-        result.source_mode === "SYNTHETIC";
-      if (!canonical && (
-        result.status !== "REVIEW_REQUIRED" || result.source_mode !== "EVIDENCE_UNAVAILABLE"
-      )) throw new Error("Unqualified outcome");
+      const canonical = result.synthetic_fixture_available === true;
+      if (result.status !== "REVIEW_REQUIRED" ||
+        result.source_mode !== "EVIDENCE_UNAVAILABLE") {
+        throw new Error("Unqualified outcome");
+      }
 
       state.textContent = canonical
         ? "SERVER VALIDATED · SYNTHETIC ONLY" : "SERVER VALIDATED · REVIEW REQUIRED";
       description.textContent = canonical
-        ? "The server matched the exact canonical tour contract. The linked demonstration uses synthetic evidence only; no real Qloo call, verification or release occurred."
+        ? "Your choices match the canonical tour template. The linked proof is a separate synthetic example, not evidence for this proposal. No Qloo call or action occurred."
         : "Server validation passed. No trusted Qloo evidence was supplied for this plan; required decisions remain uncertain and action is blocked.";
       decisions.replaceChildren();
       for (const item of result.decisions) {
