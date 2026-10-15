@@ -95,3 +95,21 @@ If the submitted choices match the canonical tour **template**, the separate syn
 `POST /api/preflight` is bounded to 96 KiB, validates same-origin browser requests, rejects malformed or cyclic dependencies, and never changes the provider attempt ledger. No new browser design was introduced; the existing frozen Studio is extended by an optional, separate script at serving time. The hosted Free instance needs no database for this deliberately read-only function.
 
 The private historical tour, separately authorized live Qloo run, and final full-plan verification each retain their own proof and trust requirements.
+
+
+## Durable hosted agent runs (separate OFC database)
+
+The hosted plan editor supports an optional **Save this review for 24 hours** action after server preflight. When storage is explicitly enabled, a browser plan is assigned a new server-generated run ID, frozen in PostgreSQL, journaled at revision 0, and made readable only with its one-time bearer ticket. The ticket stays in that browser tab's session storage. A reload can retrieve the same journal-bound, still-uncertain review. Submitted proposals never inherit the synthetic example's evidence, and this endpoint does **not** call Qloo.
+
+This mode is OFF until all required OFC-only database migration and secret checks pass. Set the server environment variables (never commit their values):
+
+- `OFC_DURABLE_RUNS_MODE=ENABLED`
+- `OFC_DATABASE_URL` — OFC Engine **dedicated** PostgreSQL connection, TLS required. The connection user needs access to `ofc_private`. Do **not** point this at NOW Network or another project.
+
+Apply `sql/001_private_runtime.sql` **only to the OFC Engine project** before enabling it. The schema is private: `anon` and `authenticated` have no table or schema privileges. There is no public REST/RPC write entry point. The backend has a database-enforced global maximum of 80 browser-created runs per UTC day, with tickets expiring after 24 hours; expiry restricts reading, not guaranteed immediate physical erasure. Dedicated maintenance can purge expired rows later.
+
+For the separately consented one-attempt **live** Qloo path, an OFC-only `OFC_DATABASE_URL` replaces the old local `OFC_HOSTED_QLOO_LEDGER_PATH`. A private six-decision frozen proposal can be supplied using either a mode-0600 server-owned file at `OFC_HOSTED_AGENT_PROPOSAL_PATH` or the bounded server-secret `OFC_HOSTED_AGENT_PROPOSAL_B64` (not both). The provider request remains OFF unless `OFC_HOSTED_QLOO_MODE=ONE_REQUEST_EXPLICITLY_APPROVED` plus the separate server-side Qloo key and operator token are also configured and the operator explicitly initiates the call. A restart or another process using the same OFC database cannot refill the provider request reservation.
+
+None of these controls establishes provider authentication, independent rank recheck, required venue/opener evidence, or full-tour verification. Every browser-created plan starts `REVIEW_REQUIRED` with `UNCERTAIN` decisions. Every isolated single-rank provider run still withholds action until all independent release conditions have genuine evidence.
+
+**Operational release status:** OFC Engine's separate Free Supabase project exists, but production schema application, private connection configuration, deployment activation and live hosted E2E are separate gated steps. The default Render fixture preview stays synthetic-only, and NOW Network is not used.
