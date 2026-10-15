@@ -1,17 +1,23 @@
 """One explicitly approved, server-side Qloo rank observation per process."""
 from __future__ import annotations
 
+from hashlib import sha256
+import hmac
+from pathlib import Path
 from threading import Lock
 from typing import Mapping
 
 from .qloo import ProbeSpec, QlooProbeClient, QlooProbeError, brand_affinity_probe
 from .qloo_affinity import AffinityCaptureError, normalize_affinity_capture
+from .hosted_attempt import HostedAttemptLedger
 
 
 class HostedLiveReview:
     def __init__(
         self, *, api_key: str, artist_id: str, brand_ids: tuple[str, ...],
         selected_brand_id: str, client: QlooProbeClient | None = None,
+        ledger: HostedAttemptLedger | None = None,
+        operator_token: str | None = None,
     ) -> None:
         self.spec: ProbeSpec = brand_affinity_probe(artist_id, brand_ids)
         if selected_brand_id not in brand_ids:
@@ -19,21 +25,35 @@ class HostedLiveReview:
         self._candidate_ids = brand_ids
         self._selected = selected_brand_id
         self._client = client or QlooProbeClient(api_key=api_key)
+        if operator_token is not None and (
+            not 32 <= len(operator_token) <= 256
+            or not operator_token.isascii()
+            or any(ord(char) < 33 or ord(char) > 126 for char in operator_token)
+        ):
+            raise ValueError("unsafe operator token")
+        self._operator_token = operator_token
+        self._ledger = ledger
         self._lock = Lock()
         self._used = False
         self._finished: dict | None = None
 
+    def authorize(self, token: str) -> bool:
+        return (
+            self._operator_token is not None
+            and isinstance(token, str)
+            and hmac.compare_digest(token, self._operator_token)
+        )
+
     def state(self) -> dict:
         with self._lock:
-            state = (
+            state = self._ledger.get()[0] if self._ledger else (
                 "READY" if not self._used else
-                "SPENT" if self._finished is None else
-                self._finished["status"]
+                "SPENT" if self._finished is None else self._finished["status"]
             )
             return {
                 "status": state,
                 "capability": "LIVE_QLOO_RANK_OBSERVATION_ONLY",
-                "requests_remaining_this_process": 0 if self._used else 1,
+                "requests_remaining_this_process": 0 if state != "READY" else 1,
                 "scope": "ONE_FROZEN_ARTIST_BRAND_POOL",
                 "provider_authenticated": False,
                 "independent_recheck_completed": False,
@@ -41,15 +61,39 @@ class HostedLiveReview:
                 "external_action_executed": False,
             }
 
+    def public_result(self) -> tuple[int, dict]:
+        with self._lock:
+            state, report = self._ledger.get() if self._ledger else (
+                ("READY", None) if not self._used else (
+                    ("SPENT", None) if self._finished is None
+                    else (self._finished["status"], self._finished)
+                )
+            )
+        if report is None:
+            return 404, self._error("NO_PUBLISHED_OBSERVATION")
+        if state != "LIVE_RANK_OBSERVED":
+            return 404, self._error("NO_QUALIFIED_OBSERVATION")
+        return 200, {**report, "cached": True, "requests_this_call": 0}
+
     def observe(self) -> tuple[int, dict]:
         with self._lock:
-            if self._used:
+            if self._ledger:
+                state, prior = self._ledger.get()
+                if state != "READY":
+                    if prior is None:
+                        return 409, self._error("REQUEST_ALREADY_RESERVED")
+                    return (200 if state == "LIVE_RANK_OBSERVED" else 503), {
+                        **prior, "cached": True, "requests_this_call": 0,
+                    }
+                if not self._ledger.reserve():
+                    return 409, self._error("REQUEST_ALREADY_RESERVED")
+            elif self._used:
                 if self._finished is None:
                     return 409, self._error("REQUEST_ALREADY_RESERVED")
                 return 200 if self._finished["status"] == "LIVE_RANK_OBSERVED" else 503, {
                     **self._finished, "cached": True, "requests_this_call": 0,
                 }
-            # Never refund a reservation: timeouts and errors may have reached Qloo.
+            # The reservation is consumed before network I/O, even after a timeout.
             self._used = True
 
         try:
@@ -93,9 +137,14 @@ class HostedLiveReview:
             report = self._error("PROVIDER_RANK_UNAVAILABLE", attempt_reserved=True)
             code = 503
         except Exception:
-            report = self._error("PROVIDER_RANK_UNAVAILABLE")
+            report = self._error("PROVIDER_RANK_UNAVAILABLE", attempt_reserved=True)
             code = 503
         with self._lock:
+            if self._ledger is not None:
+                try:
+                    self._ledger.complete(report)
+                except (OSError, ValueError):
+                    return 503, self._error("RESULT_PERSISTENCE_UNAVAILABLE", attempt_reserved=True)
             self._finished = report
         return code, report
 
@@ -127,9 +176,18 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         raise ValueError("hosted Qloo mode is not approved")
     if not environment.get("QLOO_API_KEY", "").strip():
         raise ValueError("server-side Qloo API key missing")
+    token = environment.get("OFC_HOSTED_OPERATOR_TOKEN", "")
+    ledger_path = environment.get("OFC_HOSTED_QLOO_LEDGER_PATH", "")
+    if not token or not ledger_path or not Path(ledger_path).is_absolute():
+        raise ValueError("operator authorization and persistent ledger required")
+    artist = environment.get("OFC_HOSTED_QLOO_ARTIST_ID", "")
+    brands = tuple(environment.get("OFC_HOSTED_QLOO_BRAND_IDS", "").split(","))
+    selected = environment.get("OFC_HOSTED_QLOO_SELECTED_ID", "")
+    spec = brand_affinity_probe(artist, brands)
+    scope = sha256((spec.fingerprint + ":" + selected).encode("utf-8")).hexdigest()
+    ledger = HostedAttemptLedger(Path(ledger_path), scope=scope)
     return HostedLiveReview(
         api_key=environment["QLOO_API_KEY"],
-        artist_id=environment.get("OFC_HOSTED_QLOO_ARTIST_ID", ""),
-        brand_ids=tuple(environment.get("OFC_HOSTED_QLOO_BRAND_IDS", "").split(",")),
-        selected_brand_id=environment.get("OFC_HOSTED_QLOO_SELECTED_ID", ""),
+        artist_id=artist, brand_ids=brands,
+        selected_brand_id=selected, ledger=ledger, operator_token=token,
     )
