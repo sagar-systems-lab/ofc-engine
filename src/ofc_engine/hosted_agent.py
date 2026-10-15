@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import json
 import os
 from pathlib import Path
 from stat import S_ISREG
@@ -15,7 +14,7 @@ from .local_run_view import project_local_run
 from .qloo import ProbeSpec
 from .qloo_affinity import normalize_affinity_capture
 from .qloo_flow import RecordedSource
-from .revisions import RevisionConflict, plan_digest
+from .revisions import RevisionConflict
 
 _COMMIT_ACK = "COMMIT_RECORDED_REPAIR_WITH_RECHECK_NO_RELEASE"
 
