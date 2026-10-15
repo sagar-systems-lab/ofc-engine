@@ -81,6 +81,10 @@ class HostedFixtureHandler(DemoHandler):
             if parts.path == "/api/qloo/status" and not parts.query:
                 self._send(200, _encoded(self.server.hosted_live.state()), "application/json")
                 return
+            if parts.path == "/api/qloo/result" and not parts.query:
+                code, report = self.server.hosted_live.public_result()
+                self._send(code, _encoded(report), "application/json")
+                return
             if parts.path == "/hosted-live.js" and not parts.query:
                 script = files("ofc_engine").joinpath("web", "hosted-live.js").read_bytes()
                 self._send(200, script, "text/javascript; charset=utf-8")
@@ -155,7 +159,16 @@ class HostedFixtureHandler(DemoHandler):
         if body != {"confirm": "SPEND_ONE_HOSTED_QLOO_REQUEST"}:
             self._send(400, b'{"error":"INVALID_REQUEST"}', "application/json")
             return
-        status, result = self.server.hosted_live.observe()
+        if not self.server.hosted_live.authorize(
+            self.headers.get("X-OFC-Operator-Token", "")
+        ):
+            self._send(403, b'{"error":"OPERATOR_AUTH_REQUIRED","release_authorized":false}', "application/json")
+            return
+        try:
+            status, result = self.server.hosted_live.observe()
+        except (OSError, ValueError):
+            self._send(503, b'{"error":"LEDGER_UNAVAILABLE","release_authorized":false}', "application/json")
+            return
         self._send(status, _encoded(result), "application/json")
 
     do_PUT = do_POST
