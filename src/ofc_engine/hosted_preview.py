@@ -1,4 +1,4 @@
-"""Read-only public fixture preview; no persistent runs or provider access."""
+"""Public studio with opt-in durable runs and operator-gated provider review."""
 from __future__ import annotations
 
 import argparse
@@ -75,6 +75,15 @@ class HostedFixtureHandler(DemoHandler):
         self._send(200, page.replace(marker, scripts + marker, 1),
                    "text/html; charset=utf-8")
 
+    def _durable_ready(self) -> bool:
+        registry = self.server.run_registry
+        if registry is None:
+            return True
+        try:
+            return registry.ready()
+        except (psycopg.Error, OSError, ValueError):
+            return False
+
     def do_GET(self) -> None:
         if len(self.path) > _MAX_TARGET_LENGTH:
             self._send(414, b'{"error":"URI_TOO_LONG"}', "application/json")
@@ -85,6 +94,10 @@ class HostedFixtureHandler(DemoHandler):
             self._send(200, script, "text/javascript; charset=utf-8")
             return
         if parts.path == "/api/runs/status" and not parts.query:
+            if not self._durable_ready():
+                self._send(503, b'{"error":"RUN_STORAGE_UNAVAILABLE","release_authorized":false}',
+                           "application/json")
+                return
             self._send(200, _encoded({
                 "enabled": self.server.run_registry is not None,
                 "release_authorized": False,
@@ -114,6 +127,9 @@ class HostedFixtureHandler(DemoHandler):
         if parts.path in ("/healthz", "/readyz"):
             if parts.query:
                 self._send(400, b'{"error":"INVALID_QUERY"}', "application/json")
+                return
+            if parts.path == "/readyz" and not self._durable_ready():
+                self._send(503, b'{"error":"RUN_STORAGE_UNAVAILABLE"}', "application/json")
                 return
             self._send(200, self.server.health_body, "application/json")
             return

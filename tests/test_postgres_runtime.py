@@ -283,3 +283,87 @@ def test_browser_run_quota_and_expiry_are_fail_closed(pg_url):
         )
     with pytest.raises(KeyError):
         registry.review(saved["run_id"], saved["ticket"])
+
+
+def test_durable_run_survives_new_server_and_storage_outage(pg_url, monkeypatch):
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from ofc_engine.hosted_preview import HostedFixtureServer
+    from ofc_engine.hosted_runs import HostedRunRegistry
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute("update ofc_private.browser_budget set writes=0 where id=1")
+
+    def start():
+        registry = HostedRunRegistry(
+            PostgresRevisionStore(pg_url, insecure_local_test=True)
+        )
+        registry.max_daily_runs = 1
+        server = HostedFixtureServer(("127.0.0.1", 0), run_registry=registry)
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        return registry, server, worker, "http://127.0.0.1:" + str(server.server_port)
+
+    def post(base):
+        return Request(
+            base + "/api/runs",
+            data=canonical_proposal().model_dump_json().encode(),
+            headers={"Origin": base, "Content-Type": "application/json"},
+        )
+
+    registry, server, worker, base = start()
+    try:
+        with urlopen(post(base), timeout=5) as response:
+            receipt = json.loads(response.read())
+        assert receipt["review"]["release_authorized"] is False
+        saved_digest = receipt["review"]["plan_digest"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+    reopened, server, worker, base = start()
+    try:
+        review_url = base + "/api/runs/" + receipt["run_id"] + "/review"
+        authorized = Request(
+            review_url, headers={"Authorization": "Bearer " + receipt["ticket"]}
+        )
+        with urlopen(base + "/readyz", timeout=5) as response:
+            assert response.status == 200
+        with urlopen(authorized, timeout=5) as response:
+            review = json.loads(response.read())
+        assert review["plan_digest"] == saved_digest
+        assert review["journal_head"] == reopened.store.audit_history(
+            receipt["run_id"]
+        )[-1].event_hash
+        assert review["release_authorized"] is False
+        assert review["real_qloo_requests"] == 0
+        with pytest.raises(HTTPError) as error:
+            urlopen(post(base), timeout=5)
+        assert error.value.code == 429
+
+        def unavailable():
+            raise psycopg.OperationalError("sensitive connection diagnostic")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(reopened.store, "_connect", unavailable)
+            for path in ("/readyz", "/api/runs/status", review_url[len(base):]):
+                request = authorized if path == review_url[len(base):] else base + path
+                with pytest.raises(HTTPError) as error:
+                    urlopen(request, timeout=5)
+                assert error.value.code == 503
+                assert b"sensitive connection diagnostic" not in error.value.read()
+            with pytest.raises(HTTPError) as error:
+                urlopen(post(base), timeout=5)
+            assert error.value.code == 503
+            with urlopen(base + "/healthz", timeout=5) as response:
+                assert response.status == 200
+
+        with urlopen(authorized, timeout=5) as response:
+            assert json.loads(response.read())["plan_digest"] == saved_digest
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
