@@ -42,4 +42,19 @@ alter table ofc_private.events enable row level security;
 alter table ofc_private.requests enable row level security;
 alter table ofc_private.provider_scope enable row level security;
 alter table ofc_private.provider_attempt enable row level security;
+
+create table if not exists ofc_private.browser_budget (
+    id smallint primary key check (id = 1),
+    day_utc date not null,
+    writes integer not null check (writes >= 0)
+);
+insert into ofc_private.browser_budget(id,day_utc,writes)
+values (1, current_date, 0) on conflict (id) do nothing;
+create table if not exists ofc_private.browser_runs (
+    plan_id text primary key references ofc_private.plans(plan_id),
+    ticket_digest text not null,
+    expires_at timestamptz not null
+);
+alter table ofc_private.browser_budget enable row level security;
+alter table ofc_private.browser_runs enable row level security;
 revoke all on all tables in schema ofc_private from public, anon, authenticated;
