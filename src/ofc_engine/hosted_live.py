@@ -15,6 +15,7 @@ from .qloo import ProbeSpec, QlooProbeClient, QlooProbeError, brand_affinity_pro
 from .qloo_affinity import AffinityCaptureError, normalize_affinity_capture
 from .hosted_attempt import HostedAttemptLedger
 from .hosted_agent import HostedAgentFlow, load_hosted_proposal, validate_hosted_proposal
+from .hosted_runs import HostedRunRegistry
 from .postgres_attempt import PostgresAttemptLedger
 from .postgres_store import PostgresRevisionStore
 from .intake import freeze_proposal
@@ -28,6 +29,7 @@ class HostedLiveReview:
         ledger: HostedAttemptLedger | PostgresAttemptLedger | None = None,
         operator_token: str | None = None,
         agent_evaluator: Callable[[dict, ProbeSpec], dict] | None = None,
+        bound_run_id: str | None = None,
     ) -> None:
         self.spec: ProbeSpec = brand_affinity_probe(artist_id, brand_ids)
         if selected_brand_id not in brand_ids:
@@ -44,6 +46,7 @@ class HostedLiveReview:
         self._operator_token = operator_token
         self._ledger = ledger
         self._agent_evaluator = agent_evaluator
+        self.bound_run_id = bound_run_id
         self._lock = Lock()
         self._used = False
         self._finished: dict | None = None
@@ -191,6 +194,7 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         "OFC_HOSTED_QLOO_BRAND_IDS", "OFC_HOSTED_QLOO_SELECTED_ID",
         "OFC_HOSTED_OPERATOR_TOKEN", "OFC_HOSTED_QLOO_LEDGER_PATH",
         "OFC_HOSTED_AGENT_PROPOSAL_PATH", "OFC_HOSTED_AGENT_PROPOSAL_B64",
+        "OFC_HOSTED_BROWSER_RUN_ID",
     )
     if not enabled:
         if any(environment.get(field) for field in fields[1:]):
@@ -215,9 +219,20 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
     spec = brand_affinity_probe(artist, brands)
     private_path = environment.get("OFC_HOSTED_AGENT_PROPOSAL_PATH", "")
     encoded = environment.get("OFC_HOSTED_AGENT_PROPOSAL_B64", "")
-    if bool(private_path) == bool(encoded):
-        raise ValueError("exactly one private frozen proposal is required")
-    if encoded:
+    browser_run = environment.get("OFC_HOSTED_BROWSER_RUN_ID", "")
+    if sum(bool(item) for item in (private_path, encoded, browser_run)) != 1:
+        raise ValueError("exactly one private frozen proposal source is required")
+    if browser_run:
+        if not postgres_url:
+            raise ValueError("browser-bound Qloo requires private Postgres")
+        registry = HostedRunRegistry(PostgresRevisionStore(postgres_url))
+        proposal = registry.operator_proposal(browser_run)
+        proposal = validate_hosted_proposal(
+            proposal.model_dump_json().encode("utf-8"),
+            artist_id=artist, brand_ids=brands,
+            selected_brand_id=selected,
+        )
+    elif encoded:
         if len(encoded) > 132000:
             raise ValueError("private hosted proposal too large")
         try:
@@ -252,4 +267,5 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
         artist_id=artist, brand_ids=brands,
         selected_brand_id=selected, ledger=ledger, operator_token=token,
         agent_evaluator=flow.evaluate,
+        bound_run_id=browser_run or None,
     )
