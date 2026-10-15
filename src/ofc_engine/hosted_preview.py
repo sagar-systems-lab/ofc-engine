@@ -68,6 +68,8 @@ class HostedFixtureHandler(DemoHandler):
             self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
             return
         names = ["/hosted-preflight.js"]
+        if self.server.tour_proposal is not None and self.server.run_registry is not None:
+            names.append("/hosted-tour.js")
         if extra_script:
             names.append(extra_script)
         scripts = "".join(
@@ -229,10 +231,7 @@ class HostedFixtureHandler(DemoHandler):
                 self._studio_page("/local-run.js")
                 return
         if parts.path == "/" and not parts.query:
-            self._studio_page(
-                "/hosted-tour.js" if self.server.tour_proposal is not None
-                and self.server.run_registry is not None else None
-            )
+            self._studio_page()
             return
         # Keep the static allowlist inherited from the local viewer.
         super().do_GET()
