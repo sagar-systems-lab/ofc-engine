@@ -134,6 +134,8 @@ def prepare_tour_replay(
 
     directory = _private_directory() / run_id
     directory.mkdir(mode=0o700)
+    if directory.stat().st_mode & 0o077:
+        raise TourReplayRejected("UNSAFE_SESSION_PERMISSIONS")
     database = directory / "plan.sqlite3"
     proposal_file = directory / "proposal.json"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
