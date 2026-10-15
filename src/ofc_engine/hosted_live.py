@@ -4,6 +4,7 @@ from __future__ import annotations
 from hashlib import sha256
 import hmac
 from pathlib import Path
+import sqlite3
 from threading import Lock
 from typing import Mapping
 
@@ -54,6 +55,7 @@ class HostedLiveReview:
                 "status": state,
                 "capability": "LIVE_QLOO_RANK_OBSERVATION_ONLY",
                 "requests_remaining_this_process": 0 if state != "READY" else 1,
+                "durable_reservation": self._ledger is not None,
                 "scope": "ONE_FROZEN_ARTIST_BRAND_POOL",
                 "provider_authenticated": False,
                 "independent_recheck_completed": False,
@@ -143,7 +145,7 @@ class HostedLiveReview:
             if self._ledger is not None:
                 try:
                     self._ledger.complete(report)
-                except (OSError, ValueError):
+                except (OSError, ValueError, sqlite3.Error):
                     return 503, self._error("RESULT_PERSISTENCE_UNAVAILABLE", attempt_reserved=True)
             self._finished = report
         return code, report
@@ -167,6 +169,7 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
     fields = (
         "OFC_HOSTED_QLOO_MODE", "OFC_HOSTED_QLOO_ARTIST_ID",
         "OFC_HOSTED_QLOO_BRAND_IDS", "OFC_HOSTED_QLOO_SELECTED_ID",
+        "OFC_HOSTED_OPERATOR_TOKEN", "OFC_HOSTED_QLOO_LEDGER_PATH",
     )
     if not enabled:
         if any(environment.get(field) for field in fields[1:]):
