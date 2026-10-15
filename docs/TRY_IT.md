@@ -68,26 +68,19 @@ The hosted preview remains synthetic-only by default. Its optional recorded exce
 **Publication is not yet authorized or deployed.** A locally generated draft is not consent to expose Qloo-derived data. This historical excerpt does not qualify live Qloo integration, independent verification, dependent decisions, or release authority.
 
 
-## Hosted Qloo rank inspection — operator controlled and OFF by default
+## Hosted OFC agent decision run
 
-The public Studio supports one fixed-pool server-side Qloo rank observation, but only the operator can authorize spending the request. Other visitors can view the **redacted rank-only result** after it has been stored. This is not a full six-decision tour qualification, independent provider attestation, or permission to execute.
+The hosted provider mode now evaluates a **frozen six-decision agent proposal** rather than showing a standalone Qloo rank. The server matches the proposal's artist ID, selected brand and ordered 2–5 candidate pool against the Qloo configuration before allowing any provider request.
 
-The feature stays **OFF by default**, even if a Qloo key is present. Operator configuration requires all of:
+On the one explicitly operator-authorized Qloo observation, the existing decision evaluator reviews the response, commits at most one allowlisted brand change into the same durable SQLite database, invalidates affected dependents and produces a revision-bound `REVIEW_REQUIRED` result. The approved Studio displays the redacted six-decision before/after result, its same-baseline Qloo OFF/ON comparison and blockers. Five unsupported tour decisions remain unverified; no release or external action is authorized.
 
-- `OFC_HOSTED_QLOO_MODE=ONE_REQUEST_EXPLICITLY_APPROVED`
-- `OFC_HOSTED_QLOO_ARTIST_ID`, `OFC_HOSTED_QLOO_BRAND_IDS` (fixed 2–5 IDs), `OFC_HOSTED_QLOO_SELECTED_ID` (one of those brands)
-- `QLOO_API_KEY` (server-side provider secret)
-- `OFC_HOSTED_OPERATOR_TOKEN` (distinct, random, 32–256-character access secret for the person authorized to spend provider quota)
-- `OFC_HOSTED_QLOO_LEDGER_PATH` (absolute SQLite file path in an already-existing, private mode-0700 directory on a genuinely **persistent shared volume**)
+No public browser token prompt is used. Browser visitors can **only read** the stored redacted run. The provider spend endpoint remains restricted to a separate server-side operator credential and explicit consent. Qloo credentials, candidate entity IDs and raw response content are never included in the public result.
 
-Provider key and operator token must never be uploaded, checked into GitHub, copied into public frontend code, or included in a demonstration recording. The operator token can be entered into the local prompt on the existing Studio page for an explicitly confirmed spend. It remains transient browser input and is only transmitted to the same-origin backend. Ordinary visitors never need this token to inspect a stored, redacted observation.
+In addition to the existing gated Qloo configuration, an enabled deployment must set:
 
-One SQLite row records an irreversible reservation **before** Qloo network traffic begins. Across processes that use the same SQLite database on one compatible filesystem, the reservation is atomic. Success stores only the sanitized rank result. Timeout, crash or unknown network outcomes leave the attempt consumed: process restarts never automatically retry or refund it. The SQLite file and its parent must be owned by the service user; the ledger cannot be relocated to a new path as a mechanism to claim a spending cap.
+- `OFC_HOSTED_AGENT_PROPOSAL_PATH` — an existing absolute path to a private, service-owned mode-0600 six-decision `AgentProposal` JSON file. It must be readable on startup and must match the configured Qloo artist, selected candidate, fixed pool and `external_action=false` constraint.
 
-**Operational limitation:** SQLite locks on one persistent shared volume are not distributed consensus or a Qloo billing cap. Separate deployments, ephemeral container volumes, database resets, concurrent replicas without a common filesystem, or new approval configurations can bypass the single-ledger scope. A hosting plan without durable storage **must not enable live mode**. Qualify the provider's actual event quota/billing limits and shared production state before authorizing any new real request.
+The file belongs on a private filesystem outside the public repository and Docker build context. The persistent SQLite ledger contains the frozen plan and durable repair journal as well as the already existing provider-attempt reservation. Restarting with another frozen baseline cannot silently reuse the prior scope. A successful provider observation persists only a sanitized rank summary and decision projection, not the raw Qloo payload.
 
-A public `GET /api/qloo/result` returns only rank position and explicitly blocked decision status after the operator has produced a result. It cannot spend provider quota. Refresh, health checks, ordinary browsing, synthetic scenarios and unauthenticated `POST /api/qloo/live-rank` make zero provider calls. The default hosted app remains synthetic-only; the recorded historical excerpt remains a separate mutually exclusive mode.
+**Limits:** A single live rank supports only the brand-partner decision. The remaining five decisions cannot be granted PASS from it. Provider-origin assurance and a distinct qualified current-revision recheck are still absent; the safe result is `REVIEW_REQUIRED`. A persisted redacted observation is a bounded inspectable product run, not an interactive unlimited-access provider service or a provider signature. No extra Qloo request, public deployment, or provider-derived-content publication is approved by shipping this code.
 
-**Current authorization:** No additional real Qloo requests are approved. Leave the live environment variables unset; do not deploy the new mode or supply a real token/key without a separate operator decision.
-
-**Remaining product scope:** supported non-brand Qloo decisions, real multi-decision tour evidence, independent verification, downstream rechecks, policy-qualified handoff, hosted end-to-end qualification and submission are still open. A rank-only observation is not a verified tour.
