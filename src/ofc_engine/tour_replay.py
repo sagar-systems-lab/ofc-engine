@@ -31,6 +31,9 @@ def build_tour_proposal(
     if len(original.decisions) != 1:
         raise TourReplayRejected("EXPECTED_SINGLE_BRAND_PROPOSAL")
     brand = original.decisions[0]
+    declared_artist = original.intent.taste_context.get("artist_id")
+    if declared_artist is not None and declared_artist != artist_id:
+        raise TourReplayRejected("ORIGINAL_ARTIST_SCOPE_MISMATCH")
     if (
         brand.decision_id != "brand" or brand.domain not in ("brand", "partner")
         or brand.locality_ref is not None or brand.depends_on
