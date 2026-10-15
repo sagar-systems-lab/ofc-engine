@@ -162,6 +162,22 @@
           "One observed Qloo rank request. This is not a verified full-tour plan.";
         proof.append(label, comparison, safety, evidence);
         proof.hidden = false;
+        const disclaimer = document.querySelector("#view-plan > .intro p");
+        if (disclaimer) disclaimer.textContent =
+          "One operator-authorized Qloo rank observation is recorded for this " +
+          "tour. Independent verification and action handoff remain blocked.";
+        const step = document.querySelector(".state-strip .state-item:nth-child(2) small");
+        if (step) step.textContent = "RANK OBSERVED";
+        const boundary = document.querySelector("#view-plan .boundary-panel");
+        if (boundary) {
+          const heading = boundary.querySelector("strong");
+          const description = boundary.querySelector("p");
+          if (heading) heading.textContent = "Rank observed · verification pending";
+          if (description) description.textContent =
+            "Qloo supplied one scoped rank observation. Unsupported decisions, " +
+            "dependent rechecks and plan release remain blocked. " +
+            "No external action has occurred.";
+        }
       }
     } catch {
       // The original plan editor remains usable without session storage.
