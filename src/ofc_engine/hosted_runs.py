@@ -21,8 +21,14 @@ class HostedRunRegistry:
 
     def __init__(self, store: PostgresRevisionStore):
         self.store = store
-        with store._connect() as db:
-            db.execute("select id from ofc_private.browser_budget where id=1")
+        if not self.ready():
+            raise RuntimeError("browser quota configuration missing")
+
+    def ready(self) -> bool:
+        with self.store._connect() as db:
+            return db.execute(
+                "select id from ofc_private.browser_budget where id=1"
+            ).fetchone() == (1,)
 
     def create(self, submitted: dict) -> dict:
         proposal = AgentProposal.model_validate_json(
