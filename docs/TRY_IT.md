@@ -58,3 +58,11 @@ python -m ofc_engine.tour_replay \\
 Open only `http://127.0.0.1:18080/#provider` in the approved white studio. The run and proposal remain in a mode-0700 private directory outside the repository. Close the server with Ctrl+C. If another process occupies 18080, stop it before starting this command. The projection redacts real Qloo entity IDs and private captures. It never alters the already-qualified original SQLite journal.
 
 **Historical replay is not a fresh live session.** If the two saved captures fall outside the same evidence-age window, the engine may show the original reference as stale and refuse to assert a recorded rank recheck PASS. That does not erase the real observation; it prevents misleading freshness or release claims. No provider-authenticated verification, venue qualification, dependent clearance, or external action is authorized.
+
+### Optional hosted historical excerpt (explicit approval only)
+
+When private replay produces `public-excerpt-draft.json`, the file contains **only the constrained, redacted decision projection** and a corruption-detection SHA-256 checksum. The checksum is **not a Qloo signature or provider attestation**. Do not put this file or the original captures in the repository. Review the draft and the provider's redistribution rules before deciding whether to publish it.
+
+The hosted preview remains synthetic-only by default. Its optional recorded excerpt mode requires both `OFC_PUBLISH_RECORDED_PROOF=APPROVED` and an operator-supplied, base64-encoded validated draft under `OFC_PUBLIC_RECORDED_PACK_B64` at deployment. No provider request is issued by either the hosted preview or this feature. When approved and present, the existing white Studio displays this historical recorded evidence in its Provider section, while fixture scenarios remain labeled synthetic. There is no upload endpoint.
+
+**Publication is not yet authorized or deployed.** A locally generated draft is not consent to expose Qloo-derived data. This historical excerpt does not qualify live Qloo integration, independent verification, dependent decisions, or release authority.
