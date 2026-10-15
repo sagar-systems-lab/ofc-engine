@@ -38,6 +38,19 @@ class HostedAttemptLedger:
         self.path = path
         self.scope = scope
         with self._connect() as db:
+            db.execute("""CREATE TABLE IF NOT EXISTS provider_scope (
+                id INTEGER PRIMARY KEY CHECK(id=1),
+                scope TEXT NOT NULL
+            )""")
+            db.execute(
+                "INSERT OR IGNORE INTO provider_scope(id,scope) VALUES(1,?)",
+                (scope,),
+            )
+            saved_scope = db.execute(
+                "SELECT scope FROM provider_scope WHERE id=1"
+            ).fetchone()
+            if saved_scope is None or saved_scope[0] != scope:
+                raise ValueError("ledger belongs to another frozen Qloo scope")
             db.execute("""CREATE TABLE IF NOT EXISTS provider_attempt (
                 id INTEGER PRIMARY KEY CHECK(id=1),
                 scope TEXT NOT NULL,
