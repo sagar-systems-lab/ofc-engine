@@ -1,15 +1,23 @@
 (() => {
   "use strict";
 
-  const original = document.getElementById("load-example");
+  const intro = document.querySelector("#view-plan > .intro");
   const panel = document.getElementById("preflight-panel");
-  if (!original || !panel) return;
+  if (!intro || !panel) return;
 
+  const actions = document.createElement("div");
+  actions.className = "editor-actions";
   const start = document.createElement("button");
+  start.id = "start-hosted-tour";
   start.type = "button";
-  start.className = "side-secondary";
-  start.textContent = "Start six-decision tour review";
-  original.insertAdjacentElement("afterend", start);
+  start.className = "primary";
+  start.textContent = "Start six-decision tour review →";
+  const status = document.createElement("p");
+  status.className = "small-note";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  actions.append(start, status);
+  intro.insertAdjacentElement("afterend", actions);
 
   start.addEventListener("click", async () => {
     if (start.disabled) return;
@@ -66,12 +74,12 @@
       location.hash = "#plan";
       panel.scrollIntoView({block: "nearest", behavior: "auto"});
       start.textContent = "Tour saved · review required";
+      status.textContent = "Six decisions saved. Provider evidence and handoff remain blocked.";
     } catch {
       start.disabled = false;
       start.textContent = "Retry six-decision tour review";
-      const notice = document.getElementById("editor-message");
-      if (notice) notice.textContent =
-        "The server could not save this tour. No provider request or action occurred.";
+      status.textContent =
+        "Tour save unavailable. No provider request or external action occurred.";
     }
   });
 })();
