@@ -198,3 +198,14 @@ def test_mismatched_source_proposal_is_rejected_before_database_creation(
     paths[0].write_text(invalid.model_dump_json())
     with pytest.raises(TourReplayRejected, match="ORIGINAL_BRAND_SCOPE_MISMATCH"):
         prepare(paths)
+
+
+def test_original_declared_artist_cannot_be_rebound_in_tour_replay():
+    p = proposal()
+    p = p.model_copy(update={"intent": p.intent.model_copy(update={
+        "taste_context": {"artist_id": "different-artist"},
+    })})
+    with pytest.raises(TourReplayRejected, match="ORIGINAL_ARTIST_SCOPE_MISMATCH"):
+        build_tour_proposal(
+            p, artist_id=ARTIST, brand_ids=BRANDS, run_id="scope-001"
+        )
