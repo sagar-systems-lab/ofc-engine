@@ -142,7 +142,7 @@ def test_connected_session_exposes_authenticated_review_and_existing_proof(
         assert code == 200
         assert b'<script defer src="/local-run.js"></script>' in page
         frozen = package_files("ofc_engine").joinpath("web", "studio.html").read_bytes()
-        assert page.replace(b'<script defer src="/local-run.js"></script>\\n', b"") == frozen
+        assert page.replace(b'<script defer src="/local-run.js"></script>\n', b"") == frozen
         assert b"Decision Workspace" in page
         status, local_js, _ = request(proof + "/local-run.js")
         assert status == 200 and b"/api/local-run" in local_js
