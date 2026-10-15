@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 from .webdemo import DemoHandler, SCENARIOS, demo_snapshot
 from .public_recorded import read_public_recorded_excerpt
 from .hosted_live import HostedLiveReview, configured_live_review
+from .hosted_preflight import preflight
 
 _MAX_TARGET_LENGTH = 512
 _MAX_CONNECTIONS = 16
@@ -56,11 +57,30 @@ class HostedFixtureHandler(DemoHandler):
     server_version = "OFCPreview"
     sys_version = ""
 
+    def _studio_page(self, extra_script: str | None = None) -> None:
+        page = files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+        marker = b"</head>"
+        if page.count(marker) != 1:
+            self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
+            return
+        names = ["/hosted-preflight.js"]
+        if extra_script:
+            names.append(extra_script)
+        scripts = "".join(
+            f'<script defer src="{name}"></script>\\n' for name in names
+        ).encode("utf-8")
+        self._send(200, page.replace(marker, scripts + marker, 1),
+                   "text/html; charset=utf-8")
+
     def do_GET(self) -> None:
         if len(self.path) > _MAX_TARGET_LENGTH:
             self._send(414, b'{"error":"URI_TOO_LONG"}', "application/json")
             return
         parts = urlsplit(self.path)
+        if parts.path == "/hosted-preflight.js" and not parts.query:
+            script = files("ofc_engine").joinpath("web", "hosted-preflight.js").read_bytes()
+            self._send(200, script, "text/javascript; charset=utf-8")
+            return
         if parts.path in ("/healthz", "/readyz"):
             if parts.query:
                 self._send(400, b'{"error":"INVALID_QUERY"}', "application/json")
@@ -100,13 +120,7 @@ class HostedFixtureHandler(DemoHandler):
                 self._send(200, script, "text/javascript; charset=utf-8")
                 return
             if parts.path == "/" and not parts.query:
-                page = files("ofc_engine").joinpath("web", "studio.html").read_bytes()
-                marker = b"</head>"
-                if page.count(marker) != 1:
-                    self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
-                    return
-                page = page.replace(marker, b'<script defer src="/hosted-live.js"></script>\n</head>', 1)
-                self._send(200, page, "text/html; charset=utf-8")
+                self._studio_page("/hosted-live.js")
                 return
         if self.server.public_excerpt_body is not None:
             if parts.path == "/api/local-run" and not parts.query:
@@ -117,16 +131,11 @@ class HostedFixtureHandler(DemoHandler):
                 self._send(200, script, "text/javascript; charset=utf-8")
                 return
             if parts.path == "/" and not parts.query:
-                page = files("ofc_engine").joinpath("web", "studio.html").read_bytes()
-                marker = b"</head>"
-                if page.count(marker) != 1:
-                    self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
-                    return
-                page = page.replace(
-                    marker, b'<script defer src="/local-run.js"></script>\n</head>', 1
-                )
-                self._send(200, page, "text/html; charset=utf-8")
+                self._studio_page("/local-run.js")
                 return
+        if parts.path == "/" and not parts.query:
+            self._studio_page()
+            return
         # Keep the static allowlist inherited from the local viewer.
         super().do_GET()
 
@@ -138,6 +147,35 @@ class HostedFixtureHandler(DemoHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        if self.path == "/api/preflight":
+            host = self.headers.get("Host", "")
+            expected_origin = (
+                "http://" + host if host.startswith(("127.0.0.1:", "localhost:"))
+                else "https://" + host
+            )
+            if (
+                not host or self.headers.get("Origin", "") != expected_origin
+                or self.headers.get("Sec-Fetch-Site") not in (None, "same-origin")
+                or self.headers.get("Content-Type") != "application/json"
+            ):
+                self._send(403, b'{"error":"ORIGIN_REJECTED"}', "application/json")
+                return
+            length = self.headers.get("Content-Length", "")
+            if (
+                not length.isascii() or not length.isdecimal()
+                or not 1 <= int(length) <= 96 * 1024
+            ):
+                self._send(400, b'{"error":"INVALID_REQUEST"}', "application/json")
+                return
+            try:
+                content = json.loads(self.rfile.read(int(length)))
+                outcome = preflight(content)
+            except (ValueError, TypeError, UnicodeError, OverflowError):
+                self._send(422, b'{"error":"INVALID_PROPOSAL","release_authorized":false}',
+                           "application/json")
+                return
+            self._send(200, _encoded(outcome), "application/json")
+            return
         if self.path != "/api/qloo/live-rank" or self.server.hosted_live is None:
             self._send(405, b'{"error":"READ_ONLY"}', "application/json")
             return
