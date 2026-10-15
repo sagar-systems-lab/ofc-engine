@@ -116,6 +116,37 @@ class HostedFixtureHandler(DemoHandler):
                 result = self.server.run_registry.review(
                     match.group(1), self.headers["Authorization"][7:]
                 )
+                live = self.server.hosted_live
+                if live is not None and live.bound_run_id == result["run_id"]:
+                    status, record = live.public_result()
+                    if status == 200 and record.get("agent_run"):
+                        run = record["agent_run"]
+                        proof = run.get("provenance", {})
+                        if (
+                            run.get("verification_status") != "REVIEW_REQUIRED"
+                            or run.get("release_authorized") is not False
+                            or run.get("external_action_executed") is not False
+                            or run.get("provider_authenticated") is not False
+                            or run.get("independent_recheck_completed") is not False
+                            or run.get("source_mode") != "LIVE_HTTP_UNVERIFIED"
+                            or run.get("real_qloo_requests") != 1
+                            or run.get("revision") != result["revision"]
+                            or proof.get("baseline_digest") != result["baseline_digest"]
+                            or proof.get("current_plan_digest") != result["plan_digest"]
+                            or proof.get("journal_head") != result["journal_head"]
+                            or not isinstance(run.get("decisions"), list)
+                            or len(run["decisions"]) != len(result["decisions"])
+                            or [d.get("decision_id") for d in run["decisions"]]
+                            != [d["decision_id"] for d in result["decisions"]]
+                        ):
+                            raise ValueError("stored provider review does not match this run")
+                        result.update({
+                            "source_mode": "LIVE_HTTP_UNVERIFIED",
+                            "real_qloo_requests": 1,
+                            "decisions": run["decisions"],
+                            "pending_rechecks": run["pending_rechecks"],
+                            "agent_run": run,
+                        })
             except KeyError:
                 self._send(404, b'{"error":"RUN_UNAVAILABLE"}', "application/json")
                 return
