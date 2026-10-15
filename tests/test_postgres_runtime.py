@@ -187,3 +187,99 @@ def test_full_hosted_provider_to_postgres_revision_and_readonly_review(pg_url):
     assert transport.calls == 1
     for secret in ("fake-ci-only", "artist-ci", "brand-a", "brand-b"):
         assert secret not in json.dumps(live.public_result()[1])
+
+
+def test_hosted_browser_run_save_and_reload_with_private_ticket(pg_url):
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from ofc_engine.hosted_preview import HostedFixtureServer
+    from ofc_engine.hosted_runs import HostedRunRegistry
+
+    registry = HostedRunRegistry(
+        PostgresRevisionStore(pg_url, insecure_local_test=True)
+    )
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute("update ofc_private.browser_budget set writes=0 where id=1")
+    registry.max_daily_runs = 1
+    with HostedFixtureServer(
+        ("127.0.0.1", 0), run_registry=registry
+    ) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = "http://127.0.0.1:" + str(server.server_port)
+
+        def submit(*, origin=None, method="POST"):
+            payload = canonical_proposal().model_dump(mode="json")
+            request = Request(
+                base + "/api/runs",
+                method=method,
+                headers={
+                    "Origin": origin or base,
+                    "Content-Type": "application/json",
+                },
+                data=json.dumps(payload).encode(),
+            )
+            try:
+                with urlopen(request, timeout=5) as response:
+                    return response.status, json.loads(response.read())
+            except HTTPError as error:
+                return error.code, json.loads(error.read())
+
+        try:
+            assert submit(origin="https://attacker.example")[0] == 403
+            assert submit(method="PUT")[0] == 405
+            status, receipt = submit()
+            assert status == 201
+            assert receipt["expires_in_hours"] == 24
+            assert receipt["run_id"].startswith("web-")
+            assert receipt["review"]["verification_status"] == "REVIEW_REQUIRED"
+            assert receipt["review"]["release_authorized"] is False
+            assert len(receipt["review"]["decisions"]) == 6
+            assert all(v["verdict"] == "UNCERTAIN"
+                       for v in receipt["review"]["decisions"])
+            review_path = "/api/runs/" + receipt["run_id"] + "/review"
+            with pytest.raises(HTTPError) as error:
+                urlopen(base + review_path, timeout=5)
+            assert error.value.code == 404
+            with urlopen(Request(
+                base + review_path,
+                headers={"Authorization": "Bearer " + receipt["ticket"]},
+            ), timeout=5) as response:
+                result = json.loads(response.read())
+            assert result["journal_head"] == registry.store.audit_history(
+                receipt["run_id"]
+            )[-1].event_hash
+            assert result["plan_digest"] == receipt["review"]["plan_digest"]
+            assert result["release_authorized"] is False
+            assert result["real_qloo_requests"] == 0
+            assert submit()[0] == 429
+            with urlopen(base + "/api/runs/status", timeout=5) as response:
+                assert json.loads(response.read())["enabled"] is True
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+
+def test_browser_run_quota_and_expiry_are_fail_closed(pg_url):
+    from ofc_engine.hosted_runs import HostedRunRegistry, RunCapacityReached
+    registry = HostedRunRegistry(
+        PostgresRevisionStore(pg_url, insecure_local_test=True)
+    )
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute("update ofc_private.browser_budget set writes=0 where id=1")
+    registry.max_daily_runs = 1
+    saved = registry.create(canonical_proposal().model_dump(mode="json"))
+    assert registry.review(saved["run_id"], saved["ticket"]) == saved["review"]
+    with pytest.raises(KeyError):
+        registry.review(saved["run_id"], "x" * 48)
+    with pytest.raises(RunCapacityReached):
+        registry.create(canonical_proposal().model_dump(mode="json"))
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            "update ofc_private.browser_runs set expires_at=now()-interval '1 second' "
+            "where plan_id=%s", (saved["run_id"],)
+        )
+    with pytest.raises(KeyError):
+        registry.review(saved["run_id"], saved["ticket"])
