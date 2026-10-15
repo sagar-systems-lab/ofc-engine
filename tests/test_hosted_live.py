@@ -169,7 +169,7 @@ def test_hosted_http_requires_browser_consent_and_never_leaks_key():
             assert b'/hosted-live.js' in page
             status, script = http(base, "/hosted-live.js")
             assert status == 200
-            assert b"SPEND_ONE_HOSTED_QLOO_REQUEST" in script
+            assert b"SPEND_ONE_HOSTED_QLOO_REQUEST" not in script
             assert b"window.prompt" not in script
             assert b"agent_run" in script
             status, state = http(base, "/api/qloo/status")
