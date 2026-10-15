@@ -29,9 +29,10 @@ def request(base, path, proposal=None, *, origin=None, content_type="application
 def test_server_matches_canonical_fixture_without_claiming_qloo_evidence():
     original = canonical_proposal().model_dump(mode="json")
     result = preflight(original)
-    assert result["status"] == "SYNTHETIC_FIXTURE_AVAILABLE"
-    assert result["source_mode"] == "SYNTHETIC"
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert result["source_mode"] == "EVIDENCE_UNAVAILABLE"
     assert result["synthetic_fixture_available"] is True
+    assert result["same_run_as_fixture"] is True
     assert result["decision_count"] == 6
     assert result["revision"] == 0
     assert len(result["plan_digest"]) == 64
@@ -50,6 +51,7 @@ def test_server_matches_canonical_fixture_without_claiming_qloo_evidence():
     original["intent"]["client_request_id"] = "browser-review-new-request"
     renamed = preflight(original)
     assert renamed["synthetic_fixture_available"] is True
+    assert renamed["same_run_as_fixture"] is False
     assert renamed["baseline_digest"] != result["baseline_digest"]
 
 
