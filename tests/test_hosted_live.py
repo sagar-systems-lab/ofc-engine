@@ -170,8 +170,8 @@ def test_hosted_http_requires_browser_consent_and_never_leaks_key():
             status, script = http(base, "/hosted-live.js")
             assert status == 200
             assert b"SPEND_ONE_HOSTED_QLOO_REQUEST" in script
-            assert b"window.confirm" in script
-            assert b"window.prompt" in script
+            assert b"window.prompt" not in script
+            assert b"agent_run" in script
             status, state = http(base, "/api/qloo/status")
             assert status == 200
             assert json.loads(state)["requests_remaining_this_process"] == 1
@@ -342,6 +342,34 @@ def test_hosted_configuration_needs_explicit_persistent_ledger_and_operator_secr
     with pytest.raises(ValueError):
         configured_live_review(environment)
     environment["OFC_HOSTED_QLOO_LEDGER_PATH"] = str(folder / "reservation.sqlite3")
+    from ofc_engine.contracts import ActionIntent, Decision
+    from ofc_engine.intake import AgentProposal
+    proposal_file = folder / "proposal.json"
+    proposal = AgentProposal(
+        intent=ActionIntent(
+            run_id="fixed-agent-plan-001", client_request_id="fixed-agent-proposal-001",
+            objective="Review tour decisions against artist taste",
+            constraints={"external_action": False},
+            taste_context={"artist_id": ARTIST},
+        ),
+        decisions=(
+            Decision(decision_id="brand", domain="partner", candidate_id=POOL[0],
+                     candidate_pool=POOL, mutable_fields=("candidate_id",)),
+            Decision(decision_id="opener", domain="artist", candidate_id="opener-x",
+                     candidate_pool=("opener-x",)),
+            Decision(decision_id="chicago", domain="venue", candidate_id="venue-x",
+                     candidate_pool=("venue-x",), locality_ref="Chicago"),
+            Decision(decision_id="austin", domain="venue", candidate_id="venue-y",
+                     candidate_pool=("venue-y",), locality_ref="Austin"),
+            Decision(decision_id="seattle", domain="venue", candidate_id="venue-z",
+                     candidate_pool=("venue-z",), locality_ref="Seattle"),
+            Decision(decision_id="afterparty", domain="experience", candidate_id="event-x",
+                     candidate_pool=("event-x",), depends_on=("brand",)),
+        ),
+    )
+    proposal_file.write_text(proposal.model_dump_json())
+    proposal_file.chmod(0o600)
+    environment["OFC_HOSTED_AGENT_PROPOSAL_PATH"] = str(proposal_file)
     enabled = configured_live_review(environment)
     assert enabled is not None
     assert enabled.state()["status"] == "READY"
