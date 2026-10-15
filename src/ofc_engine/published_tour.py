@@ -47,10 +47,20 @@ class PublishedTourReview:
         if not isinstance(run, dict):
             raise ValueError("agent evidence missing")
         proof = run.get("provenance", {})
+        if not isinstance(proof, dict):
+            raise ValueError("invalid evidence provenance")
         observation = proof.get("qloo_rank_observation", {})
         comparison = run.get("off_on", {})
         handoff = run.get("handoff", {})
         decisions = run.get("decisions")
+        if any(not isinstance(value, dict) for value in (
+            observation, comparison, handoff,
+        )):
+            raise ValueError("invalid evidence boundary")
+        if not isinstance(decisions, list) or any(
+            not isinstance(value, dict) for value in decisions
+        ):
+            raise ValueError("invalid decision reviews")
         if (
             current.revision != 1 or len(history) != 2
             or len(baseline.decisions) != 6
@@ -79,6 +89,7 @@ class PublishedTourReview:
             or observation.get("provider_attestation") != "NOT_ESTABLISHED"
             or not isinstance(observation.get("capture_digest"), str)
             or len(observation["capture_digest"]) != 64
+            or any(c not in "0123456789abcdef" for c in observation["capture_digest"])
             or comparison.get("same_baseline") is not True
             or comparison.get("real_causal_proof") is not False
             or comparison.get("off_verdicts", {}).get("brand") != "UNCERTAIN"
