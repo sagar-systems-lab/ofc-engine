@@ -216,7 +216,6 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
     artist = environment.get("OFC_HOSTED_QLOO_ARTIST_ID", "")
     brands = tuple(environment.get("OFC_HOSTED_QLOO_BRAND_IDS", "").split(","))
     selected = environment.get("OFC_HOSTED_QLOO_SELECTED_ID", "")
-    spec = brand_affinity_probe(artist, brands)
     private_path = environment.get("OFC_HOSTED_AGENT_PROPOSAL_PATH", "")
     encoded = environment.get("OFC_HOSTED_AGENT_PROPOSAL_B64", "")
     browser_run = environment.get("OFC_HOSTED_BROWSER_RUN_ID", "")
@@ -227,6 +226,20 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
             raise ValueError("browser-bound Qloo requires private Postgres")
         registry = HostedRunRegistry(PostgresRevisionStore(postgres_url))
         proposal = registry.operator_proposal(browser_run)
+        brand = next(
+            (item for item in proposal.decisions if item.decision_id == "brand"), None
+        )
+        trusted_artist = proposal.intent.taste_context.get("artist_id")
+        if brand is None or not isinstance(trusted_artist, str):
+            raise ValueError("saved browser proposal has no Qloo scope")
+        trusted_brands = brand.candidate_pool
+        trusted_selected = brand.candidate_id
+        if any((artist, environment.get("OFC_HOSTED_QLOO_BRAND_IDS", ""), selected)):
+            if (artist, brands, selected) != (
+                trusted_artist, trusted_brands, trusted_selected
+            ):
+                raise ValueError("configured Qloo scope conflicts with saved browser run")
+        artist, brands, selected = trusted_artist, trusted_brands, trusted_selected
         proposal = validate_hosted_proposal(
             proposal.model_dump_json().encode("utf-8"),
             artist_id=artist, brand_ids=brands,
@@ -251,6 +264,7 @@ def configured_live_review(environment: Mapping[str, str]) -> HostedLiveReview |
             path, artist_id=artist, brand_ids=brands,
             selected_brand_id=selected,
         )
+    spec = brand_affinity_probe(artist, brands)
     baseline, _ = freeze_proposal(proposal)
     scope = sha256((
         spec.fingerprint + ":" + selected + ":" + plan_digest(baseline)
