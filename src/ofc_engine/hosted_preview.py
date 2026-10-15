@@ -67,7 +67,7 @@ class HostedFixtureHandler(DemoHandler):
         if extra_script:
             names.append(extra_script)
         scripts = "".join(
-            f'<script defer src="{name}"></script>\\n' for name in names
+            f'<script defer src="{name}"></script>\n' for name in names
         ).encode("utf-8")
         self._send(200, page.replace(marker, scripts + marker, 1),
                    "text/html; charset=utf-8")
