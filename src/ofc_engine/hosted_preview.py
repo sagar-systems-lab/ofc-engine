@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
+from importlib.resources import files
 from http.server import ThreadingHTTPServer
 import json
 import os
@@ -10,6 +13,7 @@ from threading import BoundedSemaphore
 from urllib.parse import parse_qs, urlsplit
 
 from .webdemo import DemoHandler, SCENARIOS, demo_snapshot
+from .public_recorded import read_public_recorded_excerpt
 
 _MAX_TARGET_LENGTH = 512
 _MAX_CONNECTIONS = 16
@@ -72,8 +76,26 @@ class HostedFixtureHandler(DemoHandler):
                 return
             self._send(200, body, "application/json")
             return
-        # Keep the static allowlist inherited from the local viewer. Everything
-        # else, including saved-run routes, remains inaccessible.
+        if self.server.public_excerpt_body is not None:
+            if parts.path == "/api/local-run" and not parts.query:
+                self._send(200, self.server.public_excerpt_body, "application/json")
+                return
+            if parts.path == "/local-run.js" and not parts.query:
+                script = files("ofc_engine").joinpath("web", "local-run.js").read_bytes()
+                self._send(200, script, "text/javascript; charset=utf-8")
+                return
+            if parts.path == "/" and not parts.query:
+                page = files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+                marker = b"</head>"
+                if page.count(marker) != 1:
+                    self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
+                    return
+                page = page.replace(
+                    marker, b'<script defer src="/local-run.js"></script>\n</head>', 1
+                )
+                self._send(200, page, "text/html; charset=utf-8")
+                return
+        # Keep the static allowlist inherited from the local viewer.
         super().do_GET()
 
     def do_HEAD(self) -> None:
@@ -97,13 +119,20 @@ class HostedFixtureServer(ThreadingHTTPServer):
     block_on_close = False
     request_queue_size = 32
 
-    def __init__(self, address: tuple[str, int], *, build_sha: str = "unknown") -> None:
+    def __init__(
+        self, address: tuple[str, int], *, build_sha: str = "unknown",
+        public_recorded_document: dict | None = None,
+    ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
         if not isinstance(build_sha, str) or (
             build_sha != "unknown" and not _HEX_SHA.fullmatch(build_sha)
         ):
             raise ValueError("build SHA must be a lowercase hex revision or unknown")
+        self.public_excerpt_body = None
+        if public_recorded_document is not None:
+            payload = read_public_recorded_excerpt(public_recorded_document)
+            self.public_excerpt_body = _encoded(payload)
         self.fixtures = {scenario: _verified_fixture(scenario) for scenario in SCENARIOS}
         self.health_body = _encoded({"status": "ok", "mode": "SYNTHETIC", "build_sha": build_sha})
         self._slots = BoundedSemaphore(_MAX_CONNECTIONS)
@@ -146,7 +175,22 @@ def main(argv: list[str] | None = None) -> None:
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
     sha = _source_revision(os.environ)
-    with HostedFixtureServer((args.bind, args.port), build_sha=sha) as server:
+    approved = os.environ.get("OFC_PUBLISH_RECORDED_PROOF", "")
+    packed = os.environ.get("OFC_PUBLIC_RECORDED_PACK_B64", "")
+    document = None
+    if packed or approved:
+        if approved != "APPROVED" or not 0 < len(packed) <= 32000:
+            parser.error("recorded proof publication requires explicit approval and a bounded pack")
+        try:
+            decoded = base64.b64decode(packed, validate=True)
+            document = json.loads(decoded)
+            read_public_recorded_excerpt(document)
+        except (binascii.Error, UnicodeError, ValueError, TypeError):
+            parser.error("invalid recorded proof pack")
+    with HostedFixtureServer(
+        (args.bind, args.port), build_sha=sha,
+        public_recorded_document=document,
+    ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
 
