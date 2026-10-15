@@ -139,6 +139,7 @@ class HostedRunRegistry:
             "run_id": run_id,
             "revision": revision,
             "plan_digest": digest,
+            "baseline_digest": plan.baseline_digest,
             "journal_head": history[-1].event_hash,
             "source_mode": "EVIDENCE_UNAVAILABLE",
             "verification_status": "REVIEW_REQUIRED",
