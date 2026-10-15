@@ -14,6 +14,8 @@ from .agent_workspace import prepare_workspace
 from .contracts import Decision
 from .durable import SQLiteRevisionStore
 from .intake import AgentProposal, accept_proposal
+from .local_run_view import project_local_run
+from .public_recorded import seal_public_recorded_excerpt
 from .qloo import brand_affinity_probe
 from .qloo_affinity import normalize_affinity_capture
 from .qloo_agent_bridge import _read_private_json
@@ -171,6 +173,17 @@ def prepare_tour_replay(
         artist_id=artist_id, brand_ids=brand_ids, historical=True,
         age_hours=72, port=port,
     )
+    snapshot = workspace.server.evidence_session.snapshot_model(store, run_id)
+    excerpt = project_local_run(snapshot, operator_constructed_hypotheses=5)
+    try:
+        draft = seal_public_recorded_excerpt(excerpt)
+    except ValueError:
+        pass
+    else:
+        outfile = directory / "public-excerpt-draft.json"
+        file = os.open(outfile, flags, 0o600)
+        with os.fdopen(file, "w", encoding="utf-8") as output:
+            json.dump(draft, output, sort_keys=True, separators=(",", ":"))
     return workspace, directory
 
 
@@ -204,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
             "status": "HISTORICAL_TOUR_STUDIO_READY",
             "product_url": f"http://127.0.0.1:{workspace.server.server_port}/",
             "private_session_dir": str(directory),
+            "redacted_excerpt_reviewable": (directory / "public-excerpt-draft.json").exists(),
             "operator_constructed_unverified_decisions": 5,
             "historical_replay": True,
             "recorded_rank_recheck_pass": (
