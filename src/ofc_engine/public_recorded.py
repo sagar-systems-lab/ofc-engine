@@ -49,6 +49,7 @@ def validate_public_recorded_excerpt(payload: Any) -> None:
         or payload["independent_recheck_completed"] is not False
         or payload["release_authorized"] is not False
         or payload["external_action_executed"] is not False
+        or type(payload["real_qloo_requests"]) is not int
         or payload["real_qloo_requests"] != 0
     ):
         raise ValueError("UNQUALIFIED_PUBLIC_EXCERPT")
@@ -61,6 +62,7 @@ def validate_public_recorded_excerpt(payload: Any) -> None:
         or not _codes(payload["blockers"])
         or "HISTORICAL_REPLAY_ONLY" not in payload["blockers"]
         or "PENDING_RECHECKS" not in payload["blockers"]
+        or not isinstance(payload["decisions"], list)
         or len(payload["decisions"]) != 6
     ):
         raise ValueError("INVALID_EXCERPT_LINEAGE")
@@ -92,6 +94,8 @@ def validate_public_recorded_excerpt(payload: Any) -> None:
         comparison["same_baseline"] is not True
         or comparison["real_causal_proof"] is not False
         or comparison["changed_ids"] != ["brand"]
+        or not isinstance(comparison["off_verdicts"], dict)
+        or not isinstance(comparison["on_verdicts"], dict)
         or set(comparison["off_verdicts"]) != set(_IDS)
         or set(comparison["on_verdicts"]) != set(_IDS)
         or comparison["off_verdicts"]["brand"] != "UNCERTAIN"
