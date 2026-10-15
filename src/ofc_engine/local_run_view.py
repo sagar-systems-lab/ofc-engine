@@ -11,13 +11,15 @@ def project_local_run(
     if type(operator_constructed_hypotheses) is not int or not 0 <= operator_constructed_hypotheses <= 63:
         raise ValueError("invalid hypothesis count")
     if (
-        snapshot.source_mode != SourceMode.RECORDED_REDACTED
+        snapshot.source_mode not in (SourceMode.RECORDED_REDACTED, SourceMode.LIVE_HTTP_UNVERIFIED)
         or snapshot.release_state != "REVIEW_REQUIRED"
         or snapshot.release_authorized
         or snapshot.provider_authenticated
         or snapshot.independent_recheck_completed
         or snapshot.external_action_executed
-        or snapshot.real_qloo_requests
+        or snapshot.real_qloo_requests not in (0, 1)
+        or (snapshot.source_mode == SourceMode.RECORDED_REDACTED and snapshot.real_qloo_requests)
+        or (snapshot.source_mode == SourceMode.LIVE_HTTP_UNVERIFIED and snapshot.real_qloo_requests != 1)
     ):
         raise ValueError("unqualified local run")
 
@@ -34,8 +36,9 @@ def project_local_run(
             "reason_codes": list(item.reason_codes),
         })
     return {
-        "status": "RECORDED_AGENT_REVIEW",
-        "source_mode": "RECORDED_REDACTED",
+        "status": ("HOSTED_AGENT_REVIEW" if snapshot.source_mode == SourceMode.LIVE_HTTP_UNVERIFIED
+                   else "RECORDED_AGENT_REVIEW"),
+        "source_mode": snapshot.source_mode.value,
         "historical_replay": snapshot.historical_replay,
         "revision": snapshot.plan_revision,
         "decision_count": len(decisions),
@@ -63,5 +66,5 @@ def project_local_run(
         "independent_recheck_completed": False,
         "release_authorized": False,
         "external_action_executed": False,
-        "real_qloo_requests": 0,
+        "real_qloo_requests": snapshot.real_qloo_requests,
     }
