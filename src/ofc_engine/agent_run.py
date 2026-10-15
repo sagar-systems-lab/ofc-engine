@@ -4,8 +4,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Mapping
 
-from pydantic import Field
-
 from .contracts import (
     ReleaseArtifact, RepairPatch, SourceMode, StrictModel,
     VerificationResult, Verdict,
@@ -18,7 +16,7 @@ from .qloo_decision_gate import _sources
 from .qloo_flow import RecordedSource, review_recorded_plan
 from .qloo_review import RECORDED_RANK_POLICY
 from .revisions import (
-    PatchRejected, RevisionConflict, affected_dependents, apply_patch,
+    affected_dependents, apply_patch,
     digest_obj, plan_digest,
 )
 
@@ -147,7 +145,11 @@ def commit_rank_repair(
     as_of: datetime,
     max_evidence_age: timedelta,
 ) -> RunSnapshot:
-    if acknowledgement != _ACK or not request_id or len(request_id) > 128:
+    import re
+    if (
+        acknowledgement != _ACK or not isinstance(request_id, str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", request_id)
+    ):
         raise AgentEvidenceRejected("EXPLICIT_COMMIT_ACK_REQUIRED")
     baseline, plan, history, pending, changed = _stored(store, proposal, sources)
     review = review_recorded_plan(
@@ -210,7 +212,7 @@ def review_run(
     if as_of.utcoffset() is None or max_evidence_age <= timedelta(0):
         raise ValueError("invalid evidence clock")
     baseline, plan, history, pending, changed = _stored(store, proposal, sources)
-    if later_sources:
+    if later_sources is not None:
         _sources(baseline, later_sources)
     off = review_recorded_plan(
         baseline, sources, as_of=as_of, max_evidence_age=max_evidence_age,
@@ -222,7 +224,6 @@ def review_run(
     current = review_recorded_plan(
         plan, sources, as_of=as_of, max_evidence_age=max_evidence_age,
     )
-    first_verdicts = {v.decision_id: v for v in on.verdicts}
     current_verdicts = {v.decision_id: v for v in current.verdicts}
     status = False
     recheck_blocker = "RECHECK_NOT_SUPPLIED" if changed else "REPAIR_NOT_COMMITTED"
@@ -252,6 +253,10 @@ def review_run(
                     recheck_blocker = "RECHECK_NOT_DISTINCT"
                 elif captured_at > as_of or as_of - captured_at >= max_evidence_age:
                     recheck_blocker = "RECHECK_STALE_OR_FUTURE"
+                elif on.verdicts[
+                    next(i for i, v in enumerate(on.verdicts) if v.decision_id == target)
+                ].verdict != Verdict.REPAIR or current_verdicts[target].verdict != Verdict.PASS:
+                    recheck_blocker = "ORIGINAL_EVIDENCE_UNQUALIFIED"
                 elif ranked["ranking"][0]["entity_id"] != next(
                     d.candidate_id for d in plan.decisions if d.decision_id == target
                 ):
@@ -330,7 +335,8 @@ def review_run(
             evidence_on_verdicts={v.decision_id: v.verdict for v in on.verdicts},
             evidence_caused_change_ids=tuple(
                 v.decision_id for v in on.verdicts
-                if v.verdict == Verdict.REPAIR and v.evidence_refs
+                if v.decision_id in changed and v.verdict == Verdict.REPAIR
+                and v.evidence_refs
             ),
         ),
     )
