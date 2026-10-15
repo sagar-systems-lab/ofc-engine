@@ -112,8 +112,10 @@ def run_browser(origin: str) -> dict:
                     if page.locator("#export-proposal").is_disabled():
                         raise BrowserFailure("validated proposal cannot be exported")
                     page.locator("#check-preflight").click()
-                    if page.locator("#preflight-state").inner_text() != "SYNTHETIC FIXTURE READY":
-                        raise BrowserFailure("same canonical plan did not unlock synthetic fixture")
+                    page.wait_for_function(
+                        "() => document.querySelector('#preflight-state').textContent === 'SERVER VALIDATED · SYNTHETIC ONLY'",
+                        timeout=10000,
+                    )
                     if not page.locator("#open-fixture").is_visible():
                         raise BrowserFailure("canonical proof link unavailable")
                     page.locator("#objective").fill("Custom cultural decision proposal")
@@ -123,8 +125,10 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("stale result remained after edit")
                     page.locator("#validate").click()
                     page.locator("#check-preflight").click()
-                    if page.locator("#preflight-state").inner_text() != "USER REVIEW — NO EVIDENCE":
-                        raise BrowserFailure("custom proposal received synthetic verdict")
+                    page.wait_for_function(
+                        "() => document.querySelector('#preflight-state').textContent === 'SERVER VALIDATED · REVIEW REQUIRED'",
+                        timeout=10000,
+                    )
                     if not page.locator("#open-fixture").is_hidden():
                         raise BrowserFailure("custom proposal linked to unrelated fixture")
                     if page.locator("#preflight-decisions li").count() != 6:

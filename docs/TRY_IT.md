@@ -84,3 +84,14 @@ The file belongs on a private filesystem outside the public repository and Docke
 
 **Limits:** A single live rank supports only the brand-partner decision. The remaining five decisions cannot be granted PASS from it. Provider-origin assurance and a distinct qualified current-revision recheck are still absent; the safe result is `REVIEW_REQUIRED`. A persisted redacted observation is a bounded inspectable product run, not an interactive unlimited-access provider service or a provider signature. No extra Qloo request, public deployment, or provider-derived-content publication is approved by shipping this code.
 
+
+
+## Hosted proposal preflight (no provider request)
+
+The existing **Create a plan → Review plan** screen checks the submitted decisions against the same strict server contracts used by agent intake. The server freezes the submitted plan for an integrity digest and checks dependency structure without storing it, requesting Qloo or granting action authority. Any decision without independently scoped evidence remains `UNCERTAIN`; the result is `REVIEW_REQUIRED`.
+
+If the submitted choices match the canonical tour **template**, the separate synthetic proof can be opened. Template compatibility is **not** proof for the newly submitted run. This distinction remains visible even when a browser gives the proposal a new run identifier.
+
+`POST /api/preflight` is bounded to 96 KiB, validates same-origin browser requests, rejects malformed or cyclic dependencies, and never changes the provider attempt ledger. No new browser design was introduced; the existing frozen Studio is extended by an optional, separate script at serving time. The hosted Free instance needs no database for this deliberately read-only function.
+
+The private historical tour, separately authorized live Qloo run, and final full-plan verification each retain their own proof and trust requirements.
