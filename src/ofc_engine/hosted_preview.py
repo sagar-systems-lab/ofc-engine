@@ -129,9 +129,13 @@ class HostedFixtureHandler(DemoHandler):
             return
         host = self.headers.get("Host", "")
         origin = self.headers.get("Origin", "")
+        expected_origin = (
+            "http://" + host if host.startswith(("127.0.0.1:", "localhost:"))
+            else "https://" + host
+        )
         if (
             not host or
-            origin not in ("https://" + host, "http://" + host)
+            origin != expected_origin
             or self.headers.get("Sec-Fetch-Site") not in (
                 None, "same-origin"
             )
