@@ -108,32 +108,41 @@ def qualify(origin: str, expected_sha: str):
                     overflow = page.evaluate("""() => {
                         const width = innerWidth;
                         const documentWidth = document.documentElement.scrollWidth;
-                        const candidates = [...document.querySelectorAll('*')]
+                        const nodes = [...document.querySelectorAll('*')]
                           .filter(el => {
                             const style = getComputedStyle(el);
-                            if (style.display === 'none' || style.visibility === 'hidden')
-                              return false;
-                            const rect = el.getBoundingClientRect();
-                            return rect.width > 0 && rect.right > width + 1;
+                            return style.display !== 'none' &&
+                              style.visibility !== 'hidden';
                           })
                           .map(el => {
                             const rect = el.getBoundingClientRect();
+                            const style = getComputedStyle(el);
                             return {
                               tag: el.tagName.toLowerCase(),
                               id: el.id || null,
                               className: typeof el.className === 'string'
                                 ? el.className.slice(0, 110) : '',
-                              left: Math.round(rect.left),
-                              right: Math.round(rect.right),
+                              docRight: Math.round(rect.right + scrollX),
+                              docLeft: Math.round(rect.left + scrollX),
                               width: Math.round(rect.width),
-                              scrollWidth: el.scrollWidth
+                              scrollWidth: el.scrollWidth,
+                              clientWidth: el.clientWidth,
+                              overflowX: style.overflowX,
+                              whiteSpace: style.whiteSpace
                             };
                           });
-                        candidates.sort((a, b) => b.right - a.right);
+                        const candidates = nodes.filter(el =>
+                          el.docRight > width + 1 ||
+                          el.scrollWidth > el.clientWidth + 1
+                        );
+                        candidates.sort((a, b) =>
+                          Math.max(b.docRight, b.scrollWidth) -
+                          Math.max(a.docRight, a.scrollWidth));
                         return {
                           viewport: width, scrollWidth: documentWidth,
+                          scrollX, bodyScrollWidth: document.body.scrollWidth,
                           overflow: documentWidth > width + 1,
-                          offenders: candidates.slice(0, 12)
+                          offenders: candidates.slice(0, 20)
                         };
                     }""")
                     assert not overflow["overflow"], (
