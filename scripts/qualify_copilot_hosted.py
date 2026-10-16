@@ -97,8 +97,12 @@ def validate_saved_result(result: dict) -> None:
     evidence = off["qloo"]
     if evidence.get("source_mode") != "LIVE_HTTP_UNVERIFIED":
         raise QualificationFailure("GENUINE_QLOO_EVIDENCE_NOT_PRESENT")
-    if not evidence.get("observations") or not evidence.get("evidence_digest"):
+    observations = evidence.get("observations", [])
+    catalog = evidence.get("catalog_observations", [])
+    if not (observations or catalog) or not evidence.get("evidence_digest"):
         raise QualificationFailure("QLOO_SCOPE_PROVENANCE_MISSING")
+    if any(item.get("policy_qualified") is not False for item in catalog):
+        raise QualificationFailure("CATALOG_EVIDENCE_MISREPRESENTED_AS_VERIFIED")
 
 
 def main() -> None:

@@ -1362,6 +1362,7 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
             self.calls += 1
             prompt = json.loads(data)["contents"][0]["parts"][0]["text"]
             brand = "brand" in prompt.lower()
+            outside_catalog = "contract" in prompt.lower()
             decision = (
                 {
                     "decision_id": "brand", "domain": "brand",
@@ -1369,7 +1370,8 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
                     "candidate_names": ["Brand A", "Brand B"],
                     "mutable": True, "depends_on": [],
                 } if brand else {
-                    "decision_id": "venue", "domain": "venue",
+                    "decision_id": "venue",
+                    "domain": "contract" if outside_catalog else "venue",
                     "selected_name": "Venue A",
                     "candidate_names": ["Venue A", "Venue B"],
                     "mutable": False, "depends_on": [],
@@ -1427,18 +1429,26 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
     assert missing["release_authorized"] is False
     assert runtime.submit(**args) == missing
 
+    venue = runtime.submit(
+        session_id=visitor["session_id"], ticket=visitor["ticket"],
+        request_id="venue-needs-artist-456", prompt="Plan a venue",
+    )
+    assert venue["status"] == "CLARIFICATION_REQUIRED"
+    assert venue["reason_code"] == "ARTIST_NAME_REQUIRED"
+    assert venue["plan"]["choices"][0]["domain"] == "venue"
+    assert venue["qloo_requests_this_run"] == 0
     unsupported = runtime.submit(
         session_id=visitor["session_id"], ticket=visitor["ticket"],
-        request_id="unsupported-venue-456", prompt="Plan a venue",
+        request_id="unsupported-contract-789", prompt="Plan a contract",
     )
     assert unsupported["status"] == "CAPABILITY_UNAVAILABLE"
     assert unsupported["reason_code"] == "QLOO_DECISION_DOMAIN_UNQUALIFIED"
     assert unsupported["llm_requests_this_run"] == 1
     assert unsupported["qloo_search_requests"] == 0
     assert unsupported["qloo_rank_requests"] == 0
-    assert unsupported["plan"]["choices"][0]["domain"] == "venue"
+    assert unsupported["plan"]["choices"][0]["domain"] == "contract"
     assert unsupported["qloo_status"] == "NOT_QUERIED"
-    assert llm.calls == 2
+    assert llm.calls == 3
     assert qloo.calls == 0
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
@@ -1487,3 +1497,258 @@ def test_provider_failure_admissions_visible_without_retry(pg_url):
     assert model.attempts == 1
     vault.revoke(owner, "gemini")
     vault.revoke(owner, "qloo")
+
+
+def test_user_selected_qloo_identity_is_bound_to_prior_session(pg_url):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot, SessionDenied
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.copilot_llm_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+
+    artist = "c70ce2b8-0ad1-4150-bf18-5a6347f2e860"
+    brand_a = "43a36e73-9bc7-4b09-a116-78e51554c3e3"
+    brand_b = "e26bc58d-18d2-405b-bc7b-7c556ade3829"
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            request = json.loads(data)
+            schema = request["generationConfig"]["responseJsonSchema"]
+            if "answer" in schema["properties"]:
+                statement = json.loads(request["contents"][0]["parts"][0]["text"])
+                answer = {"answer": (
+                    "OFC checks and repairs the brand." if statement["view"]["ofc_enabled"]
+                    else "Qloo ranks candidate brands against the artist."
+                )}
+            else:
+                answer = {
+                    "objective": "Select brand", "artist_name": "Taylor Swft",
+                    "budget_usd": None, "cities": [],
+                    "choices": [{
+                        "decision_id": "brand", "domain": "brand",
+                        "selected_name": "Brand A",
+                        "candidate_names": ["Brand A", "Brand B"],
+                        "mutable": True, "depends_on": [],
+                    }],
+                    "baseline_answer": "Brand A is a proposal.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(answer)}]},
+            }]}).encode())
+
+    class Provider:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.calls += 1
+            route = urlsplit(url)
+            if route.path == "/search":
+                args = parse_qs(route.query)
+                query = args["query"][0]
+                names = {
+                    "Taylor Swft": ("Taylor Swift", artist),
+                    "Brand A": ("Brand A", brand_a),
+                    "Brand B": ("Brand B", brand_b),
+                }
+                name, entity_id = names[query]
+                body = {"success": True, "results": {"entities": [{
+                    "name": name, "entity_id": entity_id,
+                    "type": "urn:entity", "subtype": args["types"][0],
+                }]}}
+            else:
+                body = {"success": True, "results": {"entities": [
+                    {"entity_id": i, "type": "urn:entity",
+                     "query": {"affinity": score, "explainability": {
+                         "signal.interests.entities": {},
+                     }}}
+                    for i, score in ((brand_b, 0.9), (brand_a, 0.6))
+                ]}}
+            return TransportReply(200, json.dumps(body).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="selection-owner-" + "q" * 47,
+    )
+    token = vault.login("selection-owner-" + "q" * 47)
+    vault.configure(token, "qloo", "fake-qloo-selection-key")
+    vault.configure(token, "gemini", "fake-gemini-selection-key")
+    model, provider = Model(), Provider()
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=20, llm_daily_limit=20,
+        browser_daily_limit=60, model_transport=model, qloo_transport=provider,
+    )
+    session = service.session()
+    first = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="first-disambiguation", prompt="Taylor Swft brand suggestions",
+    )
+    assert first["status"] == "CLARIFICATION_REQUIRED"
+    assert first["reason_code"] == "SEARCH_SELECTION_REQUIRED"
+    assert first["suggestions"][0]["name"] == "Taylor Swift"
+    ref = first["suggestions"][0]["option_ref"]
+    assert "entity_id" not in json.dumps(first["suggestions"])
+
+    stranger = service.session()
+    with pytest.raises(SessionDenied):
+        service.submit(
+            session_id=stranger["session_id"], ticket=stranger["ticket"],
+            request_id="wrong-session-choice", prompt="Choose that artist",
+            parent_run_id=first["run_id"], entity_selection_ref=ref,
+        )
+
+    followup = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="confirm-taylor-option",
+        prompt="Use the suggested artist and retain both brands",
+        parent_run_id=first["run_id"], entity_selection_ref=ref,
+    )
+    assert followup["status"] == "REVIEW_REQUIRED"
+    assert followup["on"]["changed_ids"] == ["brand"]
+    assert followup["parent_run_id"] == first["run_id"]
+    assert followup["off"]["qloo"] == followup["on"]["qloo"]
+    assert service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="confirm-taylor-option",
+        prompt="Use the suggested artist and retain both brands",
+        parent_run_id=first["run_id"], entity_selection_ref=ref,
+    ) == followup
+    assert model.calls == 4
+    assert provider.calls == 6
+    vault.revoke(token, "qloo")
+    vault.revoke(token, "gemini")
+
+
+def test_cross_domain_movie_evidence_is_shared_but_never_auto_verified(pg_url):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.copilot_llm_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+
+    ids = {
+        "Artist Example": "0a0a0a0a-0000-4000-8000-000000000001",
+        "Movie A": "0a0a0a0a-0000-4000-8000-000000000002",
+        "Movie B": "0a0a0a0a-0000-4000-8000-000000000003",
+    }
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            payload = json.loads(data)
+            fields = payload["generationConfig"]["responseJsonSchema"]["properties"]
+            if "answer" in fields:
+                view = json.loads(payload["contents"][0]["parts"][0]["text"])["view"]
+                answer = {"answer": (
+                    "OFC cannot independently certify the movie relationship."
+                    if view["ofc_enabled"] else
+                    "Qloo suggests a cultural movie ranking."
+                )}
+            else:
+                answer = {
+                    "objective": "Compare movies for a music artist",
+                    "artist_name": "Artist Example",
+                    "budget_usd": None, "cities": [],
+                    "choices": [{
+                        "decision_id": "film", "domain": "movie",
+                        "selected_name": "Movie A",
+                        "candidate_names": ["Movie A", "Movie B"],
+                        "mutable": True, "depends_on": [],
+                    }],
+                    "baseline_answer": "Movie A is only a draft.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(answer)}]},
+            }]}).encode())
+
+    class Provider:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            route = urlsplit(url)
+            args = parse_qs(route.query)
+            self.calls.append(route.path)
+            if route.path == "/search":
+                name = args["query"][0]
+                payload = {"success": True, "results": {"entities": [{
+                    "name": name, "entity_id": ids[name],
+                    "type": "urn:entity",
+                    "subtype": args["types"][0],
+                }]}}
+            else:
+                assert args["filter.type"] == ["urn:entity:movie"]
+                payload = {"success": True, "results": {"entities": [
+                    {"entity_id": id_, "type": "urn:entity",
+                     "query": {"affinity": affinity}}
+                    for id_, affinity in ((ids["Movie B"], 0.92), (ids["Movie A"], 0.6))
+                ]}}
+            return TransportReply(200, json.dumps(payload).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="catalog-owner-" + "k" * 47,
+    )
+    owner = vault.login("catalog-owner-" + "k" * 47)
+    vault.configure(owner, "qloo", "private-test-qloo-catalog-key")
+    vault.configure(owner, "gemini", "private-test-gemini-catalog-key")
+    model, provider = Model(), Provider()
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=30, llm_daily_limit=30,
+        browser_daily_limit=70, model_transport=model, qloo_transport=provider,
+    )
+    session = service.session()
+    reply = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="movie-observation-001",
+        prompt="Which movies culturally resonate with Artist Example?",
+    )
+    assert reply["status"] == "REVIEW_REQUIRED"
+    assert reply["off"]["qloo"] == reply["on"]["qloo"]
+    assert reply["off"]["ofc_enabled"] is False
+    assert reply["on"]["ofc_enabled"] is True
+    assert reply["on"]["changed_ids"] == []
+    assert reply["on"]["decisions"][0]["ofc_verdict"] == "UNCERTAIN"
+    assert reply["on"]["decisions"][0]["ofc_reason"] == "CATALOG_POLICY_NOT_LIVE_QUALIFIED"
+    catalog = reply["off"]["qloo"]["catalog_observations"]
+    assert catalog[0]["status"] == "OBSERVED_NOT_POLICY_QUALIFIED"
+    assert catalog[0]["ranked_candidates"] == ["Movie B", "Movie A"]
+    assert catalog[0]["policy_qualified"] is False
+    assert reply["qloo_requests_this_run"] == 4
+    assert reply["qloo_search_requests"] == 3
+    assert reply["qloo_catalog_requests"] == 1
+    assert reply["llm_requests_this_run"] == 3
+    assert len(provider.calls) == 4 and model.calls == 3
+    assert service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="movie-observation-001",
+        prompt="Which movies culturally resonate with Artist Example?",
+    ) == reply
+    assert len(provider.calls) == 4 and model.calls == 3
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")

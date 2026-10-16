@@ -109,3 +109,19 @@ A subsequent message may include an optional `parent_run_id` pointing to an exis
 The OFF natural-language response is generated in a separate inference request **before** ON, using the original baseline plus the shared Qloo rank only. The OFF model never receives OFC changes, verdicts, repair reasons or reviewed decisions. ON receives the identical Qloo evidence plus OFC's scoped findings. Both arms keep the same model identity; inference totals are 3 per complete task (extraction + separate OFF + ON). UI toggles and saved-message reads are provider-free. These are controlled, evidence-blinded inference arms, not an independent randomized clinical-style causal experiment.
 
 The initial anonymous session limit remains 4 prompts for quota safety. This can be raised only together with explicit aggregate model/Qloo budgets and abuse controls.
+
+
+## Entity disambiguation
+
+A Qloo /search response may contain several plausible aliases or indistinguishable names. The server returns `CLARIFICATION_REQUIRED` and bounded suggestions with opaque `option_ref` values, never silently choosing a fuzzy provider ID. The user can select a suggestion in a new Copilot message using **all** of `parent_run_id`, `entity_selection_ref`, `request_id` and `prompt`. The owner of the parent visitor session is checked, the selected reference must occur in that parent response, and a newly reserved Qloo lookup must return the same identity bound to the request fingerprint. A stale/cross-session/forged reference fails closed. The final UI can render these options as selection controls without ever sending raw Qloo IDs to the browser.
+
+This user confirmation is **entity disambiguation**, not independent verification that the place has availability, the brand has contract rights, or a specific audience will convert.
+
+
+## Cross-domain Qloo observations (policy deliberately withheld)
+
+The hosted Copilot can now resolve artist-anchored candidates in the documented entity catalog (movie, place, destination, book, and related supported types) and inspect a **bounded relative-affinity ranking**. Every lookup and insights request enters the same shared Postgres Qloo daily budget before network I/O; saved observations carry scope fingerprints and digest-checked replay.
+
+The original and OFC-enabled views share one immutable catalog-evidence digest and human-readable ranked candidate names. These non-brand observations are explicitly labeled `OBSERVED_NOT_POLICY_QUALIFIED`; OFC returns `UNCERTAIN / CATALOG_POLICY_NOT_LIVE_QUALIFIED` rather than committing a choice or inferring venue inventory, reservations, signed contracts, business suitability or verified audience geography.
+
+A taste subject is still necessary for the current website flow; the initial configured Copilot schema is artist-anchored. General free-form audience demographics, tags and location filters need separately qualified request grammars and provider-backed tests. Qloo's documented category names alone do not certify that arbitrary provider keys support every combination. Real domain-specific Qloo qualification must remain a controlled user-approved test step before any new domain may be promoted from observation-only to decision policy.
