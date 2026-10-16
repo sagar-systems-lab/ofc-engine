@@ -59,10 +59,10 @@
       const handoffStep = steps.querySelector(".state-item:nth-child(3) small");
       if (handoffStep) handoffStep.textContent = "HANDOFF BLOCKED";
 
-      const boundary = document.querySelector("#view-plan .boundary-panel");
-      if (boundary) {
-        const heading = boundary.querySelector("strong");
-        const description = boundary.querySelector("p");
+      const boundaryPanel = document.querySelector("#view-plan .boundary-panel");
+      if (boundaryPanel) {
+        const heading = boundaryPanel.querySelector("strong");
+        const description = boundaryPanel.querySelector("p");
         if (heading) heading.textContent = "Qloo rank observed · independent verification pending";
         if (description) description.textContent =
           "The published tour repaired one brand choice. Unsupported decisions and " +
