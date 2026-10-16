@@ -503,6 +503,29 @@ def test_ticketed_browser_run_receives_only_its_own_qloo_rank(pg_url):
     assert preview["additional_provider_requests"] == 0
     assert preview["provider_authenticated"] is False
     assert len(preview["decisions"]) == 6
+    assert preview["journey_version"] == 1
+    tour = preview["tour"]
+    assert tour["budget_usd"] == 60000
+    assert tour["cities"] == ["Chicago", "Austin", "Seattle"]
+    assert tour["audience"] == "Indie music audiences"
+    assert tour["operator_constructed_unverified_decisions"] == 5
+    assert len(tour["decisions"]) == 6
+    assert tour["decisions"][0]["decision_id"] == "brand"
+    assert tour["decisions"][0]["candidate_count"] == 2
+    assert tour["decisions"][0]["baseline_option"] == 1
+    assert tour["decisions"][0]["reviewed_option"] == 2
+    assert tour["decisions"][0]["changed"] is True
+    assert tour["decisions"][0]["pending_recheck"] is True
+    assert all(
+        d["baseline_option"] == d["reviewed_option"] and not d["changed"]
+        for d in tour["decisions"][1:]
+    )
+    assert tour["decisions"][-1]["depends_on"] == ["brand"]
+    assert tour["decisions"][-1]["pending_recheck"] is True
+    assert set(preview["pending_rechecks"]) == {"brand", "afterparty"}
+    assert preview["off_on"]["real_causal_proof"] is False
+    assert "candidate_id" not in json.dumps(preview)
+    assert "candidate_pool" not in json.dumps(preview)
     assert "ticket" not in json.dumps(preview)
     for secret in ("fake-ci-only", "artist-ci", "brand-a", "brand-b", "operator-"):
         assert secret not in json.dumps(preview)
@@ -520,7 +543,13 @@ def test_ticketed_browser_run_receives_only_its_own_qloo_rank(pg_url):
             with urlopen(base + "/hosted-showcase.js", timeout=5) as response:
                 js = response.read()
                 assert b"/api/showcase" in js
+                assert b"start-qloo-journey" in js
+                assert b"Next: " in js
+                assert b"Qloo OFF" in js
+                assert b"HANDOFF WITHHELD" in js
                 assert b"innerHTML" not in js
+                assert b"/api/qloo/live-rank" not in js
+                assert b"SPEND_ONE_HOSTED_QLOO_REQUEST" not in js
             with urlopen(base + "/api/showcase", timeout=5) as response:
                 assert json.loads(response.read()) == preview
             with pytest.raises(HTTPError) as denied:

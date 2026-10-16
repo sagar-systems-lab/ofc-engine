@@ -87,27 +87,41 @@ def run_browser(origin: str) -> dict:
                     published = page.request.get(origin + "/api/showcase")
                     if published.status == 200:
                         shown = page.locator("#published-qloo-review")
+                        launch = page.locator("#start-qloo-journey")
+                        launch.wait_for(state="visible", timeout=10_000)
+                        if page.locator("#start-hosted-tour").is_visible():
+                            raise BrowserFailure("evidence-unavailable tour CTA competes with real review")
+                        launch.click()
                         shown.wait_for(state="visible", timeout=10_000)
-                        message = shown.inner_text()
-                        if ("Qloo changed one decision" not in message or
-                            "Handoff WITHHELD" not in message or
-                            "Provider" not in message or
-                            "RANK PASS · REPAIRED · RECHECK PENDING" not in message):
-                            raise BrowserFailure("published Qloo proof lacks source or safety boundary")
+                        if page.locator("#qloo-journey-heading").inner_text() != "01 / PROPOSE":
+                            raise BrowserFailure("frozen original tour is not the first stage")
+                        first = page.locator("#qloo-journey-body").inner_text()
+                        if "$60,000" not in first or "Chicago / Austin / Seattle" not in first:
+                            raise BrowserFailure("original tour scope not visible")
+                        stages = (
+                            ("02 / QLOO CHECK", "Qloo OFF"),
+                            ("03 / REPAIR", "REPAIRED"),
+                            ("04 / VERIFY", "RECHECK PENDING"),
+                            ("05 / HANDOFF", "HANDOFF WITHHELD"),
+                        )
+                        for expected, evidence in stages:
+                            page.locator("#qloo-journey-next").click()
+                            if page.locator("#qloo-journey-heading").inner_text() != expected:
+                                raise BrowserFailure("guided real-evidence review skipped " + expected)
+                            if evidence not in page.locator("#qloo-journey-body").inner_text():
+                                raise BrowserFailure("real-evidence review lacks " + evidence)
                         if "QLOO RANK OBSERVED · REVIEW REQUIRED" not in page.locator(".status-label").inner_text():
-                            raise BrowserFailure("published Qloo result still displays provider-pending status")
-                        if "previously acquired Qloo" not in page.locator("#view-plan > .intro p").inner_text():
-                            raise BrowserFailure("published Qloo evidence is mislabeled as unavailable")
-                        if page.locator("#view-plan .state-item").nth(1).locator("small").inner_text() != "RANK OBSERVED":
-                            raise BrowserFailure("Qloo progress does not reflect acquired evidence")
-                        if page.locator("#view-plan .state-item").nth(2).locator("small").inner_text() != "HANDOFF BLOCKED":
-                            raise BrowserFailure("Qloo progress falsely permits a handoff")
-                        if "independent verification pending" not in page.locator("#view-plan .boundary-panel").inner_text():
-                            raise BrowserFailure("published Qloo proof lacks the verification limit")
+                            raise BrowserFailure("published Qloo result shows provider-pending status")
+                        if "HANDOFF BLOCKED" != page.locator("#view-plan .state-item").nth(2).locator("small").inner_text():
+                            raise BrowserFailure("published evidence falsely authorizes release")
+                        page.locator("#qloo-journey-previous").click()
+                        if page.locator("#qloo-journey-heading").inner_text() != "04 / VERIFY":
+                            raise BrowserFailure("guided review cannot revisit verification")
                     elif published.status not in (404,):
                         raise BrowserFailure("public Qloo showcase did not fail closed")
                     run_status = page.request.get(origin + "/api/runs/status")
-                    if run_status.ok and run_status.json().get("tour_available") is True:
+                    if (published.status != 200 and run_status.ok and
+                            run_status.json().get("tour_available") is True):
                         tour = page.locator("#start-hosted-tour")
                         if not tour.is_visible():
                             raise BrowserFailure("hosted tour action missing from visible plan")
