@@ -606,6 +606,12 @@ class HostedCopilot:
                     target_category=category_for(draft.discovery_category),
                     location=draft.taste_location,
                 )
+                self._capacity(
+                    required_qloo=2 + (
+                        2 if seed_category == "artist"
+                        and context.target_category == "brand" else 0
+                    ),
+                )
                 reviewer = self._reviewer()
                 resolver = HostedQlooResolver(reviewer)
                 seed = resolver.resolve(
@@ -684,6 +690,31 @@ class HostedCopilot:
                     question="Which named Qloo entity should anchor the taste comparison?",
                 )
 
+            if native_discovery is None:
+                categories = {
+                    choice.decision_id: category_for(choice.domain)
+                    for choice in draft.choices
+                    if choice.decision_id in catalog_domains
+                }
+                distinct_names = {
+                    (category, name)
+                    for choice in draft.choices
+                    for name in choice.candidate_names
+                    for category in [categories.get(
+                        choice.decision_id, "brand"
+                    )]
+                }
+                required = (
+                    1 + len(distinct_names)
+                    + len(catalog_domains)
+                    + 2 * min(4, sum(
+                        1 for choice in draft.choices
+                        if choice.domain.lower() in (
+                            "brand", "partner", "brand_partner"
+                        ) and seed_category == "artist"
+                    ))
+                )
+                self._capacity(required_qloo=required)
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
             artist = (
