@@ -67,6 +67,22 @@ create table if not exists ofc_private.copilot_discoveries (
     result_digest text
 );
 
+create table if not exists ofc_private.copilot_business_authorities (
+    issuer text primary key,
+    requirements text not null,
+    public_key bytea not null,
+    active boolean not null default true
+);
+create table if not exists ofc_private.copilot_business_proofs (
+    run_id text not null references ofc_private.copilot_messages(run_id),
+    decision_id text not null,
+    requirement text not null,
+    issuer text not null,
+    proof_ciphertext bytea not null,
+    proof_digest text not null,
+    primary key(run_id,decision_id,requirement,issuer)
+);
+
 create table if not exists ofc_private.copilot_llm_budget (
     id smallint primary key check(id=1),
     utc_day date not null,
@@ -111,6 +127,8 @@ alter table ofc_private.copilot_messages enable row level security;
 alter table ofc_private.copilot_search enable row level security;
 alter table ofc_private.copilot_domain_observations enable row level security;
 alter table ofc_private.copilot_discoveries enable row level security;
+alter table ofc_private.copilot_business_authorities enable row level security;
+alter table ofc_private.copilot_business_proofs enable row level security;
 alter table ofc_private.copilot_llm_budget enable row level security;
 alter table ofc_private.copilot_credentials enable row level security;
 alter table ofc_private.copilot_owner_sessions enable row level security;
@@ -123,6 +141,8 @@ revoke all on
     ofc_private.copilot_search,
     ofc_private.copilot_domain_observations,
     ofc_private.copilot_discoveries,
+    ofc_private.copilot_business_authorities,
+    ofc_private.copilot_business_proofs,
     ofc_private.copilot_llm_budget,
     ofc_private.copilot_credentials,
     ofc_private.copilot_owner_sessions,
