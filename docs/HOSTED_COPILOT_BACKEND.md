@@ -65,3 +65,39 @@ Before enabling B2 publicly:
 7. Keep the product in NOT_CONFIGURED/DEGRADED rather than falsely showing ACTIVE when the above is incomplete.
 
 Final U1 creates the user-facing Settings icon/panel, conversational one-screen UI and responsive accessibility qualification. Until then, this backend does not claim the final UI is present.
+
+
+## Source-side backend closure (before Render)
+
+The guarded public API returns a versioned `copilot.v1` projection with prompt/model/Qloo scope digests, OFC revision and journal head. LLM, Qloo name-search and insights request counts are derived from private transactional ledgers, including failed reservations. `REVIEW_REQUIRED` never implies independently verified business suitability.
+
+An absent artist yields `CLARIFICATION_REQUIRED`; a decision domain without a qualified Qloo adapter returns `CAPABILITY_UNAVAILABLE`. Neither case invents Qloo evidence or spends a Qloo request. A Qloo HTTP 200 with invalid success/results payload does not mark the provider ACTIVE. Owner login admission is capped at 20 attempts per rolling 15-minute interval across Postgres workers.
+
+An interrupted RESERVED conversation stays non-repeatable to prevent accidental new provider spending; after three minutes it reads as `BLOCKED / WORKFLOW_INTERRUPTED` instead of indefinitely PROCESSING. The user can explicitly submit a **new** request if needed. The original request key never silently retries.
+
+### Preflight script for eventual hosted qualification
+
+Prepare the exact reviewed deployment SHA. Without `--execute`, the script only reads host readiness and capability status; it creates no session and makes **zero** Qloo/LLM calls:
+
+```bash
+python scripts/qualify_copilot_hosted.py \
+  --base-url https://ofc-fixture-preview.onrender.com \
+  --expected-sha <full-merged-commit-sha>
+```
+
+Only **after** owner-configured website credentials, explicit one-call connection tests, confirmed active provider statuses and authorization of a live demonstration, run a single bounded new-prompt E2E:
+
+```bash
+python scripts/qualify_copilot_hosted.py \
+  --base-url https://ofc-fixture-preview.onrender.com \
+  --expected-sha <full-merged-commit-sha> \
+  --execute \
+  --approve-spend APPROVE_ONE_BOUNDED_COPILOT_E2E \
+  --prompt "Compare two real brands for a real Qloo-resolvable artist."
+```
+
+This is an **example command**, not an authorization or a claim that the sample prompt is qualified. Replace the prompt with a verified, fictional/public test scope and inspect the live usage limits before executing it. A single workflow can consume multiple real Qloo and model calls. There are no hidden retries. The script validates: OFF/ON share Qloo evidence, only OFC differs, original prompt is restored, idempotent replay produces no extra usage, provider-origin fingerprints are present, and a second visitor cannot read the first visitor's history. It never reveals API credentials.
+
+`sql/004_copilot_hosted.sql` is idempotent for existing tables and backfills the model-attempt counter if an earlier private B2 migration was applied. Run migrations in the OFC database **only**. No migrations or deployments occur merely from merging this code.
+
+Code/test closure is not live-provider acceptance. The qualified evidence family is still scoped to artist→brand ranking; other cultural or business domains require separate real Qloo verification. Browser-level design remains the owner-directed U1 phase.

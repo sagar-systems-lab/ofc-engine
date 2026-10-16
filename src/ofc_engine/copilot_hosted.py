@@ -1,7 +1,7 @@
 """Hosted Copilot: private Postgres sessions, bounded live providers and safe projections."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from cryptography.fernet import InvalidToken
 import hmac
@@ -37,6 +37,20 @@ class CopilotNotReady(RuntimeError):
 
 
 class HostedCopilot:
+    _MAX_PENDING_AGE = timedelta(minutes=3)
+
+    @classmethod
+    def _pending_status(cls, run_id: str, created_at: datetime) -> dict:
+        if datetime.now(timezone.utc) - created_at < cls._MAX_PENDING_AGE:
+            return {"run_id": run_id, "status": "PROCESSING"}
+        return {
+            "run_id": run_id,
+            "status": "BLOCKED",
+            "reason_code": "WORKFLOW_INTERRUPTED",
+            "release_authorized": False,
+            "external_action_executed": False,
+        }
+
     def __init__(
         self, store: PostgresRevisionStore, vault: CredentialVault, *,
         qloo_daily_limit: int, llm_daily_limit: int,
@@ -143,12 +157,12 @@ class HostedCopilot:
         with self.store._connect() as db:
             rows = db.execute(
                 "select run_id,request_id,status,result,result_digest,"
-                "prompt_ciphertext from "
+                "prompt_ciphertext,created_at from "
                 "ofc_private.copilot_messages where session_id=%s "
                 "order by created_at,run_id", (session_id,),
             ).fetchall()
         outputs = []
-        for run_id, request_id, status, raw, digest, encrypted_prompt in rows:
+        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at in rows:
             try:
                 prompt = self.vault.cipher.decrypt(
                     bytes(encrypted_prompt)
@@ -157,7 +171,8 @@ class HostedCopilot:
                 raise StorageIntegrityError("invalid saved user prompt") from None
             if status == "RESERVED":
                 outputs.append({
-                    "run_id": run_id, "status": "PROCESSING", "prompt": prompt,
+                    "prompt": prompt,
+                    **self._pending_status(run_id, created_at),
                 })
                 continue
             try:
@@ -176,7 +191,7 @@ class HostedCopilot:
         """Previously saved answers remain readable even after key revocation."""
         with self.store._connect() as db:
             row = db.execute(
-                "select run_id,prompt_digest,status,result,result_digest "
+                "select run_id,prompt_digest,status,result,result_digest,created_at "
                 "from ofc_private.copilot_messages "
                 "where session_id=%s and request_id=%s",
                 (session_id, request_id),
@@ -186,7 +201,7 @@ class HostedCopilot:
         if row[1] != prompt_digest:
             raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
         if row[2] == "RESERVED":
-            return {"run_id": row[0], "status": "PROCESSING"}
+            return self._pending_status(row[0], row[5])
         try:
             value = json.loads(row[3])
         except (ValueError, TypeError) as exc:
@@ -309,6 +324,68 @@ class HostedCopilot:
                 ]
         return data
 
+    @staticmethod
+    def _draft_plan_projection(draft) -> dict:
+        return {
+            "objective": draft.objective,
+            "artist_name": draft.artist_name,
+            "budget_usd": draft.budget_usd,
+            "cities": list(draft.cities),
+            "choices": [
+                {
+                    "decision_id": choice.decision_id,
+                    "domain": choice.domain,
+                    "selected_name": choice.selected_name,
+                    "candidate_names": list(choice.candidate_names),
+                    "depends_on": list(choice.depends_on),
+                    "source": "UNVERIFIED_LLM_PROPOSAL",
+                }
+                for choice in draft.choices
+            ],
+        }
+
+    def _run_usage(self, run_id: str) -> dict:
+        with self.store._connect() as db:
+            searches = db.execute(
+                "select count(*) from ofc_private.copilot_search where run_id=%s",
+                (run_id,),
+            ).fetchone()[0]
+            insights = db.execute(
+                "select count(*) from ofc_private.dynamic_qloo_attempts "
+                "where plan_id=%s", (run_id,),
+            ).fetchone()[0]
+            model = db.execute(
+                "select llm_attempts from ofc_private.copilot_messages "
+                "where run_id=%s", (run_id,),
+            ).fetchone()
+        if model is None:
+            raise StorageIntegrityError("missing Copilot request admission")
+        return {
+            "qloo_search_requests": searches,
+            "qloo_rank_requests": insights,
+            "qloo_requests_this_run": searches + insights,
+            "llm_requests_this_run": model[0],
+        }
+
+    def _needs_input(self, run_id: str, draft, model_id: str, *,
+                     status: str, reason: str, question: str) -> dict:
+        result = {
+            "schema_version": "copilot.v1",
+            "run_id": run_id,
+            "status": status,
+            "reason_code": reason,
+            "question": question,
+            "plan": self._draft_plan_projection(draft),
+            "model_id": model_id,
+            "qloo_status": "NOT_QUERIED",
+            "ofc_review_completed": False,
+            "release_authorized": False,
+            "external_action_executed": False,
+            **self._run_usage(run_id),
+        }
+        self._complete(run_id, result)
+        return result
+
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str) -> dict:
         self._check_session(session_id, ticket)
@@ -324,20 +401,42 @@ class HostedCopilot:
         if cached is not None:
             return cached
         try:
-            reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
+            reserve_model_call(
+                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+            )
             draft = model.extract(prompt)
-            if draft.clarification_question and not draft.choices:
-                report = {
-                    "run_id": run_id, "status": "CLARIFICATION_REQUIRED",
-                    "question": draft.clarification_question,
-                    "model_id": model.model,
-                    "qloo_status": "NOT_QUERIED",
-                    "release_authorized": False,
-                }
-                self._complete(run_id, report)
-                return report
+            if not draft.choices:
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CLARIFICATION_REQUIRED",
+                    reason="DECISIONS_MISSING",
+                    question=(
+                        draft.clarification_question
+                        or "What choices should the cultural review compare?"
+                    ),
+                )
+            supported = any(
+                choice.domain.lower() in ("brand", "partner", "brand_partner")
+                for choice in draft.choices
+            )
+            if not supported:
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CAPABILITY_UNAVAILABLE",
+                    reason="QLOO_DECISION_DOMAIN_UNQUALIFIED",
+                    question=(
+                        "Only artist-to-brand cultural affinity is currently "
+                        "qualified. A venue, contract or other domain needs "
+                        "a separately verified evidence adapter."
+                    ),
+                )
             if not draft.artist_name:
-                raise EntityResolutionRequired("ARTIST_NAME_REQUIRED")
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CLARIFICATION_REQUIRED",
+                    reason="ARTIST_NAME_REQUIRED",
+                    question="Which artist should Qloo use for cultural affinity?",
+                )
 
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
@@ -363,41 +462,24 @@ class HostedCopilot:
                 prompt=prompt, model_id=model.model,
                 baseline=baseline, reviewed=reviewed, evaluated=evaluated,
             )
-            reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
+            reserve_model_call(
+                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+            )
             words = model.narrate_pair(pair, prompt=prompt)
-            with self.store._connect() as db:
-                lookup_count = db.execute(
-                    "select count(*) from ofc_private.copilot_search "
-                    "where run_id=%s", (run_id,),
-                ).fetchone()[0]
             result = {
                 **self._public_pair(pair, draft, brands, artist),
-                "plan": {
-                    "objective": draft.objective,
-                    "artist_name": draft.artist_name,
-                    "budget_usd": draft.budget_usd,
-                    "cities": list(draft.cities),
-                    "choices": [
-                        {
-                            "decision_id": choice.decision_id,
-                            "domain": choice.domain,
-                            "selected_name": choice.selected_name,
-                            "candidate_names": list(choice.candidate_names),
-                            "depends_on": list(choice.depends_on),
-                            "source": "UNVERIFIED_LLM_PROPOSAL",
-                        }
-                        for choice in draft.choices
-                    ],
-                },
+                "schema_version": "copilot.v1",
+                "session_id": session_id,
+                "request_id": request_id,
+                "journal_head": evaluated["journal_head"],
+                "revision": evaluated["revision"],
+                "rank_evidence_rechecked": evaluated["rank_evidence_rechecked"],
+                "full_plan_independently_verified": False,
+                "plan": self._draft_plan_projection(draft),
                 "status": "REVIEW_REQUIRED",
                 "original_answer": words.off_answer,
                 "ofc_answer": words.on_answer,
-                "qloo_requests_this_run": (
-                    lookup_count + evaluated["new_qloo_requests"]
-                ),
-                "qloo_search_requests": lookup_count,
-                "qloo_rank_requests": evaluated["new_qloo_requests"],
-                "llm_requests_this_run": 2,
+                **self._run_usage(run_id),
                 "release_authorized": False,
                 "external_action_executed": False,
             }
@@ -418,9 +500,11 @@ class HostedCopilot:
             }
             safe = code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
             result = {
+                "schema_version": "copilot.v1",
                 "run_id": run_id, "status": "BLOCKED", "reason_code": safe,
                 "model_id": model.model, "release_authorized": False,
                 "external_action_executed": False,
+                **self._run_usage(run_id),
             }
             self._complete(run_id, result, blocked=True)
             return result
@@ -463,11 +547,31 @@ class HostedCopilot:
                     self.store, daily_limit=self.qloo_daily_limit
                 ):
                     raise CopilotQuotaReached("QLOO_DAILY_QUOTA_EXHAUSTED")
-                QlooProbeClient(
+                observation = QlooProbeClient(
                     api_key=credential, transport=self.qloo_transport,
                 ).probe(search_probe(
                     "Taylor Swift", entity_type="urn:entity:artist", take=2,
                 ))
+                body = observation.payload
+                entities = (
+                    body.get("results", {}).get("entities")
+                    if isinstance(body, dict)
+                    and isinstance(body.get("results"), dict)
+                    and body.get("success") is True
+                    else None
+                )
+                if (
+                    not isinstance(entities, list) or not entities
+                    or not any(
+                        isinstance(entity, dict)
+                        and isinstance(entity.get("entity_id"), str)
+                        and isinstance(entity.get("name"), str)
+                        and entity.get("entity_id")
+                        and entity.get("name")
+                        for entity in entities
+                    )
+                ):
+                    raise QlooProbeError("QLOO_SEARCH_RESPONSE_INVALID")
             else:
                 reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
                 CopilotLLM(

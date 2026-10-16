@@ -982,6 +982,20 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     )
     assert report["status"] == "REVIEW_REQUIRED"
+    assert report["schema_version"] == "copilot.v1"
+    from scripts.qualify_copilot_hosted import (
+        QualificationFailure, validate_saved_result,
+    )
+    validate_saved_result(report)
+    with pytest.raises(QualificationFailure, match="OFC_ONLY"):
+        validate_saved_result({
+            **report,
+            "on": {**report["on"], "qloo": {"source_mode": "EVIDENCE_UNAVAILABLE"}},
+        })
+    assert report["journal_head"]
+    assert report["revision"] == 1
+    assert report["rank_evidence_rechecked"] == 1
+    assert report["full_plan_independently_verified"] is False
     assert report["plan"]["objective"] == "Check brand fit"
     assert report["plan"]["artist_name"] == "Artist Example"
     assert report["plan"]["budget_usd"] is None
@@ -1164,3 +1178,261 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_interrupted_copilot_job_blocks_after_timeout_without_provider_retry(pg_url):
+    """A restart cannot leave a RESERVED run in PROCESSING forever."""
+    from cryptography.fernet import Fernet
+    from hashlib import sha256
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="stale-owner-" + "v" * 45,
+    )
+    owner = vault.login("stale-owner-" + "v" * 45)
+    vault.configure(owner, "qloo", "stale-qloo-example-key-123456")
+    vault.configure(owner, "gemini", "stale-model-example-key-123456")
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=8,
+        browser_daily_limit=40,
+    )
+    session = service.session()
+    prompt = "Evaluate this fictional artist and sponsors"
+    run_id = "cp-run-" + uuid4().hex
+    request_id = "interrupted-job-001"
+    with store._connect() as db:
+        db.execute(
+            "insert into ofc_private.copilot_messages("
+            "run_id,session_id,request_id,prompt_digest,prompt_ciphertext,model_id,"
+            "status,created_at) values(%s,%s,%s,%s,%s,%s,'RESERVED',"
+            "now()-interval '10 minutes')",
+            (run_id, session["session_id"], request_id,
+             sha256(prompt.encode()).hexdigest(), vault.cipher.encrypt(prompt.encode()),
+             "gemini-3.1-flash-lite"),
+        )
+    before = service.messages(session["session_id"], session["ticket"])["messages"]
+    assert before[0]["prompt"] == prompt
+    assert before[0]["status"] == "BLOCKED"
+    assert before[0]["reason_code"] == "WORKFLOW_INTERRUPTED"
+    saved = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id=request_id, prompt=prompt,
+    )
+    assert saved["status"] == "BLOCKED"
+    assert saved["reason_code"] == "WORKFLOW_INTERRUPTED"
+    assert saved["release_authorized"] is False
+    assert saved["external_action_executed"] is False
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
+
+
+def test_owner_login_throttled_in_private_postgres(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import (
+        CredentialVault, OwnerUnauthorized, OwnerRateLimited,
+    )
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_owner_login_budget "
+            "set attempts=0,window_start=now()-interval '20 minutes' where id=1"
+        )
+    secret = "rate-gate-" + "q" * 48
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(), owner_secret=secret,
+    )
+    for _ in range(20):
+        with pytest.raises(OwnerUnauthorized):
+            vault.login("wrong-owner")
+    with pytest.raises(OwnerRateLimited, match="OWNER_LOGIN_RATE_LIMITED"):
+        vault.login(secret)
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_owner_login_budget "
+            "set attempts=0,window_start=now()-interval '20 minutes' where id=1"
+        )
+    assert vault.login(secret)
+
+
+def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.qloo import TransportReply
+
+    class BadQloo:
+        def __init__(self):
+            self.requests = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.requests += 1
+            # An HTTP 200 can still carry a failed Qloo response.
+            return TransportReply(
+                200, json.dumps({
+                    "success": False,
+                    "results": {"entities": []},
+                }).encode(),
+            )
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="bad-qloo-owner-" + "m" * 46,
+    )
+    owner = vault.login("bad-qloo-owner-" + "m" * 46)
+    vault.configure(owner, "qloo", "bad-qloo-test-api-key-00001")
+    bad = BadQloo()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=40, qloo_transport=bad,
+    )
+    observed = runtime.test_connection(owner, "qloo")
+    assert observed == {"provider": "qloo", "status": "UNAVAILABLE"}
+    assert bad.requests == 1
+    assert runtime.capabilities()["qloo"] == "UNAVAILABLE"
+    vault.revoke(owner, "qloo")
+
+
+def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
+    """Do not spend Qloo calls or misstate grounded answers outside qualified scopes."""
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    class DraftOnly:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            prompt = json.loads(data)["contents"][0]["parts"][0]["text"]
+            brand = "brand" in prompt.lower()
+            decision = (
+                {
+                    "decision_id": "brand", "domain": "brand",
+                    "selected_name": "Brand A",
+                    "candidate_names": ["Brand A", "Brand B"],
+                    "mutable": True, "depends_on": [],
+                } if brand else {
+                    "decision_id": "venue", "domain": "venue",
+                    "selected_name": "Venue A",
+                    "candidate_names": ["Venue A", "Venue B"],
+                    "mutable": False, "depends_on": [],
+                }
+            )
+            payload = {
+                "objective": "Propose a fictional event", "artist_name": None,
+                "budget_usd": None, "cities": [],
+                "choices": [decision],
+                "baseline_answer": "These are draft options, not verified.",
+                "clarification_question": None,
+            }
+            return JSONReply(200, json.dumps({
+                "candidates": [{
+                    "finishReason": "STOP",
+                    "content": {"parts": [{"text": json.dumps(payload)}]},
+                }],
+            }).encode())
+
+    class NoQloo:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            raise AssertionError("unqualified scope should never query Qloo")
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="clarify-owner-" + "c" * 45,
+    )
+    owner = vault.login("clarify-owner-" + "c" * 45)
+    vault.configure(owner, "qloo", "local-test-qloo-credential-12345")
+    vault.configure(owner, "gemini", "local-test-model-credential-12345")
+    llm, qloo = DraftOnly(), NoQloo()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=80, model_transport=llm, qloo_transport=qloo,
+    )
+    visitor = runtime.session()
+    args = {
+        "session_id": visitor["session_id"], "ticket": visitor["ticket"],
+        "request_id": "missing-artist-123",
+        "prompt": "Pick a brand partner",
+    }
+    missing = runtime.submit(**args)
+    assert missing["status"] == "CLARIFICATION_REQUIRED"
+    assert missing["reason_code"] == "ARTIST_NAME_REQUIRED"
+    assert missing["schema_version"] == "copilot.v1"
+    assert missing["llm_requests_this_run"] == 1
+    assert missing["qloo_requests_this_run"] == 0
+    assert missing["qloo_status"] == "NOT_QUERIED"
+    assert missing["plan"]["choices"][0]["domain"] == "brand"
+    assert missing["release_authorized"] is False
+    assert runtime.submit(**args) == missing
+
+    unsupported = runtime.submit(
+        session_id=visitor["session_id"], ticket=visitor["ticket"],
+        request_id="unsupported-venue-456", prompt="Plan a venue",
+    )
+    assert unsupported["status"] == "CAPABILITY_UNAVAILABLE"
+    assert unsupported["reason_code"] == "QLOO_DECISION_DOMAIN_UNQUALIFIED"
+    assert unsupported["llm_requests_this_run"] == 1
+    assert unsupported["qloo_search_requests"] == 0
+    assert unsupported["qloo_rank_requests"] == 0
+    assert unsupported["plan"]["choices"][0]["domain"] == "venue"
+    assert unsupported["qloo_status"] == "NOT_QUERIED"
+    assert llm.calls == 2
+    assert qloo.calls == 0
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
+
+
+def test_provider_failure_admissions_visible_without_retry(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    class RateLimitedModel:
+        def __init__(self):
+            self.attempts = 0
+
+        def post(self, *args, **kwargs):
+            self.attempts += 1
+            return JSONReply(429, b"{}")
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="failure-count-owner-" + "f" * 44,
+    )
+    owner = vault.login("failure-count-owner-" + "f" * 44)
+    vault.configure(owner, "gemini", "failure-demo-model-key-000123")
+    vault.configure(owner, "qloo", "failure-demo-qloo-key-000123")
+    model = RateLimitedModel()
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=80, model_transport=model,
+    )
+    session = service.session()
+    args = {
+        "session_id": session["session_id"], "ticket": session["ticket"],
+        "request_id": "failing-extraction-001",
+        "prompt": "Make a cultural brand shortlist",
+    }
+    blocked = service.submit(**args)
+    assert blocked["status"] == "BLOCKED"
+    assert blocked["reason_code"] == "PROVIDER_HTTP_429"
+    assert blocked["llm_requests_this_run"] == 1
+    assert blocked["qloo_requests_this_run"] == 0
+    assert blocked["release_authorized"] is False
+    assert service.submit(**args) == blocked
+    assert model.attempts == 1
+    vault.revoke(owner, "gemini")
+    vault.revoke(owner, "qloo")

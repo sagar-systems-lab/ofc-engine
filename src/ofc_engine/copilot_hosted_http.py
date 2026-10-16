@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 import psycopg
 
-from .copilot_credentials import OwnerUnauthorized
+from .copilot_credentials import OwnerUnauthorized, OwnerRateLimited
 from .copilot_hosted import CopilotNotReady, SessionDenied, SessionLimitReached
 from .copilot_hosted_quota import CopilotQuotaReached
 from .durable import StorageIntegrityError
@@ -191,6 +191,8 @@ class CopilotHTTPMixin:
                 )
                 return True
             raise ValueError("INVALID_REQUEST")
+        except OwnerRateLimited:
+            self._copilot_reply(429, {"error": "OWNER_LOGIN_RATE_LIMITED"})
         except (OwnerUnauthorized, SessionDenied):
             self._copilot_reply(403, {"error": "ACCESS_DENIED"})
         except (SessionLimitReached, CopilotQuotaReached):

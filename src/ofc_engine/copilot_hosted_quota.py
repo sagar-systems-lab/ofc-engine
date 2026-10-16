@@ -17,7 +17,10 @@ class CopilotQuotaReached(ValueError):
     pass
 
 
-def reserve_model_call(store: PostgresRevisionStore, *, daily_limit: int) -> None:
+def reserve_model_call(
+    store: PostgresRevisionStore, *, daily_limit: int,
+    run_id: str | None = None,
+) -> None:
     if type(daily_limit) is not int or not 1 <= daily_limit <= 64:
         raise ValueError("invalid model budget")
     with store._connect() as db:
@@ -36,6 +39,15 @@ def reserve_model_call(store: PostgresRevisionStore, *, daily_limit: int) -> Non
             "set utc_day=%s,reserved=%s where id=1",
             (day, used + 1),
         )
+        if run_id is not None:
+            updated = db.execute(
+                "update ofc_private.copilot_messages "
+                "set llm_attempts=llm_attempts+1 "
+                "where run_id=%s and status='RESERVED' and llm_attempts<4",
+                (run_id,),
+            )
+            if updated.rowcount != 1:
+                raise StorageIntegrityError("model admission lost its active run")
 
 
 def reserve_qloo_request(store: PostgresRevisionStore, *, daily_limit: int) -> bool:
