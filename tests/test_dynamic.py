@@ -144,9 +144,12 @@ def test_daily_budget_consumed_before_network_and_no_unbounded_retry(tmp_path):
 
 def test_fresh_rank_disagreement_blocks_pass(tmp_path):
     fake = FakeInsights(reverse_recheck=True)
-    _, flow = reviewer(tmp_path, fake)
+    store, flow = reviewer(tmp_path, fake)
     result = flow.evaluate(plan())
-    assert result["changed_ids"] == ["partner"]
+    assert result["changed_ids"] == []
+    assert result["revision"] == 0
+    assert store.get("customer-1").decisions[0].candidate_id == "brand-a"
+    assert len(store.audit_history("customer-1")) == 1
     assert result["decisions"][0]["reason_code"] == "FRESH_RANK_RECHECK_DISAGREES"
     assert result["decisions"][0]["verdict"] == "UNCERTAIN"
     assert result["rank_evidence_rechecked"] == 0
@@ -270,3 +273,40 @@ def test_dynamic_api_uses_real_submission_without_exposing_key(tmp_path):
         code, repeat = post(base, plan())
         assert code == 200 and repeat["new_qloo_requests"] == 0
         assert len(fake.calls) == 2
+
+
+def test_budget_exhaustion_never_commits_optimistic_repair(tmp_path):
+    fake = FakeInsights()
+    store, flow = reviewer(tmp_path, fake, limit=1)
+    observed = flow.evaluate(plan("no-second"))
+    assert observed["new_qloo_requests"] == 1
+    assert observed["revision"] == 0
+    assert observed["changed_ids"] == []
+    assert store.get("no-second").decisions[0].candidate_id == "brand-a"
+    assert observed["decisions"][0]["reason_code"] == "DAILY_QLOO_BUDGET_EXHAUSTED"
+    assert observed["full_plan_independently_verified"] is False
+    assert observed["release_authorized"] is False
+
+
+def test_rank_agreement_must_cover_full_frozen_candidate_order(tmp_path):
+    class LowerRankDrift(FakeInsights):
+        def get(self, url, headers, *, timeout, max_bytes):
+            result = super().get(url, headers, timeout=timeout, max_bytes=max_bytes)
+            if len(self.calls) == 2:
+                body = json.loads(result.body)
+                entities = body["results"]["entities"]
+                # Simulate three candidates, preserving the top but changing lower ranks.
+                entities[1], entities[2] = entities[2], entities[1]
+                for i, entity in enumerate(entities):
+                    entity["query"]["affinity"] = 0.95 - i * 0.2
+                return TransportReply(200, json.dumps(body).encode())
+            return result
+
+    fake = LowerRankDrift()
+    store, flow = reviewer(tmp_path, fake)
+    offer = plan("lower-rank-drift", brand_ids=("a", "b", "c"))
+    report = flow.evaluate(offer)
+    assert report["changed_ids"] == []
+    assert report["revision"] == 0
+    assert report["decisions"][0]["reason_code"] == "FRESH_RANK_RECHECK_DISAGREES"
+    assert store.get("lower-rank-drift").decisions[0].candidate_id == "a"

@@ -9,6 +9,7 @@ import hmac
 import json
 import secrets
 
+from .business_assurance import assess_business_readiness
 from .copilot_compare import build_copilot_pair
 from .copilot_domain_observations import HostedDomainObservations
 from .copilot_credentials import CredentialVault
@@ -582,6 +583,20 @@ class HostedCopilot:
             evaluated = reviewer.evaluate(proposal)
             baseline, _ = freeze_proposal(proposal)
             reviewed = self.store.get(run_id)
+            requirements = {
+                choice.decision_id: (
+                    ("budget_feasibility", "contract_rights", "local_audience")
+                    if choice.domain.lower() in ("brand", "partner", "brand_partner")
+                    else ("venue_availability",)
+                )
+                for choice in draft.choices
+                if choice.domain.lower() in (
+                    "brand", "partner", "brand_partner", "venue", "place", "restaurant"
+                )
+            }
+            business_review = assess_business_readiness(
+                reviewed, required=requirements,
+            )
             pair = build_copilot_pair(
                 prompt=prompt, model_id=model.model,
                 baseline=baseline, reviewed=reviewed, evaluated=evaluated,
@@ -655,6 +670,7 @@ class HostedCopilot:
                 "revision": evaluated["revision"],
                 "rank_evidence_rechecked": evaluated["rank_evidence_rechecked"],
                 "full_plan_independently_verified": False,
+                "business_verification": business_review,
                 "plan": self._draft_plan_projection(draft),
                 "status": "REVIEW_REQUIRED",
                 "original_answer": off_answer,
