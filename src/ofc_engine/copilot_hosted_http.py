@@ -177,13 +177,17 @@ class CopilotHTTPMixin:
                 )
                 return True
             if found and found.group(2) == "/messages":
-                if set(data) != {"request_id", "prompt"}:
+                if set(data) not in (
+                    {"request_id", "prompt"},
+                    {"request_id", "prompt", "parent_run_id"},
+                ):
                     raise ValueError("INVALID_COPILOT_MESSAGE")
                 result = runtime.submit(
                     session_id=found.group(1),
                     ticket=self._copilot_cookie("ofc_visitor"),
                     request_id=data["request_id"],
                     prompt=data["prompt"],
+                    parent_run_id=data.get("parent_run_id"),
                 )
                 self._copilot_reply(
                     202 if result.get("status") == "PROCESSING" else 200,

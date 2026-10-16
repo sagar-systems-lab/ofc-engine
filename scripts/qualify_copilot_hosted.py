@@ -89,7 +89,7 @@ def validate_saved_result(result: dict) -> None:
         or not isinstance(result.get("ofc_answer"), str)
         or not result["ofc_answer"].strip()
         or result.get("qloo_requests_this_run", 0) < 1
-        or result.get("llm_requests_this_run") != 2
+        or result.get("llm_requests_this_run") != 3
         or not isinstance(result.get("plan"), dict)
         or not isinstance(result.get("journal_head"), str)
     ):
