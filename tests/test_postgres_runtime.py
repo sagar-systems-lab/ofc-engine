@@ -982,6 +982,11 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     )
     assert report["status"] == "REVIEW_REQUIRED"
+    assert report["schema_version"] == "copilot.v1"
+    assert report["journal_head"]
+    assert report["revision"] == 1
+    assert report["rank_evidence_rechecked"] == 1
+    assert report["full_plan_independently_verified"] is False
     assert report["plan"]["objective"] == "Check brand fit"
     assert report["plan"]["artist_name"] == "Artist Example"
     assert report["plan"]["budget_usd"] is None
@@ -1354,6 +1359,9 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
     missing = runtime.submit(**args)
     assert missing["status"] == "CLARIFICATION_REQUIRED"
     assert missing["reason_code"] == "ARTIST_NAME_REQUIRED"
+    assert missing["schema_version"] == "copilot.v1"
+    assert missing["llm_requests_this_run"] == 1
+    assert missing["qloo_requests_this_run"] == 0
     assert missing["qloo_status"] == "NOT_QUERIED"
     assert missing["plan"]["choices"][0]["domain"] == "brand"
     assert missing["release_authorized"] is False
@@ -1365,9 +1373,57 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
     )
     assert unsupported["status"] == "CAPABILITY_UNAVAILABLE"
     assert unsupported["reason_code"] == "QLOO_DECISION_DOMAIN_UNQUALIFIED"
+    assert unsupported["llm_requests_this_run"] == 1
+    assert unsupported["qloo_search_requests"] == 0
+    assert unsupported["qloo_rank_requests"] == 0
     assert unsupported["plan"]["choices"][0]["domain"] == "venue"
     assert unsupported["qloo_status"] == "NOT_QUERIED"
     assert llm.calls == 2
     assert qloo.calls == 0
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
+
+
+def test_provider_failure_admissions_visible_without_retry(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    class RateLimitedModel:
+        def __init__(self):
+            self.attempts = 0
+
+        def post(self, *args, **kwargs):
+            self.attempts += 1
+            return JSONReply(429, b"{}")
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="failure-count-owner-" + "f" * 44,
+    )
+    owner = vault.login("failure-count-owner-" + "f" * 44)
+    vault.configure(owner, "gemini", "failure-demo-model-key-000123")
+    vault.configure(owner, "qloo", "failure-demo-qloo-key-000123")
+    model = RateLimitedModel()
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=80, model_transport=model,
+    )
+    session = service.session()
+    args = {
+        "session_id": session["session_id"], "ticket": session["ticket"],
+        "request_id": "failing-extraction-001",
+        "prompt": "Make a cultural brand shortlist",
+    }
+    blocked = service.submit(**args)
+    assert blocked["status"] == "BLOCKED"
+    assert blocked["reason_code"] == "PROVIDER_HTTP_429"
+    assert blocked["llm_requests_this_run"] == 1
+    assert blocked["qloo_requests_this_run"] == 0
+    assert blocked["release_authorized"] is False
+    assert service.submit(**args) == blocked
+    assert model.attempts == 1
+    vault.revoke(owner, "gemini")
+    vault.revoke(owner, "qloo")
