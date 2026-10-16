@@ -19,7 +19,10 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 HOST = "https://hackathon.api.qloo.com"
 MAX_BYTES = 512 * 1024
-_ENTITY_TYPES = frozenset({"urn:entity:artist", "urn:entity:brand"})
+_ENTITY_TYPES = frozenset({"urn:entity:" + kind for kind in (
+    "artist", "book", "brand", "destination", "movie", "person",
+    "place", "podcast", "tv_show", "videogame",
+)})
 
 
 class QlooProbeError(RuntimeError):
@@ -66,7 +69,7 @@ def _ids(ids: tuple[str, ...]) -> str:
 
 def search_probe(query: str, *, entity_type: str, take: int = 8) -> ProbeSpec:
     if entity_type not in _ENTITY_TYPES:
-        raise ValueError("entity type must be artist or brand")
+        raise ValueError("entity type is not in the Qloo catalog")
     if not query or not query.strip() or len(query) > 120:
         raise ValueError("invalid search query")
     if type(take) is not int or not 1 <= take <= 20:
