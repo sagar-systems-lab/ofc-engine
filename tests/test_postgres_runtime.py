@@ -1857,7 +1857,7 @@ def test_native_qloo_discovery_from_candidate_free_taste_prompt(pg_url):
         "prompt": "Suggest New York restaurants for people who enjoy Movie Example.",
     }
     result = runtime.submit(**args)
-    assert result["status"] == "REVIEW_REQUIRED", result
+    assert result["status"] == "REVIEW_REQUIRED", (result, provider.calls, transport.calls)
     assert result["plan"]["choices"][0]["candidate_names"] == [
         "Restaurant Beta", "Restaurant Alpha"
     ]
