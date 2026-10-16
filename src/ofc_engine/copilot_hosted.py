@@ -189,6 +189,42 @@ class HostedCopilot:
             outputs.append({"prompt": prompt, **result})
         return {"session_id": session_id, "messages": outputs}
 
+    def _validate_entity_selection(
+        self, session_id: str, parent_run_id: str | None,
+        selection_ref: str | None,
+    ) -> None:
+        if selection_ref is None:
+            return
+        if (
+            not isinstance(selection_ref, str)
+            or len(selection_ref) != 16
+            or any(c not in "0123456789abcdef" for c in selection_ref)
+            or parent_run_id is None
+        ):
+            raise SessionDenied("INVALID_QLOO_SELECTION")
+        with self.store._connect() as db:
+            row = db.execute(
+                "select status,result,result_digest from "
+                "ofc_private.copilot_messages where run_id=%s and session_id=%s",
+                (parent_run_id, session_id),
+            ).fetchone()
+        if row is None or row[0] != "COMPLETE":
+            raise SessionDenied("QLOO_SELECTION_PARENT_NOT_FOUND")
+        try:
+            record = json.loads(row[1])
+        except (ValueError, TypeError) as exc:
+            raise StorageIntegrityError("invalid stored selection parent") from exc
+        if (
+            not isinstance(record, dict) or digest_obj(record) != row[2]
+            or record.get("status") != "CLARIFICATION_REQUIRED"
+            or not any(
+                isinstance(option, dict)
+                and option.get("option_ref") == selection_ref
+                for option in record.get("suggestions", [])
+            )
+        ):
+            raise SessionDenied("QLOO_SELECTION_SCOPE_MISMATCH")
+
     def _parent_context(self, session_id: str, parent_run_id: str | None):
         if parent_run_id is None:
             return None
@@ -428,9 +464,15 @@ class HostedCopilot:
 
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
-               parent_run_id: str | None = None) -> dict:
+               parent_run_id: str | None = None,
+               entity_selection_ref: str | None = None) -> dict:
         self._check_session(session_id, ticket)
         digest = self._validate_message(request_id, prompt)
+        if entity_selection_ref is not None:
+            digest = digest_obj({
+                "prompt": prompt.strip(),
+                "entity_selection_ref": entity_selection_ref,
+            })
         cached = self._cached_message(
             session_id, request_id, digest, parent_run_id,
         )
@@ -439,6 +481,9 @@ class HostedCopilot:
         self._require_credentials()
         model = self._model()
         prior_plan = self._parent_context(session_id, parent_run_id)
+        self._validate_entity_selection(
+            session_id, parent_run_id, entity_selection_ref,
+        )
         run_id, cached = self._admit_message(
             session_id, request_id, digest, model.model, prompt, parent_run_id,
         )
@@ -485,7 +530,8 @@ class HostedCopilot:
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
             artist = resolver.resolve(
-                run_id=run_id, name=draft.artist_name, kind="artist"
+                run_id=run_id, name=draft.artist_name, kind="artist",
+                selection_ref=entity_selection_ref,
             )
             brands = {}
             for choice in draft.choices:
@@ -493,8 +539,11 @@ class HostedCopilot:
                     for name in choice.candidate_names:
                         if name not in brands:
                             brands[name] = resolver.resolve(
-                                run_id=run_id, name=name, kind="brand"
+                                run_id=run_id, name=name, kind="brand",
+                                selection_ref=entity_selection_ref,
                             )
+            if entity_selection_ref is not None and not resolver.selection_consumed:
+                raise EntityResolutionRequired("QLOO_SELECTION_SCOPE_MISMATCH")
             proposal = draft_plan(
                 draft, run_id=run_id, request_id=request_id,
                 resolved_artist=artist, resolved_brands=brands,
