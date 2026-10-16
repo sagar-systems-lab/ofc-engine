@@ -183,7 +183,8 @@
           " · " + tour.cities.join(" / ") + " · audience: " + tour.audience + ".");
         put("Original plan: one artist-to-brand shortlist and five " +
           "operator-constructed, unverified choices. Option numbers are redacted " +
-          "positions in frozen candidate pools, not invented brand names.");
+          "positions in frozen candidate pools, not invented brand names. " +
+          "Artist identity and tour feasibility are scenario assumptions, not Qloo attestations.");
         addList(body, tour.decisions.map(d =>
           labels[d.decision_id] + ": option " + d.baseline_option +
           " of " + d.candidate_count + " · " +
@@ -200,7 +201,8 @@
         put("Observation: " + (proof.evidence.collected_at || "not available") +
           " · Query fingerprint: " + proof.evidence.query_fingerprint.slice(0, 16) +
           "… · Capture digest: " + proof.evidence.capture_digest.slice(0, 16) + "…");
-        put("The rank only addresses the brand pool; it does not verify venues, " +
+        put("The observed Qloo rank preferred the reviewed brand option over the " +
+          "original option inside this fixed candidate pool. The rank does not verify venues, " +
           "opening acts, ticket demand, contract suitability or the $60,000 budget.");
       } else if (position === 2) {
         put("One bounded, allowlisted candidate-only repair was committed:");
