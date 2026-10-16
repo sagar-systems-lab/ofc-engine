@@ -38,4 +38,19 @@ Unsupported decisions, stale evidence, exhausted budget, mismatched stored plan,
 
 `python -m pytest tests/test_dynamic.py tests/test_agent_api.py`
 
-Tests use deterministic injected Qloo transports and make no real provider requests. Existing production live-Qloo authorization remains a separately guarded single-use path. This dynamic capability is **local authenticated backend**; it is not enabled on the public Render Studio until an explicit, bounded hosted rollout is designed and qualified.
+Tests use deterministic injected Qloo transports and make no real provider requests. Existing production live-Qloo authorization remains a separately guarded single-use path. The same evaluator is also wired behind an **independently authenticated, default-disabled hosted API**. This is server-to-server infrastructure, not a browser-accessible public Qloo switch.
+
+## Hosted agent integration
+
+Apply `sql/003_dynamic_qloo.sql` to the **OFC PostgreSQL database only** before enabling the hosted path. It creates private, row-level-security-protected per-plan Qloo attempts and a UTC-day budget row. No migration is applied automatically and no public permission is granted.
+
+In the private OFC service environment, in addition to its existing database connection, set:
+
+- `OFC_DYNAMIC_QLOO_MODE=OPERATOR_BUDGETED`
+- `OFC_DYNAMIC_QLOO_DAILY_LIMIT=...` (1–64 requests/day)
+- `OFC_DYNAMIC_AGENT_TOKEN=...` (strong 32–256 character ASCII secret, **not** the public browser ticket)
+- `QLOO_API_KEY` (already operator-protected)
+
+POST the same immutable `AgentProposal` to `/api/agent/evaluate` with the private bearer token from a **server-side agent**, not JavaScript in a visitor's browser. Browser-origin submissions are rejected; unauthorized requests cannot start provider traffic. The endpoint is disabled without operator configuration. PostgreSQL persists reservations across restarts; replaying completed attempts does not issue a new Qloo request.
+
+The current public hosted Studio remains unchanged. Do not enable the hosted endpoint until its isolated database migration, key quota and deploy qualification are approved. No user-facing self-service Qloo spend is authorized by this backend route.
