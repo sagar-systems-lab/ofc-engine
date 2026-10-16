@@ -91,10 +91,14 @@ class CopilotHTTPMixin:
         )
 
     def _copilot_post(self) -> bool:
-        path = urlsplit(self.path).path
+        parts = urlsplit(self.path)
+        path = parts.path
         found = _SESSION.fullmatch(path)
         if path not in _ROUTES and not found:
             return False
+        if parts.query or parts.fragment:
+            self._copilot_reply(400, {"error": "INVALID_QUERY"})
+            return True
         runtime = self.server.copilot
         if runtime is None:
             self._copilot_reply(405, {"error": "COPILOT_NOT_CONFIGURED"})
