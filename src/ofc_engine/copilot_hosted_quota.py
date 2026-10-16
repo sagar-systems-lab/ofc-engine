@@ -6,6 +6,7 @@ import json
 
 from .copilot_intake import ResolvedEntity, EntityResolutionRequired
 from .copilot_resolver import normalize_qloo_search
+from .qloo_catalog import CATEGORIES
 from .durable import StorageIntegrityError
 from .dynamic_postgres import PostgresDynamicQlooReview
 from .postgres_store import PostgresRevisionStore
@@ -78,7 +79,7 @@ class HostedQlooResolver:
         self.reviewer = reviewer
 
     def resolve(self, *, run_id: str, name: str, kind: str) -> ResolvedEntity:
-        if kind not in ("brand", "artist"):
+        if kind not in CATEGORIES:
             raise EntityResolutionRequired("UNSUPPORTED_QLOO_SEARCH_TYPE")
         spec = search_probe(name, entity_type="urn:entity:" + kind)
         store = self.reviewer.store
