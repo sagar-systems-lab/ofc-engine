@@ -1077,6 +1077,9 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
             assert "SPEND_ONE_PROVIDER_REQUEST" in script
             assert "localStorage" not in script
         assert call("/api/owner/credentials")[0] == 403
+        assert call(
+            "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
+        )[0] == 503
         assert call("/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}, origin=False)[0] == 403
         status, value, cookie = call(
             "/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}
@@ -1097,6 +1100,14 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         assert status == 200
         assert configured["providers"]["gemini"]["masked_suffix"] == "2345"
         assert "owner-test-credential-12345" not in json.dumps(configured)
+        status, _, _ = call(
+            "/api/owner/credentials", {
+                "action": "set", "provider": "qloo",
+                "api_key": "owner-test-qloo-credential-12345",
+            }, cookie=owner_cookie,
+        )
+        assert status == 200
+        assert call("/api/capabilities")[1]["product"] == "CHECK_REQUIRED"
         status, visitors, visitor_cookie = call(
             "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
         )
