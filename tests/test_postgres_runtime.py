@@ -848,3 +848,253 @@ def test_dynamic_postgres_qloo_budget_and_authenticated_hosted_api(pg_url):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(pg_url):
+    """OFC B2 integration: external clients are injected, SQL and HTTP are real."""
+    from cryptography.fernet import Fernet
+    from urllib.parse import urlsplit, parse_qs
+    from ofc_engine.copilot_credentials import CredentialVault, OwnerUnauthorized
+    from ofc_engine.copilot_hosted import HostedCopilot, SessionDenied, SessionLimitReached
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            (Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text()
+        )
+        db.execute(
+            (Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text()
+        )
+        for table in (
+            "copilot_credentials", "copilot_sessions", "copilot_messages",
+            "copilot_llm_budget", "copilot_search",
+        ):
+            assert db.execute(
+                "select to_regclass(%s)", ("ofc_private." + table,)
+            ).fetchone()[0] is not None
+        db.execute("update ofc_private.copilot_llm_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.copilot_browser_budget set sessions=0,utc_day=current_date")
+        db.execute("update ofc_private.copilot_connection_attempts set reserved=0,utc_day=current_date")
+
+    artist = "0a0a0a0a-0000-4000-8000-000000000001"
+    brand_a = "0a0a0a0a-0000-4000-8000-000000000002"
+    brand_b = "0a0a0a0a-0000-4000-8000-000000000003"
+    known = {"Artist Example": artist, "Brand A": brand_a, "Brand B": brand_b}
+
+    class FakeQloo:
+        def __init__(self):
+            self.searches = []
+            self.ranks = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            assert headers["X-Api-Key"] == "private-qloo-key-not-a-real-provider-secret"
+            route = urlsplit(url)
+            if route.path == "/search":
+                query = parse_qs(route.query)
+                name = query["query"][0]
+                self.searches.append(name)
+                body = {"success": True, "results": {"entities": [{
+                    "name": name,
+                    "entity_id": known[name],
+                    "type": "urn:entity",
+                    "subtype": query["types"][0],
+                }]}}
+            else:
+                self.ranks += 1
+                body = {"success": True, "results": {"entities": [
+                    {"entity_id": entity, "type": "urn:entity",
+                     "query": {"affinity": score, "explainability": {
+                         "signal.interests.entities": {},
+                     }}}
+                    for entity, score in ((brand_b, .9), (brand_a, .6))
+                ]}}
+            return TransportReply(200, json.dumps(body).encode())
+
+    class FakeModel:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            assert headers["x-goog-api-key"] == "private-gemini-key-not-real"
+            payload = json.loads(data)
+            schema = payload["generationConfig"]["responseJsonSchema"]
+            if "off_answer" in schema["properties"]:
+                text = {
+                    "off_answer": "Qloo ranks Brand B, but the proposal retained Brand A.",
+                    "on_answer": "With the same Qloo evidence, OFC revises to Brand B, pending review.",
+                }
+            else:
+                text = {
+                    "objective": "Check brand fit", "artist_name": "Artist Example",
+                    "budget_usd": None, "cities": [],
+                    "choices": [{
+                        "decision_id": "brand", "domain": "brand",
+                        "selected_name": "Brand A",
+                        "candidate_names": ["Brand A", "Brand B"],
+                        "mutable": True, "depends_on": [],
+                    }],
+                    "baseline_answer": "Brand A is proposed.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(text)}]},
+            }]}).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="integration-owner-secret-" + "x" * 42,
+    )
+    with pytest.raises(OwnerUnauthorized):
+        vault.login("wrong-owner")
+    owner = vault.login("integration-owner-secret-" + "x" * 42)
+    vault.configure(owner, "qloo", "private-qloo-key-not-a-real-provider-secret")
+    vault.configure(owner, "gemini", "private-gemini-key-not-real")
+    status = vault.status(private=True)
+    assert status["qloo"]["configured"] is True
+    assert status["qloo"]["masked_suffix"] == "cret"
+    assert status["qloo"]["status"] == "NOT_TESTED"
+    assert vault.status()["qloo"].get("masked_suffix") is None
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        ciphertext = bytes(db.execute(
+            "select ciphertext from ofc_private.copilot_credentials "
+            "where provider='qloo'"
+        ).fetchone()[0])
+        assert b"private-qloo-key-not-a-real-provider-secret" not in ciphertext
+
+    qloo, model = FakeQloo(), FakeModel()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=8,
+        browser_daily_limit=6, qloo_transport=qloo, model_transport=model,
+    )
+    assert runtime.capabilities()["qloo"] == "NOT_TESTED"
+    assert model.calls == qloo.ranks == len(qloo.searches) == 0
+
+    session = runtime.session()
+    report = runtime.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-idempotent-001", prompt="Find a great sponsor",
+    )
+    assert report["status"] == "REVIEW_REQUIRED"
+    assert report["off"]["qloo"] == report["on"]["qloo"]
+    assert report["off"]["ofc_enabled"] is False
+    assert report["on"]["ofc_enabled"] is True
+    assert report["off"]["decisions"][0]["candidate_id"] == "Brand A"
+    assert report["on"]["decisions"][0]["candidate_id"] == "Brand B"
+    assert report["on"]["changed_ids"] == ["brand"]
+    assert report["release_authorized"] is False
+    assert len(qloo.searches) == 3 and qloo.ranks == 2 and model.calls == 2
+    assert artist not in json.dumps(report)
+    assert brand_a not in json.dumps(report)
+    assert brand_b not in json.dumps(report)
+    assert "private-gemini-key-not-real" not in json.dumps(report)
+    assert "private-qloo-key-not-a-real-provider-secret" not in json.dumps(report)
+
+    copy = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=8,
+        browser_daily_limit=6, qloo_transport=qloo, model_transport=model,
+    )
+    assert copy.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-idempotent-001", prompt="Find a great sponsor",
+    ) == report
+    assert qloo.ranks == model.calls == 2 and len(qloo.searches) == 3
+    assert copy.messages(session["session_id"], session["ticket"])["messages"] == [report]
+    with pytest.raises(SessionDenied):
+        copy.messages(session["session_id"], "unauthorized-visitor-token")
+
+    vault.logout(owner)
+    with pytest.raises(OwnerUnauthorized):
+        vault.authorize(owner)
+    assert copy.capabilities()["llm"] == "NOT_TESTED"
+
+
+def test_hosted_copilot_credential_routes_and_csrf(pg_url):
+    from cryptography.fernet import Fernet
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.hosted_preview import HostedFixtureServer
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="http-owner-secret-" + "z" * 42,
+    )
+    server = HostedFixtureServer(
+        ("127.0.0.1", 0), build_sha="abc123d",
+        copilot=HostedCopilot(
+            store, vault, qloo_daily_limit=12, llm_daily_limit=8,
+            browser_daily_limit=8,
+        ),
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = "http://127.0.0.1:" + str(server.server_port)
+
+    def call(path, payload=None, *, cookie=None, origin=True):
+        method = "POST" if payload is not None else "GET"
+        headers = {}
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            if origin:
+                headers["Origin"] = base
+        if cookie:
+            headers["Cookie"] = cookie
+        request = Request(
+            base + path, method=method, headers=headers,
+            data=json.dumps(payload).encode() if payload is not None else None,
+        )
+        try:
+            with urlopen(request, timeout=12) as response:
+                return response.status, json.load(response), response.headers.get("Set-Cookie")
+        except HTTPError as error:
+            return error.code, json.load(error), error.headers.get("Set-Cookie")
+
+    try:
+        assert call("/api/capabilities")[1]["qloo"] == "NOT_CONFIGURED"
+        assert call("/api/owner/credentials")[0] == 403
+        assert call("/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}, origin=False)[0] == 403
+        status, value, cookie = call(
+            "/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}
+        )
+        assert status == 200 and value["authenticated"] is True
+        assert "HttpOnly" in cookie and "SameSite=Strict" in cookie
+        owner_cookie = cookie.split(";", 1)[0]
+        assert call("/api/owner/credentials", {
+            "action": "set", "provider": "gemini",
+            "api_key": "owner-test-credential-12345",
+        })[0] == 403
+        status, configured, _ = call(
+            "/api/owner/credentials", {
+                "action": "set", "provider": "gemini",
+                "api_key": "owner-test-credential-12345",
+            }, cookie=owner_cookie,
+        )
+        assert status == 200
+        assert configured["providers"]["gemini"]["masked_suffix"] == "2345"
+        assert "owner-test-credential-12345" not in json.dumps(configured)
+        status, visitors, visitor_cookie = call(
+            "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
+        )
+        assert status == 201 and visitors["session_id"].startswith("cp-")
+        visitor_cookie = visitor_cookie.split(";", 1)[0]
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            cookie=owner_cookie,
+        )[0] == 403
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            cookie=visitor_cookie,
+        )[0] == 200
+        assert call("/api/owner/logout", {}, cookie=owner_cookie)[0] == 200
+        assert call("/api/owner/credentials", cookie=owner_cookie)[0] == 403
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
