@@ -618,6 +618,11 @@ class HostedCopilot:
                     **pair.off["qloo"],
                     "catalog_observations": catalog_results,
                 }
+                if any(
+                    item["source_mode"] == "LIVE_HTTP_UNVERIFIED"
+                    for item in catalog_results
+                ):
+                    shared["source_mode"] = "LIVE_HTTP_UNVERIFIED"
                 shared["evidence_digest"] = digest_obj({
                     "original": pair.qloo_evidence_digest,
                     "catalog": catalog_results,
