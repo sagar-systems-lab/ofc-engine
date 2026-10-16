@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 from dataclasses import asdict
 import json
 import re
@@ -38,7 +39,7 @@ class BusinessProofIntake:
             raise ValueError("INVALID_TRUSTED_AUTHORITY")
         try:
             raw = base64.b64decode(public_key_b64, validate=True)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, binascii.Error):
             raise ValueError("INVALID_AUTHORITY_KEY") from None
         authority = TrustedAuthority(
             issuer=issuer, requirements=frozenset(requirements), public_key=raw,
@@ -133,7 +134,7 @@ class BusinessProofIntake:
 
     def attach(self, owner: str, *, run_id: str, proof: dict) -> dict:
         self.vault.authorize(owner)
-        if not isinstance(proof, dict) or len(json.dumps(proof)) > 16000:
+        if not isinstance(proof, dict) or len(json.dumps(proof)) > 7000:
             raise ValueError("INVALID_BUSINESS_PROOF")
         try:
             signed = SignedBusinessProof(**proof)
