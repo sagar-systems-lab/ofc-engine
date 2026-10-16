@@ -180,6 +180,7 @@ class CopilotHTTPMixin:
                 if set(data) not in (
                     {"request_id", "prompt"},
                     {"request_id", "prompt", "parent_run_id"},
+                    {"request_id", "prompt", "parent_run_id", "entity_selection_ref"},
                 ):
                     raise ValueError("INVALID_COPILOT_MESSAGE")
                 result = runtime.submit(
@@ -188,6 +189,7 @@ class CopilotHTTPMixin:
                     request_id=data["request_id"],
                     prompt=data["prompt"],
                     parent_run_id=data.get("parent_run_id"),
+                    entity_selection_ref=data.get("entity_selection_ref"),
                 )
                 self._copilot_reply(
                     202 if result.get("status") == "PROCESSING" else 200,
