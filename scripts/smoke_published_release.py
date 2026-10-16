@@ -105,8 +105,40 @@ def qualify(origin: str, expected_sha: str):
                             page.locator("#qloo-journey-next").press("Enter")
                     assert "HANDOFF BLOCKED" == page.locator(
                         "#view-plan .state-item").nth(2).locator("small").inner_text()
-                    assert not page.evaluate(
-                        "document.documentElement.scrollWidth > innerWidth + 1"
+                    overflow = page.evaluate("""() => {
+                        const width = innerWidth;
+                        const documentWidth = document.documentElement.scrollWidth;
+                        const candidates = [...document.querySelectorAll('*')]
+                          .filter(el => {
+                            const style = getComputedStyle(el);
+                            if (style.display === 'none' || style.visibility === 'hidden')
+                              return false;
+                            const rect = el.getBoundingClientRect();
+                            return rect.width > 0 && rect.right > width + 1;
+                          })
+                          .map(el => {
+                            const rect = el.getBoundingClientRect();
+                            return {
+                              tag: el.tagName.toLowerCase(),
+                              id: el.id || null,
+                              className: typeof el.className === 'string'
+                                ? el.className.slice(0, 110) : '',
+                              left: Math.round(rect.left),
+                              right: Math.round(rect.right),
+                              width: Math.round(rect.width),
+                              scrollWidth: el.scrollWidth
+                            };
+                          });
+                        candidates.sort((a, b) => b.right - a.right);
+                        return {
+                          viewport: width, scrollWidth: documentWidth,
+                          overflow: documentWidth > width + 1,
+                          offenders: candidates.slice(0, 12)
+                        };
+                    }""")
+                    assert not overflow["overflow"], (
+                        "published tour horizontal overflow: " +
+                        json.dumps(overflow, sort_keys=True)
                     )
                     page.reload(wait_until="domcontentloaded")
                     page.locator("#start-qloo-journey").wait_for(state="visible")
