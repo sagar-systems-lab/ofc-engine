@@ -1065,6 +1065,17 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
 
     try:
         assert call("/api/capabilities")[1]["qloo"] == "NOT_CONFIGURED"
+        with urlopen(base + "/connect", timeout=12) as portal:
+            html = portal.read().decode()
+            assert portal.status == 200
+            assert "API Connectivity" in html
+            assert 'id="owner-secret"' in html
+            assert "private-gemini-key-not-real" not in html
+        with urlopen(base + "/connect.js", timeout=12) as bundle:
+            script = bundle.read().decode()
+            assert bundle.status == 200
+            assert "SPEND_ONE_PROVIDER_REQUEST" in script
+            assert "localStorage" not in script
         assert call("/api/owner/credentials")[0] == 403
         assert call("/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}, origin=False)[0] == 403
         status, value, cookie = call(
@@ -1093,6 +1104,11 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         visitor_cookie = visitor_cookie.split(";", 1)[0]
         assert call(
             "/api/copilot/sessions/" + visitors["session_id"],
+            cookie=owner_cookie,
+        )[0] == 403
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"] + "/messages",
+            {"request_id": "example-prompt-001", "prompt": "Choose brands"},
             cookie=owner_cookie,
         )[0] == 403
         assert call(
