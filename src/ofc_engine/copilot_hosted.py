@@ -344,9 +344,33 @@ class HostedCopilot:
             ],
         }
 
+    def _run_usage(self, run_id: str) -> dict:
+        with self.store._connect() as db:
+            searches = db.execute(
+                "select count(*) from ofc_private.copilot_search where run_id=%s",
+                (run_id,),
+            ).fetchone()[0]
+            insights = db.execute(
+                "select count(*) from ofc_private.dynamic_qloo_attempts "
+                "where plan_id=%s", (run_id,),
+            ).fetchone()[0]
+            model = db.execute(
+                "select llm_attempts from ofc_private.copilot_messages "
+                "where run_id=%s", (run_id,),
+            ).fetchone()
+        if model is None:
+            raise StorageIntegrityError("missing Copilot request admission")
+        return {
+            "qloo_search_requests": searches,
+            "qloo_rank_requests": insights,
+            "qloo_requests_this_run": searches + insights,
+            "llm_requests_this_run": model[0],
+        }
+
     def _needs_input(self, run_id: str, draft, model_id: str, *,
                      status: str, reason: str, question: str) -> dict:
         result = {
+            "schema_version": "copilot.v1",
             "run_id": run_id,
             "status": status,
             "reason_code": reason,
@@ -357,6 +381,7 @@ class HostedCopilot:
             "ofc_review_completed": False,
             "release_authorized": False,
             "external_action_executed": False,
+            **self._run_usage(run_id),
         }
         self._complete(run_id, result)
         return result
@@ -376,7 +401,9 @@ class HostedCopilot:
         if cached is not None:
             return cached
         try:
-            reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
+            reserve_model_call(
+                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+            )
             draft = model.extract(prompt)
             if not draft.choices:
                 return self._needs_input(
@@ -435,25 +462,24 @@ class HostedCopilot:
                 prompt=prompt, model_id=model.model,
                 baseline=baseline, reviewed=reviewed, evaluated=evaluated,
             )
-            reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
+            reserve_model_call(
+                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+            )
             words = model.narrate_pair(pair, prompt=prompt)
-            with self.store._connect() as db:
-                lookup_count = db.execute(
-                    "select count(*) from ofc_private.copilot_search "
-                    "where run_id=%s", (run_id,),
-                ).fetchone()[0]
             result = {
                 **self._public_pair(pair, draft, brands, artist),
+                "schema_version": "copilot.v1",
+                "session_id": session_id,
+                "request_id": request_id,
+                "journal_head": evaluated["journal_head"],
+                "revision": evaluated["revision"],
+                "rank_evidence_rechecked": evaluated["rank_evidence_rechecked"],
+                "full_plan_independently_verified": False,
                 "plan": self._draft_plan_projection(draft),
                 "status": "REVIEW_REQUIRED",
                 "original_answer": words.off_answer,
                 "ofc_answer": words.on_answer,
-                "qloo_requests_this_run": (
-                    lookup_count + evaluated["new_qloo_requests"]
-                ),
-                "qloo_search_requests": lookup_count,
-                "qloo_rank_requests": evaluated["new_qloo_requests"],
-                "llm_requests_this_run": 2,
+                **self._run_usage(run_id),
                 "release_authorized": False,
                 "external_action_executed": False,
             }
@@ -474,9 +500,11 @@ class HostedCopilot:
             }
             safe = code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
             result = {
+                "schema_version": "copilot.v1",
                 "run_id": run_id, "status": "BLOCKED", "reason_code": safe,
                 "model_id": model.model, "release_authorized": False,
                 "external_action_executed": False,
+                **self._run_usage(run_id),
             }
             self._complete(run_id, result, blocked=True)
             return result
