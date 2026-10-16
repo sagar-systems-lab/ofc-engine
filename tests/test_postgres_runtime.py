@@ -1006,10 +1006,12 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     with pytest.raises(SessionDenied):
         copy.messages(session["session_id"], "unauthorized-visitor-token")
 
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
-    assert copy.capabilities()["llm"] == "NOT_TESTED"
+    assert copy.capabilities()["llm"] == "NOT_CONFIGURED"
 
 
 def test_hosted_copilot_credential_routes_and_csrf(pg_url):
