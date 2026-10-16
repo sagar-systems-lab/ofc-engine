@@ -150,6 +150,7 @@
     progress.setAttribute("aria-live", "polite");
     const body = document.createElement("div");
     body.id = "qloo-journey-body";
+    body.style.overflowWrap = "anywhere";
     body.setAttribute("aria-live", "polite");
     const navigation = document.createElement("div");
     navigation.className = "editor-actions";
