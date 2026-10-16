@@ -1,7 +1,6 @@
 """One prompt → one saved Qloo-backed OFF/ON Copilot transaction, no duplicate calls."""
-from datetime import datetime, timezone
 import json
-from uuid import uuid4
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -10,8 +9,9 @@ from ofc_engine.copilot_service import (
     CopilotRunConflict, CopilotRunReserved, LocalCopilotService,
 )
 from ofc_engine.dynamic import DynamicQlooReview
+from ofc_engine.copilot_search import BudgetedQlooResolver
 from ofc_engine.durable import SQLiteRevisionStore
-from ofc_engine.qloo import QlooProbeClient, ProbeObservation, TransportReply, search_probe
+from ofc_engine.qloo import QlooProbeClient, TransportReply
 
 ART = "0a0a0a0a-0000-4000-8000-000000000001"
 A = "0a0a0a0a-0000-4000-8000-000000000002"
@@ -62,30 +62,25 @@ class FakeModel:
         return JSONReply(200, json.dumps(envelope).encode())
 
 
-class FakeSearch:
-    def __init__(self):
-        self.calls = []
-
-    def __call__(self, name, kind):
-        self.calls.append((name, kind))
-        spec = search_probe(name, entity_type="urn:entity:" + kind)
-        return ProbeObservation(
-            path="/search", query_fingerprint=spec.fingerprint,
-            utc_collected_at=datetime.now(timezone.utc).isoformat(),
-            duration_ms=1, http_status=200,
-            top_level_fields=("results", "success"),
-            payload={"success": True, "results": {"entities": [{
-                "name": name, "entity_id": IDS[name],
-                "type": "urn:entity", "subtype": "urn:entity:" + kind,
-            }]}},
-        )
-
-
 class FakeAffinity:
     def __init__(self):
         self.calls = 0
+        self.search_calls = []
 
     def get(self, url, headers, *, timeout, max_bytes):
+        route = urlsplit(url)
+        if route.path == "/search":
+            query = parse_qs(route.query)
+            name = query["query"][0]
+            kind = query["types"][0]
+            self.search_calls.append((name, kind))
+            return TransportReply(200, json.dumps({
+                "success": True,
+                "results": {"entities": [{
+                    "name": name, "entity_id": IDS[name],
+                    "type": "urn:entity", "subtype": kind,
+                }]},
+            }).encode())
         self.calls += 1
         return TransportReply(200, json.dumps({
             "success": True, "results": {"entities": [
@@ -98,23 +93,24 @@ class FakeAffinity:
         }).encode())
 
 
-def setup(tmp_path, *, model=None, qloo=None, search=None):
+def setup(tmp_path, *, model=None, qloo=None, qloo_limit=16, llm_limit=8):
     model = model or FakeModel()
     qloo = qloo or FakeAffinity()
-    search = search or FakeSearch()
     store = SQLiteRevisionStore(tmp_path / "copilot.sqlite3")
     flow = DynamicQlooReview(
-        store, QlooProbeClient(api_key="test-qloo", transport=qloo), daily_limit=8,
+        store, QlooProbeClient(api_key="test-qloo", transport=qloo),
+        daily_limit=qloo_limit,
     )
     service = LocalCopilotService(
         llm=CopilotLLM(provider="gemini", api_key="test-model", transport=model),
-        engine=flow, search=search,
+        engine=flow, resolver=BudgetedQlooResolver(flow),
+        llm_daily_limit=llm_limit,
     )
-    return service, model, qloo, search
+    return service, model, qloo
 
 
 def test_real_contract_with_injected_apis_and_durable_replay(tmp_path):
-    service, model, qloo, search = setup(tmp_path)
+    service, model, qloo = setup(tmp_path)
     answer = service.submit(
         run_id="visitor-1", request_id="req-1",
         prompt="Find a culturally aligned sponsor",
@@ -131,18 +127,18 @@ def test_real_contract_with_injected_apis_and_durable_replay(tmp_path):
     assert answer["release_authorized"] is False
     assert answer["external_action_executed"] is False
     assert answer["qloo_requests_this_run"] == 2
-    assert len(search.calls) == 3
+    assert len(qloo.search_calls) == 3
     assert qloo.calls == 2
     assert model.calls == 2
 
     # Same job ID uses the saved immutable output even after service restart.
-    again, new_model, new_qloo, new_search = setup(tmp_path)
+    again, new_model, new_qloo = setup(tmp_path)
     cached = again.submit(
         run_id="visitor-1", request_id="req-1",
         prompt="Find a culturally aligned sponsor",
     )
     assert cached == answer
-    assert new_model.calls == new_qloo.calls == len(new_search.calls) == 0
+    assert new_model.calls == new_qloo.calls == len(new_qloo.search_calls) == 0
     with pytest.raises(CopilotRunConflict):
         again.submit(
             run_id="visitor-1", request_id="req-1",
@@ -151,7 +147,7 @@ def test_real_contract_with_injected_apis_and_durable_replay(tmp_path):
 
 
 def test_new_visitor_gets_own_frozen_scope(tmp_path):
-    service, model, qloo, search = setup(tmp_path)
+    service, model, qloo = setup(tmp_path)
     one = service.submit(
         run_id="visitor-1", request_id="request-1", prompt="Find a sponsor"
     )
@@ -160,11 +156,11 @@ def test_new_visitor_gets_own_frozen_scope(tmp_path):
     )
     assert one["run_id"] != other["run_id"]
     assert one["baseline_digest"] != other["baseline_digest"]
-    assert model.calls == 4 and qloo.calls == 4 and len(search.calls) == 6
+    assert model.calls == 4 and qloo.calls == 4 and len(qloo.search_calls) == 6
 
 
 def test_failed_inference_cannot_respend_by_retry(tmp_path):
-    service, model, qloo, search = setup(tmp_path, model=FakeModel(fail=True))
+    service, model, qloo = setup(tmp_path, model=FakeModel(fail=True))
     with pytest.raises(LLMUnavailable):
         service.submit(
             run_id="unstable", request_id="id", prompt="Make me a proposal"
@@ -174,4 +170,4 @@ def test_failed_inference_cannot_respend_by_retry(tmp_path):
             run_id="unstable", request_id="id", prompt="Make me a proposal"
         )
     assert model.calls == 1
-    assert qloo.calls == len(search.calls) == 0
+    assert qloo.calls == len(qloo.search_calls) == 0
