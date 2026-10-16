@@ -1,0 +1,11 @@
+# Taste intelligence contract (F1)
+
+The hosted Copilot supports two explicit input paths: a typed list of 2–5 user-supplied candidates, or a **candidate-free** proposal specifying `discovery_category` plus `taste_seed_name` and `taste_seed_category`. Artist remains the historical default seed where `artist_name` is given. Candidate-free discovery uses one Qloo `/v2/insights` request without `filter.results.entities`; every network request is reserved against the same PostgreSQL Qloo daily budget. A named seed is first resolved by a separate, budgeted Qloo `/search`.
+
+Discovery response must have 2–5 unique ranked entities, finite distinct affinity values, names, UUID identifiers and the original request fingerprint. Provider-affinity explainability is allowed only when supplied as bounded numeric source weights. Missing explainability is not filled in by the LLM. Repeated requests replay the saved evidence with **zero** additional provider calls.
+
+A typed `TasteContext` may anchor discovery to a Qloo artist, movie, brand or another documented entity category. The only initial bounded geographic modifier is `filter.location.query` when the **target** is a place. General city budgets and locality effects on brand ranking are not silently applied. Qloo category schema availability is not evidence of observed compatibility with every user key or parameter combination; this remains a separately approved live-provider qualification gate.
+
+For an artist→brand discovery, the existing two-observation rank checker still determines whether a *candidate decision* is eligible for OFC policy status. For other pairs, results are `OBSERVED_NOT_POLICY_QUALIFIED` and OFC leaves the recommendation unchanged. In both modes, source Qloo observations are identical; OFC never asserts venue availability, rights, demographics or commercial outcomes based on affinity alone.
+
+The returned `taste_policy` and `native_discovery` projections support the final single-screen UI without another backend API design pass. Frontend client connections and backend activation are not part of F1. Official contract references: https://github.com/qloo/docs-public/blob/main/reference/api-overview.md and https://github.com/qloo/docs-public/blob/main/reference/insights-api-deep-dive.md.

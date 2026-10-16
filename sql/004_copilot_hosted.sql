@@ -56,6 +56,14 @@ create table if not exists ofc_private.copilot_domain_observations (
     primary key(run_id,decision_id)
 );
 
+create table if not exists ofc_private.copilot_discoveries (
+    run_id text primary key references ofc_private.copilot_messages(run_id),
+    fingerprint text not null,
+    state text not null check(state in ('RESERVED','COMPLETE')),
+    result text,
+    result_digest text
+);
+
 create table if not exists ofc_private.copilot_llm_budget (
     id smallint primary key check(id=1),
     utc_day date not null,
@@ -99,6 +107,7 @@ alter table ofc_private.copilot_sessions enable row level security;
 alter table ofc_private.copilot_messages enable row level security;
 alter table ofc_private.copilot_search enable row level security;
 alter table ofc_private.copilot_domain_observations enable row level security;
+alter table ofc_private.copilot_discoveries enable row level security;
 alter table ofc_private.copilot_llm_budget enable row level security;
 alter table ofc_private.copilot_credentials enable row level security;
 alter table ofc_private.copilot_owner_sessions enable row level security;
@@ -110,6 +119,7 @@ revoke all on
     ofc_private.copilot_messages,
     ofc_private.copilot_search,
     ofc_private.copilot_domain_observations,
+    ofc_private.copilot_discoveries,
     ofc_private.copilot_llm_budget,
     ofc_private.copilot_credentials,
     ofc_private.copilot_owner_sessions,
