@@ -751,3 +751,102 @@ def test_public_six_decision_tour_freezes_scope_and_requires_operator_for_qloo(
         configured_live_review({
             **environment, "OFC_HOSTED_QLOO_ARTIST_ID": "other-artist"
         })
+
+
+def test_dynamic_postgres_qloo_budget_and_authenticated_hosted_api(pg_url):
+    from threading import Thread
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from ofc_engine.dynamic_postgres import PostgresDynamicQlooReview
+    from ofc_engine.hosted_preview import HostedFixtureServer
+    from ofc_engine.qloo import TransportReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute(
+            (Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text()
+        )
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+
+    class Transport:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.calls += 1
+            assert "filter.type=urn%3Aentity%3Abrand" in url
+            payload = {"success": True, "results": {"entities": [
+                {"entity_id": "brand-b", "type": "urn:entity",
+                 "query": {"affinity": 0.9, "explainability": {"signal.interests.entities": {}}}},
+                {"entity_id": "brand-a", "type": "urn:entity",
+                 "query": {"affinity": 0.6, "explainability": {"signal.interests.entities": {}}}},
+                {"entity_id": "brand-c", "type": "urn:entity",
+                 "query": {"affinity": 0.3, "explainability": {"signal.interests.entities": {}}}},
+            ]}}
+            return TransportReply(200, json.dumps(payload).encode())
+
+    client_transport = Transport()
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    flow = PostgresDynamicQlooReview(
+        store, QlooProbeClient(api_key="fake-local-only", transport=client_transport),
+        daily_limit=3,
+    )
+    proposal = plan_for_test()
+    response = flow.evaluate(proposal)
+    assert response["revision"] == 1
+    assert response["new_qloo_requests"] == 2
+    assert response["changed_ids"] == ["brand"]
+    assert response["decisions"][0]["rank_recheck_completed"] is True
+    assert response["provider_authenticated"] is False
+    assert response["full_plan_independently_verified"] is False
+    assert flow.evaluate(proposal)["new_qloo_requests"] == 0
+    assert client_transport.calls == 2
+
+    token = "hosted-test-" + "x" * 40
+    server = HostedFixtureServer(
+        ("127.0.0.1", 0), build_sha="abc123d",
+        dynamic_review=flow, dynamic_token=token,
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = "http://127.0.0.1:" + str(server.server_port) + "/api/agent/evaluate"
+
+    def request(value, *, supplied=token, origin=None):
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + supplied,
+        }
+        if origin:
+            headers["Origin"] = origin
+        req = Request(endpoint, method="POST", headers=headers,
+                      data=value.model_dump_json().encode())
+        try:
+            with urlopen(req, timeout=10) as answer:
+                return answer.status, json.load(answer)
+        except HTTPError as exc:
+            return exc.code, json.load(exc)
+
+    try:
+        assert request(proposal, supplied="wrong")[0] == 403
+        assert request(proposal, origin="https://example.com")[0] == 403
+        status, replay = request(proposal)
+        assert status == 200
+        assert replay["new_qloo_requests"] == 0
+        assert client_transport.calls == 2
+        # A second customer is not bound to the first customer's fixed scope.
+        other = plan_for_test()
+        another = other.intent.model_copy(update={
+            "run_id": "dynamic-" + uuid4().hex,
+            "client_request_id": "dynamic-" + uuid4().hex,
+        })
+        other = other.model_copy(update={"intent": another})
+        code, next_run = request(other)
+        assert code == 200
+        assert next_run["new_qloo_requests"] == 1
+        assert next_run["decisions"][0]["reason_code"] == "DAILY_QLOO_BUDGET_EXHAUSTED"
+        assert next_run["release_authorized"] is False
+        assert client_transport.calls == 3
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
