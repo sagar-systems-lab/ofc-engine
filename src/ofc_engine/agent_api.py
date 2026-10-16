@@ -18,6 +18,8 @@ from .durable import SQLiteRevisionStore, StorageIntegrityError
 from .qloo_agent_bridge import AgentEvidenceRejected
 from .qloo_affinity import AffinityCaptureError
 from .intake import AgentProposal, ProposalConflict, accept_proposal
+from .dynamic import DynamicQlooReview, DynamicScopeConflict
+from .qloo import QlooProbeClient
 from .revisions import plan_digest
 
 _MAX_BODY = 96 * 1024
@@ -137,7 +139,7 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self._authorize():
             return
-        if self.path != "/api/proposals":
+        if self.path not in ("/api/proposals", "/api/proposals/evaluate"):
             self._deny(405, "METHOD_NOT_ALLOWED")
             return
         if self.headers.get("Transfer-Encoding") is not None:
@@ -156,7 +158,17 @@ class AgentAPIHandler(BaseHTTPRequestHandler):
             return
         try:
             proposal = AgentProposal.model_validate_json(self.rfile.read(length))
+            if self.path == "/api/proposals/evaluate":
+                if self.server.dynamic_review is None:
+                    self._deny(405, "DYNAMIC_QLOO_DISABLED")
+                    return
+                result = self.server.dynamic_review.evaluate(proposal)
+                self._reply(200, result)
+                return
             receipt = accept_proposal(self.server.store, proposal)
+        except DynamicScopeConflict:
+            self._deny(409, "DYNAMIC_SCOPE_CONFLICT")
+            return
         except (ValidationError, ValueError, TypeError):
             self._deny(400, "INVALID_PROPOSAL")
             return
@@ -187,7 +199,9 @@ class AgentAPIServer(ThreadingHTTPServer):
     request_queue_size = 16
 
     def __init__(self, address: tuple[str, int], *, database: str, auth_token: str,
-                 evidence_session: OperatorEvidenceSession | None = None) -> None:
+                 evidence_session: OperatorEvidenceSession | None = None,
+                 dynamic_api_key: str | None = None, dynamic_daily_limit: int = 0,
+                 dynamic_transport=None) -> None:
         if address[0] != "127.0.0.1":
             raise ValueError("agent API must bind to IPv4 loopback")
         if (
@@ -201,6 +215,18 @@ class AgentAPIServer(ThreadingHTTPServer):
         if evidence_session is not None:
             evidence_session.snapshot(self.store, evidence_session.proposal.intent.run_id)
         self.evidence_session = evidence_session
+        if dynamic_daily_limit:
+            if not dynamic_api_key:
+                raise ValueError("dynamic Qloo requires an operator-owned API key")
+            self.dynamic_review = DynamicQlooReview(
+                self.store,
+                QlooProbeClient(api_key=dynamic_api_key, transport=dynamic_transport),
+                daily_limit=dynamic_daily_limit,
+            )
+        else:
+            if dynamic_api_key:
+                raise ValueError("dynamic Qloo requires an explicit daily budget")
+            self.dynamic_review = None
         self.auth_token = auth_token
         super().__init__(address, AgentAPIHandler)
 
@@ -227,9 +253,23 @@ def main(argv: list[str] | None = None) -> None:
         age_hours=args.age_hours,
     ) if args.operator_proposal is not None else None
     token = os.environ.get("OFC_AGENT_TOKEN", "")
+    mode = os.environ.get("OFC_DYNAMIC_QLOO_MODE", "")
+    if mode not in ("", "OPERATOR_BUDGETED"):
+        parser.error("unrecognized dynamic Qloo mode")
+    try:
+        daily_limit = int(os.environ.get("OFC_DYNAMIC_QLOO_DAILY_LIMIT", "0"))
+    except ValueError:
+        parser.error("dynamic Qloo daily limit must be an integer")
+    if mode == "OPERATOR_BUDGETED":
+        if not 1 <= daily_limit <= 64 or not os.environ.get("QLOO_API_KEY"):
+            parser.error("dynamic Qloo requires QLOO_API_KEY and a 1–64 daily request limit")
+    elif daily_limit:
+        parser.error("daily request limit requires OPERATOR_BUDGETED mode")
     with AgentAPIServer(
         ("127.0.0.1", args.port), database=args.database,
         auth_token=token, evidence_session=session,
+        dynamic_api_key=os.environ.get("QLOO_API_KEY") if mode else None,
+        dynamic_daily_limit=daily_limit,
     ) as server:
         print(f"Agent API listening at http://127.0.0.1:{server.server_port}", flush=True)
         server.serve_forever()
