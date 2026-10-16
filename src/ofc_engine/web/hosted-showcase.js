@@ -84,7 +84,8 @@
           decision.verdict === "PASS" ? "RANK PASS" : decision.verdict;
         decisions.append(item("li", decision.decision_id + ": " +
           verdict + (decision.changed ? " · REPAIRED" : " · UNCHANGED") +
-          (decision.pending_recheck ? " · RECHECK PENDING" : "")));
+          (run.pending_rechecks.includes(decision.decision_id) ?
+            " · RECHECK PENDING" : "")));
       }
       const boundary = item("p",
         "Dependent checks invalidated: " + run.invalidated_ids.join(", ") +
