@@ -7,7 +7,7 @@ name = "ofc-engine"
 version = "0.0.1"
 description = "Pre-execution cultural decision layer — key-independent contracts foundation"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.10,<3", "psycopg[binary]>=3.2,<4"]
+dependencies = ["pydantic>=2.10,<3", "psycopg[binary]>=3.2,<4", "cryptography>=43,<47"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
