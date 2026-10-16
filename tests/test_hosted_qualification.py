@@ -64,6 +64,17 @@ def test_expected_build_identity_mismatch_fails():
             probe.qualify(url, expected_sha='ff120aa')
 
 
+def test_published_mode_is_explicit_and_cannot_pass_a_synthetic_host():
+    probe = _load_smoke()
+    with preview() as url:
+        with pytest.raises(probe.SmokeFailure, match="provenance"):
+            probe.qualify(url, expected_sha="abc123d",
+                          expected_mode="PUBLIC_REDACTED_QLOO_REVIEW")
+        assert probe.qualify(url, expected_sha="abc123d")["mode"] == "SYNTHETIC"
+    with pytest.raises(ValueError, match="expected"):
+        probe.qualify("https://preview.onrender.com", expected_mode="UNKNOWN")
+
+
 def test_bounded_wake_wait_and_hash_validation():
     probe = _load_smoke()
     with pytest.raises(ValueError):
@@ -120,3 +131,5 @@ def test_local_and_hosted_browser_gates_are_separate():
     assert 'python scripts/smoke_hosted.py' in hosted
     assert 'python scripts/browser_smoke.py --base-url "$DEPLOY_URL"' in hosted
     assert 'python scripts/accessibility_smoke.py --base-url "$DEPLOY_URL"' in hosted
+    assert '--expected-mode PUBLIC_REDACTED_QLOO_REVIEW' in hosted
+    assert 'python scripts/smoke_published_release.py' in hosted
