@@ -179,6 +179,36 @@ def browser_test(origin):
                     assert page.locator("#start-hosted-tour").is_hidden()
                     launch.focus()
                     launch.press("Enter")
+                    copilot = page.locator("#qloo-copilot")
+                    assert copilot.is_visible()
+                    assert page.locator("#qloo-copilot-off").get_attribute(
+                        "aria-pressed") == "true"
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "UNCERTAIN"
+                    assert "I will not guess" in page.locator(
+                        "#qloo-copilot-thread").inner_text()
+                    page.locator("#qloo-copilot-on").focus()
+                    page.locator("#qloo-copilot-on").press("Enter")
+                    assert page.locator("#qloo-copilot-on").get_attribute(
+                        "aria-pressed") == "true"
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "REPAIR"
+                    assert "option 1 → 2 of 3" in page.locator(
+                        "#qloo-copilot-choice").inner_text()
+                    assert "five other selections stay as proposed" in page.locator(
+                        "#qloo-copilot-thread").inner_text()
+                    assert "HANDOFF WITHHELD" in page.locator(
+                        "#qloo-copilot-safety").inner_text()
+                    assert not page.evaluate(
+                        "document.documentElement.scrollWidth > innerWidth + 1"
+                    ), "copilot ON caused horizontal overflow"
+                    page.locator("#qloo-copilot-off").click()
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "UNCERTAIN"
+                    page.locator("#qloo-copilot-on").click()
+                    page.locator("#toggle-qloo-copilot").click()
+                    assert copilot.is_hidden()
+                    assert page.locator("#toggle-qloo-copilot").get_attribute(
+                        "aria-expanded") == "false"
+                    page.locator("#toggle-qloo-copilot").click()
+                    assert copilot.is_visible()
                     stages = (
                         ("01 / PROPOSE", "$60,000"),
                         ("02 / QLOO CHECK", "Qloo OFF"),
@@ -217,6 +247,8 @@ def browser_test(origin):
                     ), "horizontal overflow"
                     assert not errors, errors
                     assert not outgoing, outgoing
+                    assert page.locator("#qloo-copilot-on").get_attribute(
+                        "aria-pressed") == "true"
                     assert page.evaluate(
                         "window.matchMedia('(prefers-reduced-motion: reduce)').matches"
                     )
