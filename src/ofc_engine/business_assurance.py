@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from hashlib import sha256
 import base64
-import json
 from typing import Mapping
 
 from cryptography.exceptions import InvalidSignature
@@ -186,7 +184,12 @@ def assess_business_readiness(
         decision_id: sorted(set(requirements) - fulfilled[decision_id])
         for decision_id, requirements in required.items()
     }
-    clean = not any(missing.values()) and invalid_claims == 0
+    for decision_id in known_decisions - set(required):
+        missing[decision_id] = ["UNQUALIFIED_DECISION_DOMAIN"]
+    for decision_id, requirements in required.items():
+        if not requirements:
+            missing[decision_id] = ["BUSINESS_REQUIREMENT_POLICY_MISSING"]
+    clean = bool(known_decisions) and not any(missing.values()) and invalid_claims == 0
     # Even complete verified inputs do not execute or release a third-party action.
     return {
         "status": "BUSINESS_EVIDENCE_COMPLETE" if clean else "REVIEW_REQUIRED",
