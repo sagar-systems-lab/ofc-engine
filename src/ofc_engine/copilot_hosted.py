@@ -394,8 +394,46 @@ class HostedCopilot:
             if cursor.rowcount != 1:
                 raise StorageIntegrityError("Copilot result reservation lost")
 
+    def _selected_model(self) -> str:
+        statuses = self.vault.status()
+        if statuses["gemini"]["status"] == "ACTIVE":
+            return "gemini"
+        if statuses["groq"]["status"] == "ACTIVE":
+            return "groq"
+        return "gemini" if statuses["gemini"]["configured"] else "groq"
+
+    def _capacity(self, *, required_llm: int = 0, required_qloo: int = 0) -> dict:
+        with self.store._connect() as db:
+            llm = db.execute(
+                "select utc_day,reserved from ofc_private.copilot_llm_budget "
+                "where id=1"
+            ).fetchone()
+            qloo = db.execute(
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget "
+                "where id=1"
+            ).fetchone()
+        if not llm or not qloo:
+            raise StorageIntegrityError("provider request budgets missing")
+        today = datetime.now(timezone.utc).date()
+        model_remaining = max(
+            0, self.llm_daily_limit - (llm[1] if llm[0] == today else 0)
+        )
+        qloo_remaining = max(
+            0, self.qloo_daily_limit - (qloo[1] if qloo[0] == today else 0)
+        )
+        if model_remaining < required_llm:
+            raise CopilotQuotaReached("LLM_DAILY_QUOTA_EXHAUSTED")
+        if qloo_remaining < required_qloo:
+            raise CopilotQuotaReached("QLOO_DAILY_QUOTA_EXHAUSTED")
+        return {
+            "qloo_requests_remaining": qloo_remaining,
+            "llm_requests_remaining": model_remaining,
+            "llm_comparison_ready": model_remaining >= 3,
+            "utc_day": str(today),
+        }
+
     def _model(self):
-        selected = "gemini" if self.vault.read_for_server("gemini") else "groq"
+        selected = self._selected_model()
         key = self.vault.read_for_server(selected)
         if key is None:
             raise ValueError("LLM_NOT_CONFIGURED")
@@ -545,6 +583,7 @@ class HostedCopilot:
         if cached is not None:
             return cached
         try:
+            self._capacity(required_llm=3)
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
@@ -891,9 +930,8 @@ class HostedCopilot:
 
     def capabilities(self) -> dict:
         statuses = self.vault.status()
-        model = statuses["gemini"]
-        if model["status"] == "NOT_CONFIGURED":
-            model = statuses["groq"]
+        chosen = self._selected_model()
+        model = statuses[chosen]
         with self.store._connect() as db:
             db.execute("select 1")
         qloo_state = statuses["qloo"]["status"]
@@ -912,6 +950,8 @@ class HostedCopilot:
             "qloo": qloo_state,
             "llm": model_state,
             "product": product_state,
+            "selected_llm_provider": chosen,
+            "capacity": self._capacity(),
             "qloo_catalog": capability_registry(),
             "release_authorized": False,
         }
