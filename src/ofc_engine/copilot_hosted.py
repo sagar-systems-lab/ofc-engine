@@ -17,14 +17,15 @@ from .copilot_hosted_quota import (
     CopilotQuotaReached, HostedQlooResolver,
     reserve_model_call, reserve_qloo_request,
 )
-from .copilot_intake import EntityResolutionRequired, QlooSelectionRequired, draft_plan
-from .copilot_llm import CopilotLLM, LLMUnavailable
+from .copilot_intake import EntityResolutionRequired, QlooSelectionRequired, ResolvedEntity, draft_plan
+from .copilot_llm import CopilotDraft, DraftChoice, CopilotLLM, LLMUnavailable
 from .dynamic_postgres import PostgresDynamicQlooReview
 from .durable import StorageIntegrityError
 from .intake import freeze_proposal
 from .postgres_store import PostgresRevisionStore
 from .qloo import QlooProbeClient, QlooProbeError, search_probe
 from .qloo_catalog import capability_registry, category_for
+from .taste_intelligence import TasteContext, policy_for
 from .revisions import digest_obj
 
 
@@ -436,6 +437,10 @@ class HostedCopilot:
                 "select count(*) from ofc_private.copilot_domain_observations "
                 "where run_id=%s", (run_id,),
             ).fetchone()[0]
+            discovered = db.execute(
+                "select count(*) from ofc_private.copilot_discoveries "
+                "where run_id=%s", (run_id,),
+            ).fetchone()[0]
             model = db.execute(
                 "select llm_attempts from ofc_private.copilot_messages "
                 "where run_id=%s", (run_id,),
@@ -446,7 +451,8 @@ class HostedCopilot:
             "qloo_search_requests": searches,
             "qloo_rank_requests": insights + catalog,
             "qloo_catalog_requests": catalog,
-            "qloo_requests_this_run": searches + insights + catalog,
+            "qloo_discovery_requests": discovered,
+            "qloo_requests_this_run": searches + insights + catalog + discovered,
             "llm_requests_this_run": model[0],
         }
 
@@ -501,6 +507,58 @@ class HostedCopilot:
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
             draft = model.extract(prompt, prior_plan=prior_plan)
+            native_discovery = None
+            discovered_ids = {}
+            context = None
+            seed_name = draft.taste_seed_name or draft.artist_name
+            seed_category = draft.taste_seed_category or "artist"
+            if not draft.choices and draft.discovery_category:
+                if not seed_name:
+                    return self._needs_input(
+                        run_id, draft, model.model,
+                        status="CLARIFICATION_REQUIRED",
+                        reason="TASTE_SEED_REQUIRED",
+                        question="Which existing artist, brand, movie or place should anchor the recommendations?",
+                    )
+                context = TasteContext(
+                    seed_name=seed_name, seed_category=seed_category,
+                    target_category=category_for(draft.discovery_category),
+                    location=draft.taste_location,
+                )
+                reviewer = self._reviewer()
+                resolver = HostedQlooResolver(reviewer)
+                seed = resolver.resolve(
+                    run_id=run_id, name=seed_name, kind=seed_category,
+                    selection_ref=entity_selection_ref,
+                )
+                native_discovery = HostedDomainObservations(reviewer).discover(
+                    run_id=run_id, context=context, seed_id=seed.entity_id,
+                )
+                if native_discovery.get("status") != "CULTURAL_CANDIDATES_OBSERVED":
+                    return self._needs_input(
+                        run_id, draft, model.model,
+                        status="CAPABILITY_UNAVAILABLE",
+                        reason=native_discovery.get(
+                            "reason_code", "QLOO_DISCOVERY_UNAVAILABLE"
+                        ),
+                        question="Qloo could not return a qualifying candidate shortlist.",
+                    )
+                candidates = native_discovery["candidates"]
+                discovered_ids = {item["name"]: item["entity_id"] for item in candidates}
+                discovered_choice = DraftChoice(
+                    decision_id="taste_recommendation",
+                    domain=context.target_category,
+                    selected_name=candidates[0]["name"],
+                    candidate_names=tuple(item["name"] for item in candidates),
+                    mutable=(seed_category == "artist" and context.target_category == "brand"),
+                    depends_on=(),
+                )
+                draft = CopilotDraft.model_validate({
+                    **draft.model_dump(),
+                    "taste_seed_name": seed_name,
+                    "taste_seed_category": seed_category,
+                    "choices": [discovered_choice.model_dump()],
+                })
             if not draft.choices:
                 return self._needs_input(
                     run_id, draft, model.model,
@@ -511,13 +569,16 @@ class HostedCopilot:
                         or "What choices should the cultural review compare?"
                     ),
                 )
-            supported = any(
+            supported = seed_category == "artist" and any(
                 choice.domain.lower() in ("brand", "partner", "brand_partner")
                 for choice in draft.choices
             )
             catalog_domains = {}
             for choice in draft.choices:
-                if choice.domain.lower() in ("brand", "partner", "brand_partner"):
+                if (
+                    choice.domain.lower() in ("brand", "partner", "brand_partner")
+                    and seed_category == "artist"
+                ):
                     continue
                 try:
                     catalog_domains[choice.decision_id] = category_for(choice.domain)
@@ -534,28 +595,40 @@ class HostedCopilot:
                         "a separately verified evidence adapter."
                     ),
                 )
-            if not draft.artist_name:
+            if not seed_name:
                 return self._needs_input(
                     run_id, draft, model.model,
                     status="CLARIFICATION_REQUIRED",
                     reason="ARTIST_NAME_REQUIRED",
-                    question="Which artist should Qloo use for cultural affinity?",
+                    question="Which named Qloo entity should anchor the taste comparison?",
                 )
 
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
-            artist = resolver.resolve(
-                run_id=run_id, name=draft.artist_name, kind="artist",
-                selection_ref=entity_selection_ref,
+            artist = (
+                seed if native_discovery is not None
+                else resolver.resolve(
+                    run_id=run_id, name=seed_name, kind=seed_category,
+                    selection_ref=entity_selection_ref,
+                )
             )
             brands = {}
             for choice in draft.choices:
                 if choice.domain.lower() in ("brand", "partner", "brand_partner"):
                     for name in choice.candidate_names:
                         if name not in brands:
-                            brands[name] = resolver.resolve(
-                                run_id=run_id, name=name, kind="brand",
-                                selection_ref=entity_selection_ref,
+                            brands[name] = (
+                                ResolvedEntity(
+                                    name=name, entity_id=discovered_ids[name],
+                                    entity_type="urn:entity:brand",
+                                    query_fingerprint=native_discovery["query_fingerprint"],
+                                    source="QLOO_DISCOVERY",
+                                )
+                                if name in discovered_ids
+                                else resolver.resolve(
+                                    run_id=run_id, name=name, kind="brand",
+                                    selection_ref=entity_selection_ref,
+                                )
                             )
             catalog_identities = {}
             for choice in draft.choices:
@@ -563,7 +636,12 @@ class HostedCopilot:
                     continue
                 category = catalog_domains[choice.decision_id]
                 entities = [
-                    resolver.resolve(
+                    ResolvedEntity(
+                        name=name, entity_id=discovered_ids[name],
+                        entity_type="urn:entity:" + category,
+                        query_fingerprint=native_discovery["query_fingerprint"],
+                        source="QLOO_DISCOVERY",
+                    ) if name in discovered_ids else resolver.resolve(
                         run_id=run_id, name=name, kind=category,
                         selection_ref=entity_selection_ref,
                     )
@@ -605,10 +683,20 @@ class HostedCopilot:
                 engine = HostedDomainObservations(reviewer)
                 catalog_results = []
                 for decision_id, (choice, category, entities) in catalog_identities.items():
-                    observation = engine.inspect(
-                        run_id=run_id, decision_id=decision_id, category=category,
-                        subject_id=artist.entity_id,
-                        candidate_ids=tuple(item.entity_id for item in entities),
+                    observation = (
+                        {
+                            "status": "OBSERVED_NOT_POLICY_QUALIFIED",
+                            "source_mode": "LIVE_HTTP_UNVERIFIED",
+                            "ranking": [item["entity_id"] for item in native_discovery["candidates"]],
+                            "query_fingerprint": native_discovery["query_fingerprint"],
+                        }
+                        if native_discovery is not None
+                        and decision_id == "taste_recommendation"
+                        else engine.inspect(
+                            run_id=run_id, decision_id=decision_id, category=category,
+                            subject_id=artist.entity_id,
+                            candidate_ids=tuple(item.entity_id for item in entities),
+                        )
                     )
                     name_map = {item.entity_id: item.name for item in entities}
                     catalog_results.append({
@@ -652,6 +740,27 @@ class HostedCopilot:
                     pair, off=off, on=on,
                     qloo_evidence_digest=shared["evidence_digest"],
                 )
+            if native_discovery is not None:
+                sanitized = {
+                    key: value for key, value in native_discovery.items()
+                    if key != "candidates"
+                }
+                sanitized["candidates"] = [
+                    {k: v for k, v in item.items() if k != "entity_id"}
+                    for item in native_discovery["candidates"]
+                ]
+                sanitized["taste_seed_category"] = seed_category
+                sanitized["taste_seed_name"] = seed_name
+                shared = {**pair.off["qloo"], "native_discovery": sanitized}
+                shared["evidence_digest"] = digest_obj({
+                    "prior": pair.qloo_evidence_digest, "native": sanitized,
+                })
+                pair = replace_dataclass(
+                    pair,
+                    off={**pair.off, "qloo": shared},
+                    on={**pair.on, "qloo": shared},
+                    qloo_evidence_digest=shared["evidence_digest"],
+                )
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
@@ -672,6 +781,14 @@ class HostedCopilot:
                 "full_plan_independently_verified": False,
                 "business_verification": business_review,
                 "plan": self._draft_plan_projection(draft),
+                "taste_policy": policy_for(
+                    context.target_category if context is not None
+                    else "brand" if supported else list(catalog_domains.values())[0]
+                ),
+                "unapplied_constraints": (
+                    ["LOCATION_NOT_IN_RANK_QUERY"]
+                    if draft.cities and context is None else []
+                ),
                 "status": "REVIEW_REQUIRED",
                 "original_answer": off_answer,
                 "ofc_answer": on_answer,
