@@ -32,7 +32,9 @@ All writes require same-site HTTPS JSON requests. Initial authentication uses `P
 - `POST /api/owner/test-connection` with `{"provider":"qloo|gemini|groq","confirm":"SPEND_ONE_PROVIDER_REQUEST"}` for an explicitly authorized test; counts against connection-test quota and the provider's shared global daily quota.
 - `POST /api/owner/logout`: revoke the session and clear cookie.
 
-The user's API keys are never exposed in HTML, JavaScript, localStorage, URL parameters, application logs or JSON responses. Replacing a credential clears the last test status. The test button is never automatically executed on page load or status refresh. A configured provider is NOT_TESTED until a successful explicit test; an ACTIVE test status expires after 30 minutes.
+The temporary owner setup portal at `/connect` provides this workflow using real authenticated requests. This is an operational configuration page, not the final one-screen product interface. The final UI will move the functionality to the Settings icon without changing backend security.
+
+The user's API keys are never exposed in HTML, JavaScript, localStorage, URL parameters, application logs or JSON responses. Replacing a credential clears the last test status. The test button is never automatically executed on page load or status refresh. A configured provider is NOT_TESTED until a successful explicit test; an ACTIVE test status expires after 30 minutes. The public capability response distinguishes individual components and the derived product status without spending a provider request.
 
 The owner secret is not a Qloo/LLM key and must not be shared with public visitors. Rotate credentials and cryptographic master key through a controlled private operation.
 
@@ -45,7 +47,7 @@ The owner secret is not a Qloo/LLM key and must not be shared with public visito
 
 The OFF and ON answers share the same language-model identity, frozen baseline and original Qloo observations. **OFF = LLM + Qloo. ON = LLM + Qloo + OFC.** The OFF/ON toggle only reads stored output and cannot consume inference quota.
 
-Each new session is rate-limited by a private global UTC-day budget and supports at most four independent prompts. Two model calls and several Qloo search/insights requests may be required for a prompt; quotas count calls, not sessions. Missing keys, exhausted quotas, unavailable external services and unsupported cultural decision categories return explicit blocked/uncertain states. No client can authorize bookings, payments, contracts or external actions through this API.
+Each new session requires Qloo plus a configured LLM key, is rate-limited by a private global UTC-day budget, and supports at most four independent prompts. Original user prompts are encrypted in the private database and restored only to the matching visitor session. Two model calls and several Qloo search/insights requests may be required for a prompt; quotas count calls, not sessions. Missing keys, exhausted quotas, unavailable external services and unsupported cultural decision categories return explicit blocked/uncertain states. No client can authorize bookings, payments, contracts or external actions through this API.
 
 The browser receives the original/reviewed choice **names** and redacted evidence summaries, not raw Qloo captures or private Qloo ID lists. Internally all decisions remain tied to scoped provider IDs, checksums, revisions and the journal.
 
