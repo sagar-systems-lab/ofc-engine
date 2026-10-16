@@ -121,7 +121,7 @@ def qualify(origin: str) -> dict:
                     assert "The separate editable draft below" in page.locator(
                         "#view-plan > .intro p").inner_text()
                     assert "artist-ci" not in page.locator("#published-qloo-review").inner_text()
-                    assert not posts, f"unexpected external/provid­er request: {posts}"
+                    assert not posts, f"unexpected provider/network request: {posts}"
                     assert not errors, errors
                     assert not page.evaluate(
                         "document.documentElement.scrollWidth > innerWidth + 1"
