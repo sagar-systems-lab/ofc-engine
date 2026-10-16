@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import psycopg
 
 from .copilot_credentials import OwnerUnauthorized
-from .copilot_hosted import SessionDenied, SessionLimitReached
+from .copilot_hosted import CopilotNotReady, SessionDenied, SessionLimitReached
 from .copilot_hosted_quota import CopilotQuotaReached
 from .durable import StorageIntegrityError
 
@@ -191,6 +191,8 @@ class CopilotHTTPMixin:
             self._copilot_reply(403, {"error": "ACCESS_DENIED"})
         except (SessionLimitReached, CopilotQuotaReached):
             self._copilot_reply(429, {"error": "COPILOT_CAPACITY_REACHED"})
+        except CopilotNotReady:
+            self._copilot_reply(503, {"error": "COPILOT_NOT_CONFIGURED"})
         except (ValueError, TypeError, KeyError):
             self._copilot_reply(422, {"error": "INVALID_REQUEST"})
         except (psycopg.Error, StorageIntegrityError):
