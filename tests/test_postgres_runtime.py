@@ -1108,6 +1108,10 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         assert call(
             "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
         )[0] == 503
+        assert call(
+            "/api/owner/login?secret=never-allowed",
+            {"owner_secret": "http-owner-secret-" + "z" * 42},
+        )[0] == 400
         assert call("/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}, origin=False)[0] == 403
         status, value, cookie = call(
             "/api/owner/login", {"owner_secret": "http-owner-secret-" + "z" * 42}
