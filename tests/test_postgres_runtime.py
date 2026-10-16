@@ -994,6 +994,10 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert report["on"]["decisions"][0]["candidate_id"] == "Brand B"
     assert report["on"]["changed_ids"] == ["brand"]
     assert report["release_authorized"] is False
+    assert report["qloo_requests_this_run"] == 5
+    assert report["qloo_search_requests"] == 3
+    assert report["qloo_rank_requests"] == 2
+    assert report["llm_requests_this_run"] == 2
     assert len(qloo.searches) == 3 and qloo.ranks == 2 and model.calls == 2
     assert artist not in json.dumps(report)
     assert brand_a not in json.dumps(report)
