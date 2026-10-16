@@ -100,6 +100,7 @@ class HostedCopilot:
             raise CopilotNotReady("COPILOT_PROVIDERS_NOT_CONFIGURED")
 
     def session(self) -> dict:
+        self.cleanup_expired(limit=8)
         self._require_credentials()
         token = secrets.token_urlsafe(40)
         session_id = "cp-" + secrets.token_hex(16)
@@ -145,54 +146,74 @@ class HostedCopilot:
         ):
             raise SessionDenied("INVALID_SESSION")
 
+    @staticmethod
+    def _delete_session_tx(db, session_id: str) -> int:
+        ids = [
+            row[0] for row in db.execute(
+                "select run_id from ofc_private.copilot_messages "
+                "where session_id=%s for update", (session_id,),
+            ).fetchall()
+        ]
+        if ids:
+            db.execute(
+                "delete from ofc_private.copilot_business_proofs "
+                "where run_id=any(%s)", (ids,),
+            )
+            for table in (
+                "copilot_discoveries", "copilot_domain_observations",
+                "copilot_search",
+            ):
+                db.execute(
+                    "delete from ofc_private." + table + " where run_id=any(%s)",
+                    (ids,),
+                )
+            for table in (
+                "dynamic_qloo_attempts", "browser_runs",
+                "requests", "events",
+            ):
+                db.execute(
+                    "delete from ofc_private." + table + " where plan_id=any(%s)",
+                    (ids,),
+                )
+            db.execute(
+                "delete from ofc_private.plans where plan_id=any(%s)", (ids,),
+            )
+            db.execute(
+                "delete from ofc_private.copilot_messages "
+                "where session_id=%s", (session_id,),
+            )
+        removed = db.execute(
+            "delete from ofc_private.copilot_sessions "
+            "where session_id=%s", (session_id,),
+        )
+        if removed.rowcount != 1:
+            raise SessionDenied("SESSION_ALREADY_DELETED")
+        return len(ids)
+
     def delete_session(self, session_id: str, ticket: str) -> dict:
         self._check_session(session_id, ticket)
         with self.store._connect() as db:
-            ids = [
-                row[0] for row in db.execute(
-                    "select run_id from ofc_private.copilot_messages "
-                    "where session_id=%s for update", (session_id,),
-                ).fetchall()
-            ]
-            if ids:
-                db.execute(
-                    "delete from ofc_private.copilot_business_proofs "
-                    "where run_id=any(%s)", (ids,),
-                )
-                for table in (
-                    "copilot_discoveries", "copilot_domain_observations",
-                    "copilot_search",
-                ):
-                    db.execute(
-                        "delete from ofc_private." + table + " where run_id=any(%s)",
-                        (ids,),
-                    )
-                for table in (
-                    "dynamic_qloo_attempts", "browser_runs",
-                    "requests", "events",
-                ):
-                    db.execute(
-                        "delete from ofc_private." + table + " where plan_id=any(%s)",
-                        (ids,),
-                    )
-                db.execute(
-                    "delete from ofc_private.plans where plan_id=any(%s)", (ids,),
-                )
-                db.execute(
-                    "delete from ofc_private.copilot_messages "
-                    "where session_id=%s", (session_id,),
-                )
-            deleted = db.execute(
-                "delete from ofc_private.copilot_sessions "
-                "where session_id=%s", (session_id,),
-            )
-            if deleted.rowcount != 1:
-                raise SessionDenied("SESSION_ALREADY_DELETED")
+            count = self._delete_session_tx(db, session_id)
         return {
             "status": "SESSION_DELETED",
-            "removed_conversation_runs": len(ids),
+            "removed_conversation_runs": count,
             "provider_quota_history_preserved": True,
         }
+
+    def cleanup_expired(self, *, limit: int = 8) -> int:
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise ValueError("invalid cleanup batch")
+        with self.store._connect() as db:
+            expired = [
+                row[0] for row in db.execute(
+                    "select session_id from ofc_private.copilot_sessions "
+                    "where expires_at<=now() order by expires_at "
+                    "limit %s for update skip locked", (limit,),
+                ).fetchall()
+            ]
+            for session_id in expired:
+                self._delete_session_tx(db, session_id)
+        return len(expired)
 
     @staticmethod
     def _validate_message(request_id: str, prompt: str) -> str:
