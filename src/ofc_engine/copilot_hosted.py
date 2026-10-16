@@ -367,6 +367,23 @@ class HostedCopilot:
             words = model.narrate_pair(pair, prompt=prompt)
             result = {
                 **self._public_pair(pair, draft, brands, artist),
+                "plan": {
+                    "objective": draft.objective,
+                    "artist_name": draft.artist_name,
+                    "budget_usd": draft.budget_usd,
+                    "cities": list(draft.cities),
+                    "choices": [
+                        {
+                            "decision_id": choice.decision_id,
+                            "domain": choice.domain,
+                            "selected_name": choice.selected_name,
+                            "candidate_names": list(choice.candidate_names),
+                            "depends_on": list(choice.depends_on),
+                            "source": "UNVERIFIED_LLM_PROPOSAL",
+                        }
+                        for choice in draft.choices
+                    ],
+                },
                 "status": "REVIEW_REQUIRED",
                 "original_answer": words.off_answer,
                 "ofc_answer": words.on_answer,
