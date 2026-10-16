@@ -210,6 +210,19 @@ def browser_test(origin):
                     page.reload(wait_until="domcontentloaded")
                     page.locator("#start-qloo-journey").wait_for(state="visible")
                     assert page.locator("#published-qloo-review").is_hidden()
+
+                    page.goto(origin + "/proof", wait_until="domcontentloaded")
+                    page.locator("#run-status").wait_for(state="visible", timeout=15000)
+                    assert page.locator("#run-status").inner_text() == "INTEGRITY ONLY"
+                    assert page.get_by_text("NOT AUTHORIZED").is_visible()
+                    page.locator("#scenario").select_option("outage")
+                    page.locator("#run").click()
+                    page.get_by_text("USER REVIEW", exact=True).first.wait_for(
+                        state="visible", timeout=15000
+                    )
+                    assert page.get_by_text("NOT AUTHORIZED").is_visible()
+                    assert not outgoing, outgoing
+                    assert not errors, errors
                 finally:
                     page.close()
         finally:
