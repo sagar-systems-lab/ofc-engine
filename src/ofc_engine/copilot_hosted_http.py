@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import psycopg
 
 from .copilot_credentials import OwnerUnauthorized, OwnerRateLimited
+from .copilot_business import BusinessProofIntake
 from .copilot_hosted import CopilotNotReady, SessionDenied, SessionLimitReached
 from .copilot_hosted_quota import CopilotQuotaReached
 from .durable import StorageIntegrityError
@@ -17,7 +18,7 @@ from .durable import StorageIntegrityError
 _SESSION = re.compile(r"^/api/copilot/sessions/(cp-[a-f0-9]{32})(/messages)?$")
 _ROUTES = frozenset({
     "/api/owner/login", "/api/owner/logout", "/api/owner/credentials",
-    "/api/owner/test-connection", "/api/copilot/sessions",
+    "/api/owner/test-connection", "/api/owner/business", "/api/copilot/sessions",
 })
 _MAX_BODY = 8192
 
@@ -123,7 +124,7 @@ class CopilotHTTPMixin:
                 return True
             if path in (
                 "/api/owner/logout", "/api/owner/credentials",
-                "/api/owner/test-connection",
+                "/api/owner/test-connection", "/api/owner/business",
             ):
                 owner = self._copilot_cookie("ofc_owner")
                 runtime.vault.authorize(owner)
@@ -153,6 +154,31 @@ class CopilotHTTPMixin:
                         200, {"providers": runtime.vault.status(private=True)},
                     )
                     return True
+                if path == "/api/owner/business":
+                    intake = BusinessProofIntake(runtime)
+                    action = data.get("action")
+                    if action == "register" and set(data) == {
+                        "action", "issuer", "requirements", "public_key_b64",
+                    }:
+                        output = intake.register_authority(
+                            owner, issuer=data["issuer"],
+                            requirements=data["requirements"],
+                            public_key_b64=data["public_key_b64"],
+                        )
+                    elif action == "revoke" and set(data) == {"action", "issuer"}:
+                        output = intake.revoke_authority(owner, data["issuer"])
+                    elif action == "proof" and set(data) == {
+                        "action", "run_id", "proof",
+                    }:
+                        output = intake.attach(
+                            owner, run_id=data["run_id"], proof=data["proof"],
+                        )
+                    elif action == "assess" and set(data) == {"action", "run_id"}:
+                        output = intake.report(owner, data["run_id"])
+                    else:
+                        raise ValueError("INVALID_BUSINESS_ACTION")
+                    self._copilot_reply(200, output)
+                    return True
                 if data != {
                     "provider": data.get("provider"),
                     "confirm": "SPEND_ONE_PROVIDER_REQUEST",
@@ -173,6 +199,18 @@ class CopilotHTTPMixin:
                     201, session,
                     cookie=self._copilot_cookie_header(
                         "ofc_visitor", ticket, max_age=86400,
+                    ),
+                )
+                return True
+            if found and found.group(2) is None:
+                if data != {"confirm": "DELETE_MY_SESSION"}:
+                    raise ValueError("SESSION_DELETION_CONFIRMATION_REQUIRED")
+                deleted = runtime.delete_session(
+                    found.group(1), self._copilot_cookie("ofc_visitor"),
+                )
+                self._copilot_reply(
+                    200, deleted, cookie=self._copilot_cookie_header(
+                        "ofc_visitor", "", max_age=0,
                     ),
                 )
                 return True
