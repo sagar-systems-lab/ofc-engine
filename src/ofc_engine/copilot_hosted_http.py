@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from http.cookies import SimpleCookie
+from importlib.resources import files
 import json
 import re
 from urllib.parse import urlsplit
@@ -199,6 +200,21 @@ class CopilotHTTPMixin:
     def _copilot_get(self) -> bool:
         parts = urlsplit(self.path)
         path = parts.path
+        if path in ("/connect", "/connect.js", "/connect.css") and not parts.query:
+            if self.server.copilot is None:
+                self._copilot_reply(404, {"error": "COPILOT_NOT_CONFIGURED"})
+                return True
+            asset, content_type = {
+                "/connect": ("connect.html", "text/html; charset=utf-8"),
+                "/connect.js": ("connect.js", "text/javascript; charset=utf-8"),
+                "/connect.css": ("connect.css", "text/css; charset=utf-8"),
+            }[path]
+            self._send(
+                200,
+                files("ofc_engine").joinpath("web", asset).read_bytes(),
+                content_type,
+            )
+            return True
         match = _SESSION.fullmatch(path)
         if path not in ("/api/capabilities", "/api/owner/credentials") and not match:
             return False
