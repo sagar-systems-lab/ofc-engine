@@ -109,3 +109,10 @@ A subsequent message may include an optional `parent_run_id` pointing to an exis
 The OFF natural-language response is generated in a separate inference request **before** ON, using the original baseline plus the shared Qloo rank only. The OFF model never receives OFC changes, verdicts, repair reasons or reviewed decisions. ON receives the identical Qloo evidence plus OFC's scoped findings. Both arms keep the same model identity; inference totals are 3 per complete task (extraction + separate OFF + ON). UI toggles and saved-message reads are provider-free. These are controlled, evidence-blinded inference arms, not an independent randomized clinical-style causal experiment.
 
 The initial anonymous session limit remains 4 prompts for quota safety. This can be raised only together with explicit aggregate model/Qloo budgets and abuse controls.
+
+
+## Entity disambiguation
+
+A Qloo /search response may contain several plausible aliases or indistinguishable names. The server returns `CLARIFICATION_REQUIRED` and bounded suggestions with opaque `option_ref` values, never silently choosing a fuzzy provider ID. The user can select a suggestion in a new Copilot message using **all** of `parent_run_id`, `entity_selection_ref`, `request_id` and `prompt`. The owner of the parent visitor session is checked, the selected reference must occur in that parent response, and a newly reserved Qloo lookup must return the same identity bound to the request fingerprint. A stale/cross-session/forged reference fails closed. The final UI can render these options as selection controls without ever sending raw Qloo IDs to the browser.
+
+This user confirmation is **entity disambiguation**, not independent verification that the place has availability, the brand has contract rights, or a specific audience will convert.
