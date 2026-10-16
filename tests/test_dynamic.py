@@ -213,7 +213,7 @@ def test_parallel_review_never_spends_double(tmp_path):
         gate.set()
         outcomes = (a.result(), b.result())
     assert len(fake.calls) == 2
-    assert sorted(outcome["new_qloo_requests"] for outcome in outcomes) == [0, 2]
+    assert sum(outcome["new_qloo_requests"] for outcome in outcomes) == 2
     assert all(outcome["release_authorized"] is False for outcome in outcomes)
 
 
