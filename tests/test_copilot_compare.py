@@ -140,3 +140,82 @@ def test_revisions_and_evidence_scopes_cannot_be_swapped(tmp_path):
             prompt="Brand", model_id="gemini", baseline=baseline,
             reviewed=current, evaluated=corrupted,
         )
+
+
+def test_narration_uses_same_saved_qloo_in_both_llm_arms(tmp_path):
+    from ofc_engine.copilot_llm import CopilotLLM, JSONReply
+
+    class PairLLMTransport:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            body = json.loads(data)
+            self.calls.append(body)
+            if "generationConfig" in body:
+                context = body["contents"][0]["parts"][0]["text"]
+                envelope = {"candidates": [{
+                    "finishReason": "STOP",
+                    "content": {"parts": [{"text": json.dumps({
+                        "off_answer": "Qloo ranks Brand B above Brand A; my original choice is Brand A.",
+                        "on_answer": "Using the same Qloo rank, OFC repairs Brand A to Brand B; dependent review is still pending.",
+                    })}]},
+                }]}
+            else:
+                context = body["messages"][1]["content"]
+                envelope = {"choices": [{
+                    "finish_reason": "stop",
+                    "message": {"content": json.dumps({
+                        "off_answer": "Qloo suggests Brand B. Original plan retains Brand A.",
+                        "on_answer": "OFC repairs Brand A to B with Qloo; dependent verification remains pending.",
+                    })},
+                }]}
+            data = json.loads(context)
+            pair = data["comparison"]
+            assert pair["off"]["llm_enabled"] is True
+            assert pair["on"]["llm_enabled"] is True
+            assert pair["off"]["qloo"] == pair["on"]["qloo"]
+            assert pair["off"]["ofc_enabled"] is False
+            assert pair["on"]["ofc_enabled"] is True
+            assert pair["verification_status"] == "REVIEW_REQUIRED"
+            return JSONReply(200, json.dumps(envelope).encode())
+
+    store, flow, provider = setup(tmp_path)
+    item = proposal()
+    evaluated = flow.evaluate(item)
+    baseline, _ = freeze_proposal(item)
+    prompt = "Find a suitable sponsor"
+    pair = build_copilot_pair(
+        prompt=prompt, model_id="gemini-3.1-flash-lite", baseline=baseline,
+        reviewed=store.get(baseline.plan_id), evaluated=evaluated,
+    )
+    fake = PairLLMTransport()
+    llm = CopilotLLM(provider="gemini", api_key="test-only", transport=fake)
+    result = llm.narrate_pair(pair, prompt=prompt)
+    assert "Qloo" in result.off_answer
+    assert "OFC" in result.on_answer
+    assert len(fake.calls) == 1
+    assert provider.calls == 2
+    # UI mode switching should consume no additional LLM or Qloo requests.
+    for mode in ("off", "on", "off", "on"):
+        _ = pair.as_dict()[mode]
+    assert len(fake.calls) == 1 and provider.calls == 2
+
+
+def test_narration_rejects_different_prompt_or_model(tmp_path):
+    from ofc_engine.copilot_llm import CopilotLLM
+
+    store, flow, _ = setup(tmp_path)
+    item = proposal()
+    evaluated = flow.evaluate(item)
+    baseline, _ = freeze_proposal(item)
+    pair = build_copilot_pair(
+        prompt="original prompt", model_id="gemini-3.1-flash-lite",
+        baseline=baseline, reviewed=store.get(baseline.plan_id), evaluated=evaluated,
+    )
+    wrong_provider = CopilotLLM(provider="groq", api_key="test-only")
+    with pytest.raises(ValueError, match="model identity"):
+        wrong_provider.narrate_pair(pair, prompt="original prompt")
+    llm = CopilotLLM(provider="gemini", api_key="test-only")
+    with pytest.raises(ValueError, match="prompt provenance"):
+        llm.narrate_pair(pair, prompt="changed prompt")
