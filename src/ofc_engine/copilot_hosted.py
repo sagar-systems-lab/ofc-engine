@@ -10,6 +10,7 @@ import json
 import secrets
 
 from .business_assurance import assess_business_readiness
+from .copilot_receipt import decision_receipt, grounded_explanations
 from .copilot_compare import build_copilot_pair
 from .copilot_domain_observations import HostedDomainObservations
 from .copilot_credentials import CredentialVault
@@ -99,6 +100,7 @@ class HostedCopilot:
             raise CopilotNotReady("COPILOT_PROVIDERS_NOT_CONFIGURED")
 
     def session(self) -> dict:
+        self.cleanup_expired(limit=8)
         self._require_credentials()
         token = secrets.token_urlsafe(40)
         session_id = "cp-" + secrets.token_hex(16)
@@ -145,6 +147,75 @@ class HostedCopilot:
             raise SessionDenied("INVALID_SESSION")
 
     @staticmethod
+    def _delete_session_tx(db, session_id: str) -> int:
+        ids = [
+            row[0] for row in db.execute(
+                "select run_id from ofc_private.copilot_messages "
+                "where session_id=%s for update", (session_id,),
+            ).fetchall()
+        ]
+        if ids:
+            db.execute(
+                "delete from ofc_private.copilot_business_proofs "
+                "where run_id=any(%s)", (ids,),
+            )
+            for table in (
+                "copilot_discoveries", "copilot_domain_observations",
+                "copilot_search",
+            ):
+                db.execute(
+                    "delete from ofc_private." + table + " where run_id=any(%s)",
+                    (ids,),
+                )
+            for table in (
+                "dynamic_qloo_attempts", "browser_runs",
+                "requests", "events",
+            ):
+                db.execute(
+                    "delete from ofc_private." + table + " where plan_id=any(%s)",
+                    (ids,),
+                )
+            db.execute(
+                "delete from ofc_private.plans where plan_id=any(%s)", (ids,),
+            )
+            db.execute(
+                "delete from ofc_private.copilot_messages "
+                "where session_id=%s", (session_id,),
+            )
+        removed = db.execute(
+            "delete from ofc_private.copilot_sessions "
+            "where session_id=%s", (session_id,),
+        )
+        if removed.rowcount != 1:
+            raise SessionDenied("SESSION_ALREADY_DELETED")
+        return len(ids)
+
+    def delete_session(self, session_id: str, ticket: str) -> dict:
+        self._check_session(session_id, ticket)
+        with self.store._connect() as db:
+            count = self._delete_session_tx(db, session_id)
+        return {
+            "status": "SESSION_DELETED",
+            "removed_conversation_runs": count,
+            "provider_quota_history_preserved": True,
+        }
+
+    def cleanup_expired(self, *, limit: int = 8) -> int:
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise ValueError("invalid cleanup batch")
+        with self.store._connect() as db:
+            expired = [
+                row[0] for row in db.execute(
+                    "select session_id from ofc_private.copilot_sessions "
+                    "where expires_at<=now() order by expires_at "
+                    "limit %s for update skip locked", (limit,),
+                ).fetchall()
+            ]
+            for session_id in expired:
+                self._delete_session_tx(db, session_id)
+        return len(expired)
+
+    @staticmethod
     def _validate_message(request_id: str, prompt: str) -> str:
         if (
             not isinstance(request_id, str) or not 8 <= len(request_id) <= 96
@@ -157,17 +228,32 @@ class HostedCopilot:
             raise ValueError("INVALID_COPILOT_MESSAGE")
         return sha256(prompt.strip().encode()).hexdigest()
 
+    def _decode_result(self, raw, ciphertext, digest: str) -> dict:
+        try:
+            if ciphertext is not None:
+                decoded = self.vault.cipher.decrypt(bytes(ciphertext)).decode("utf-8")
+            elif isinstance(raw, str):
+                decoded = raw
+            else:
+                raise ValueError("missing result")
+            value = json.loads(decoded)
+        except (InvalidToken, ValueError, TypeError, UnicodeError) as exc:
+            raise StorageIntegrityError("invalid private Copilot result") from exc
+        if not isinstance(value, dict) or digest_obj(value) != digest:
+            raise StorageIntegrityError("saved Copilot result integrity mismatch")
+        return value
+
     def messages(self, session_id: str, ticket: str) -> dict:
         self._check_session(session_id, ticket)
         with self.store._connect() as db:
             rows = db.execute(
                 "select run_id,request_id,status,result,result_digest,"
-                "prompt_ciphertext,created_at from "
+                "prompt_ciphertext,created_at,result_ciphertext from "
                 "ofc_private.copilot_messages where session_id=%s "
                 "order by created_at,run_id", (session_id,),
             ).fetchall()
         outputs = []
-        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at in rows:
+        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at, encrypted_result in rows:
             try:
                 prompt = self.vault.cipher.decrypt(
                     bytes(encrypted_prompt)
@@ -180,14 +266,8 @@ class HostedCopilot:
                     **self._pending_status(run_id, created_at),
                 })
                 continue
-            try:
-                result = json.loads(raw)
-            except (ValueError, TypeError) as exc:
-                raise StorageIntegrityError("invalid saved Copilot projection") from exc
-            if (
-                not isinstance(result, dict) or digest_obj(result) != digest
-                or result.get("run_id") != run_id
-            ):
+            result = self._decode_result(raw, encrypted_result, digest)
+            if result.get("run_id") != run_id:
                 raise StorageIntegrityError("saved Copilot projection corrupted")
             outputs.append({"prompt": prompt, **result})
         return {"session_id": session_id, "messages": outputs}
@@ -207,16 +287,13 @@ class HostedCopilot:
             raise SessionDenied("INVALID_QLOO_SELECTION")
         with self.store._connect() as db:
             row = db.execute(
-                "select status,result,result_digest from "
+                "select status,result,result_digest,result_ciphertext from "
                 "ofc_private.copilot_messages where run_id=%s and session_id=%s",
                 (parent_run_id, session_id),
             ).fetchone()
         if row is None or row[0] != "COMPLETE":
             raise SessionDenied("QLOO_SELECTION_PARENT_NOT_FOUND")
-        try:
-            record = json.loads(row[1])
-        except (ValueError, TypeError) as exc:
-            raise StorageIntegrityError("invalid stored selection parent") from exc
+        record = self._decode_result(row[1], row[3], row[2])
         if (
             not isinstance(record, dict) or digest_obj(record) != row[2]
             or record.get("status") != "CLARIFICATION_REQUIRED"
@@ -240,16 +317,13 @@ class HostedCopilot:
             raise SessionDenied("INVALID_CONVERSATION_PARENT")
         with self.store._connect() as db:
             row = db.execute(
-                "select status,result,result_digest from "
+                "select status,result,result_digest,result_ciphertext from "
                 "ofc_private.copilot_messages where run_id=%s and session_id=%s",
                 (parent_run_id, session_id),
             ).fetchone()
         if row is None or row[0] != "COMPLETE":
             raise SessionDenied("CONVERSATION_PARENT_NOT_COMPLETE")
-        try:
-            prior = json.loads(row[1])
-        except (ValueError, TypeError) as exc:
-            raise StorageIntegrityError("invalid conversation parent") from exc
+        prior = self._decode_result(row[1], row[3], row[2])
         if (
             not isinstance(prior, dict) or digest_obj(prior) != row[2]
             or prior.get("run_id") != parent_run_id
@@ -267,7 +341,7 @@ class HostedCopilot:
         with self.store._connect() as db:
             row = db.execute(
                 "select run_id,prompt_digest,status,result,result_digest,created_at,"
-                "parent_run_id from ofc_private.copilot_messages "
+                "parent_run_id,result_ciphertext from ofc_private.copilot_messages "
                 "where session_id=%s and request_id=%s",
                 (session_id, request_id),
             ).fetchone()
@@ -277,14 +351,8 @@ class HostedCopilot:
             raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
         if row[2] == "RESERVED":
             return self._pending_status(row[0], row[5])
-        try:
-            value = json.loads(row[3])
-        except (ValueError, TypeError) as exc:
-            raise StorageIntegrityError("invalid saved message") from exc
-        if (
-            not isinstance(value, dict) or value.get("run_id") != row[0]
-            or digest_obj(value) != row[4]
-        ):
+        value = self._decode_result(row[3], row[7], row[4])
+        if value.get("run_id") != row[0]:
             raise StorageIntegrityError("saved message digest mismatch")
         return value
 
@@ -300,7 +368,7 @@ class HostedCopilot:
                 raise SessionDenied("INVALID_SESSION")
             existing = db.execute(
                 "select run_id,prompt_digest,model_id,status,result,result_digest,"
-                "parent_run_id from ofc_private.copilot_messages "
+                "parent_run_id,result_ciphertext from ofc_private.copilot_messages "
                 "where session_id=%s and request_id=%s",
                 (session_id, request_id),
             ).fetchone()
@@ -312,14 +380,8 @@ class HostedCopilot:
                     raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
                 if existing[3] == "RESERVED":
                     return existing[0], {"run_id": existing[0], "status": "PROCESSING"}
-                try:
-                    saved = json.loads(existing[4])
-                except (TypeError, ValueError) as exc:
-                    raise StorageIntegrityError("invalid saved message") from exc
-                if (
-                    not isinstance(saved, dict) or digest_obj(saved) != existing[5]
-                    or saved.get("run_id") != existing[0]
-                ):
+                saved = self._decode_result(existing[4], existing[7], existing[5])
+                if saved.get("run_id") != existing[0]:
                     raise StorageIntegrityError("saved message digest mismatch")
                 return existing[0], saved
             if row[0] >= 4:
@@ -344,16 +406,55 @@ class HostedCopilot:
         with self.store._connect() as db:
             cursor = db.execute(
                 "update ofc_private.copilot_messages "
-                "set status=%s,result=%s,result_digest=%s "
+                "set status=%s,result=null,result_ciphertext=%s,result_digest=%s "
                 "where run_id=%s and status='RESERVED'",
-                ("BLOCKED" if blocked else "COMPLETE", raw,
+                ("BLOCKED" if blocked else "COMPLETE",
+                 self.vault.cipher.encrypt(raw.encode("utf-8")),
                  digest_obj(value), run_id),
             )
             if cursor.rowcount != 1:
                 raise StorageIntegrityError("Copilot result reservation lost")
 
+    def _selected_model(self) -> str:
+        statuses = self.vault.status()
+        if statuses["gemini"]["status"] == "ACTIVE":
+            return "gemini"
+        if statuses["groq"]["status"] == "ACTIVE":
+            return "groq"
+        return "gemini" if statuses["gemini"]["configured"] else "groq"
+
+    def _capacity(self, *, required_llm: int = 0, required_qloo: int = 0) -> dict:
+        with self.store._connect() as db:
+            llm = db.execute(
+                "select utc_day,reserved from ofc_private.copilot_llm_budget "
+                "where id=1"
+            ).fetchone()
+            qloo = db.execute(
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget "
+                "where id=1"
+            ).fetchone()
+        if not llm or not qloo:
+            raise StorageIntegrityError("provider request budgets missing")
+        today = datetime.now(timezone.utc).date()
+        model_remaining = max(
+            0, self.llm_daily_limit - (llm[1] if llm[0] == today else 0)
+        )
+        qloo_remaining = max(
+            0, self.qloo_daily_limit - (qloo[1] if qloo[0] == today else 0)
+        )
+        if model_remaining < required_llm:
+            raise CopilotQuotaReached("LLM_DAILY_QUOTA_EXHAUSTED")
+        if qloo_remaining < required_qloo:
+            raise CopilotQuotaReached("QLOO_DAILY_QUOTA_EXHAUSTED")
+        return {
+            "qloo_requests_remaining": qloo_remaining,
+            "llm_requests_remaining": model_remaining,
+            "llm_comparison_ready": model_remaining >= 3,
+            "utc_day": str(today),
+        }
+
     def _model(self):
-        selected = "gemini" if self.vault.read_for_server("gemini") else "groq"
+        selected = self._selected_model()
         key = self.vault.read_for_server(selected)
         if key is None:
             raise ValueError("LLM_NOT_CONFIGURED")
@@ -503,6 +604,7 @@ class HostedCopilot:
         if cached is not None:
             return cached
         try:
+            self._capacity(required_llm=3)
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
@@ -524,6 +626,12 @@ class HostedCopilot:
                     seed_name=seed_name, seed_category=seed_category,
                     target_category=category_for(draft.discovery_category),
                     location=draft.taste_location,
+                )
+                self._capacity(
+                    required_qloo=2 + (
+                        2 if seed_category == "artist"
+                        and context.target_category == "brand" else 0
+                    ),
                 )
                 reviewer = self._reviewer()
                 resolver = HostedQlooResolver(reviewer)
@@ -603,6 +711,31 @@ class HostedCopilot:
                     question="Which named Qloo entity should anchor the taste comparison?",
                 )
 
+            if native_discovery is None:
+                categories = {
+                    choice.decision_id: category_for(choice.domain)
+                    for choice in draft.choices
+                    if choice.decision_id in catalog_domains
+                }
+                distinct_names = {
+                    (category, name)
+                    for choice in draft.choices
+                    for name in choice.candidate_names
+                    for category in [categories.get(
+                        choice.decision_id, "brand"
+                    )]
+                }
+                required = (
+                    1 + len(distinct_names)
+                    + len(catalog_domains)
+                    + 2 * min(4, sum(
+                        1 for choice in draft.choices
+                        if choice.domain.lower() in (
+                            "brand", "partner", "brand_partner"
+                        ) and seed_category == "artist"
+                    ))
+                )
+                self._capacity(required_qloo=required)
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
             artist = (
@@ -769,8 +902,15 @@ class HostedCopilot:
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
             on_answer = model.narrate_arm(pair, prompt=prompt, mode="on")
+            projection = self._public_pair(pair, draft, brands, artist)
+            receipt = decision_receipt(
+                projection, business_review=business_review,
+            )
             result = {
-                **self._public_pair(pair, draft, brands, artist),
+                **projection,
+                "value_receipt": receipt,
+                "grounded_explanations": grounded_explanations(receipt),
+                "narrative_trust": "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED",
                 "schema_version": "copilot.v1",
                 "session_id": session_id,
                 "request_id": request_id,
@@ -842,9 +982,8 @@ class HostedCopilot:
 
     def capabilities(self) -> dict:
         statuses = self.vault.status()
-        model = statuses["gemini"]
-        if model["status"] == "NOT_CONFIGURED":
-            model = statuses["groq"]
+        chosen = self._selected_model()
+        model = statuses[chosen]
         with self.store._connect() as db:
             db.execute("select 1")
         qloo_state = statuses["qloo"]["status"]
@@ -863,6 +1002,8 @@ class HostedCopilot:
             "qloo": qloo_state,
             "llm": model_state,
             "product": product_state,
+            "selected_llm_provider": chosen,
+            "capacity": self._capacity(),
             "qloo_catalog": capability_registry(),
             "release_authorized": False,
         }

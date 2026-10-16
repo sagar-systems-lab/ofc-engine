@@ -1008,6 +1008,14 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
             **report,
             "on": {**report["on"], "qloo": {"source_mode": "EVIDENCE_UNAVAILABLE"}},
         })
+    receipt = report["value_receipt"]
+    assert receipt["schema_version"] == "ofc-value.v1"
+    assert receipt["changed_count"] == 1
+    assert receipt["changes"][0]["before"] == "Brand A"
+    assert receipt["changes"][0]["after"] == "Brand B"
+    assert receipt["shared_qloo_evidence_digest"] == report["qloo_evidence_digest"]
+    assert report["grounded_explanations"]["source"] == "SERVER_VALIDATED_EVIDENCE_ONLY"
+    assert report["narrative_trust"] == "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED"
     assert report["journal_head"]
     assert report["revision"] == 1
     assert report["rank_evidence_rechecked"] == 1
@@ -1053,6 +1061,13 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
             "where run_id=%s", (report["run_id"],)
         ).fetchone()[0])
         assert b"Find a great sponsor" not in encrypted
+        content = db.execute(
+            "select result,result_ciphertext from "
+            "ofc_private.copilot_messages where run_id=%s", (report["run_id"],)
+        ).fetchone()
+        assert content[0] is None
+        assert b"Brand A" not in bytes(content[1])
+        assert b"Brand B" not in bytes(content[1])
     with pytest.raises(SessionDenied):
         copy.messages(session["session_id"], "unauthorized-visitor-token")
 
@@ -1099,6 +1114,66 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         )
     assert (len(qloo.searches), qloo.ranks, model.calls) == (7, 4, 7)
 
+    from datetime import timedelta
+    import base64
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    from ofc_engine.copilot_business import BusinessProofIntake
+    from ofc_engine.revisions import canonical_bytes
+    intake = BusinessProofIntake(copy)
+    signing_key = Ed25519PrivateKey.generate()
+    issuer = "independent-budget-attestor"
+    enrolled = intake.register_authority(
+        owner, issuer=issuer, requirements=["budget_feasibility"],
+        public_key_b64=base64.b64encode(
+            signing_key.public_key().public_bytes(
+                Encoding.Raw, PublicFormat.Raw,
+            )
+        ).decode(),
+    )
+    assert enrolled["status"] == "OWNER_REGISTERED_AUTHORITY"
+    plan_state = store.get(report["run_id"])
+    now = datetime.now(timezone.utc)
+    fields = {
+        "requirement": "budget_feasibility",
+        "decision_id": "brand",
+        "plan_id": plan_state.plan_id,
+        "plan_revision": plan_state.revision,
+        "plan_digest": plan_digest(plan_state),
+        "issuer": issuer,
+        "issued_at": (now - timedelta(minutes=1)).isoformat(),
+        "expires_at": (now + timedelta(hours=1)).isoformat(),
+        "claims": {
+            "currency": "USD",
+            "approved_budget_usd": 80000,
+            "fully_loaded_cost_usd": 60000,
+        },
+    }
+    proof = {**fields, "signature_b64": base64.b64encode(
+        signing_key.sign(canonical_bytes(fields))
+    ).decode()}
+    with pytest.raises(ValueError, match="SIGNED_BUSINESS_EVIDENCE_INVALID"):
+        intake.attach(owner, run_id=report["run_id"], proof={
+            **proof, "claims": {**fields["claims"], "fully_loaded_cost_usd": 90000},
+        })
+    with pytest.raises(OwnerUnauthorized):
+        intake.attach("bad-owner", run_id=report["run_id"], proof=proof)
+    assessment = intake.attach(owner, run_id=report["run_id"], proof=proof)
+    assert assessment["status"] == "REVIEW_REQUIRED"
+    assert "budget_feasibility" not in assessment["missing_requirements"]["brand"]
+    assert "contract_rights" in assessment["missing_requirements"]["brand"]
+    assert assessment["external_action_authorized"] is False
+    with store._connect() as db:
+        encrypted_proof = bytes(db.execute(
+            "select proof_ciphertext from ofc_private.copilot_business_proofs "
+            "where run_id=%s", (report["run_id"],)
+        ).fetchone()[0])
+        assert b"approved_budget_usd" not in encrypted_proof
+    assert intake.revoke_authority(owner, issuer)["status"] == "REVOKED"
+    withdrawn = intake.report(owner, report["run_id"])
+    assert "budget_feasibility" in withdrawn["missing_requirements"]["brand"]
+    assert withdrawn["external_action_authorized"] is False
+
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
     assert copy.submit(
@@ -1106,6 +1181,42 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
     assert qloo.ranks == 4 and model.calls == 7 and len(qloo.searches) == 7
+    deleted = copy.delete_session(session["session_id"], session["ticket"])
+    assert deleted["removed_conversation_runs"] == 2
+    with store._connect() as db:
+        for table, key in (
+            ("copilot_messages", "session_id"),
+            ("copilot_sessions", "session_id"),
+        ):
+            assert db.execute(
+                "select count(*) from ofc_private." + table +
+                " where " + key + "=%s", (session["session_id"],)
+            ).fetchone()[0] == 0
+        for table, key in (
+            ("plans", "plan_id"),
+            ("events", "plan_id"),
+            ("dynamic_qloo_attempts", "plan_id"),
+            ("copilot_business_proofs", "run_id"),
+            ("copilot_search", "run_id"),
+        ):
+            assert db.execute(
+                "select count(*) from ofc_private." + table +
+                " where " + key + "=%s", (report["run_id"],)
+            ).fetchone()[0] == 0
+    with pytest.raises(SessionDenied):
+        copy.messages(session["session_id"], session["ticket"])
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_sessions "
+            "set expires_at=now()-interval '1 minute' where session_id=%s",
+            (outsider["session_id"],),
+        )
+    assert copy.cleanup_expired(limit=8) >= 1
+    with store._connect() as db:
+        assert db.execute(
+            "select count(*) from ofc_private.copilot_sessions "
+            "where session_id=%s", (outsider["session_id"],),
+        ).fetchone()[0] == 0
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
@@ -1170,6 +1281,9 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
             assert "SPEND_ONE_PROVIDER_REQUEST" in script
             assert "localStorage" not in script
         assert call("/api/owner/credentials")[0] == 403
+        assert call("/api/owner/business", {
+            "action": "assess", "run_id": "unauthorized",
+        })[0] == 403
         assert call(
             "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
         )[0] == 503
@@ -1223,6 +1337,26 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
             "/api/copilot/sessions/" + visitors["session_id"],
             cookie=visitor_cookie,
         )[0] == 200
+        assert call("/api/owner/business", {
+            "action": "register", "issuer": "test-authority-001",
+            "requirements": ["contract_rights"], "public_key_b64": "invalid!",
+        }, cookie=owner_cookie)[0] == 422
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            {"confirm": "DELETE_MY_SESSION"},
+            cookie=owner_cookie,
+        )[0] == 403
+        status, removed, clear_cookie = call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            {"confirm": "DELETE_MY_SESSION"},
+            cookie=visitor_cookie,
+        )
+        assert status == 200 and removed["status"] == "SESSION_DELETED"
+        assert "Max-Age=0" in clear_cookie
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            cookie=visitor_cookie,
+        )[0] == 403
         assert call("/api/owner/logout", {}, cookie=owner_cookie)[0] == 200
         assert call("/api/owner/credentials", cookie=owner_cookie)[0] == 403
     finally:
