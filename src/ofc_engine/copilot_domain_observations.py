@@ -12,6 +12,7 @@ from .qloo_catalog import (
     inspect_domain_rank,
 )
 from .revisions import digest_obj
+from .taste_intelligence import TasteContext, discovery_spec, normalize_discovery, TasteEvidenceError
 
 
 class HostedDomainObservations:
@@ -104,4 +105,62 @@ class HostedDomainObservations:
             )
             if written.rowcount != 1:
                 raise StorageIntegrityError("lost catalog observation reservation")
+        return result
+
+    def discover(self, *, run_id: str, context: TasteContext, seed_id: str) -> dict:
+        spec = discovery_spec(context, seed_id)
+        store = self.reviewer.store
+        with store._connect() as db:
+            budget = db.execute(
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget "
+                "where id=1 for update"
+            ).fetchone()
+            if budget is None:
+                raise StorageIntegrityError("missing Qloo daily budget")
+            saved = db.execute(
+                "select fingerprint,state,result,result_digest "
+                "from ofc_private.copilot_discoveries where run_id=%s for update",
+                (run_id,),
+            ).fetchone()
+            if saved is not None:
+                if saved[0] != spec.fingerprint:
+                    raise StorageIntegrityError("discovery request scope conflict")
+                if saved[1] != "COMPLETE":
+                    return {"status": "UNCERTAIN", "reason_code": "DISCOVERY_ALREADY_RESERVED"}
+                try:
+                    restored = json.loads(saved[2])
+                except (TypeError, ValueError) as exc:
+                    raise StorageIntegrityError("invalid saved discovery") from exc
+                if digest_obj(restored) != saved[3]:
+                    raise StorageIntegrityError("discovery integrity mismatch")
+                return restored
+            today = datetime.now(timezone.utc).date()
+            used = budget[1] if budget[0] == today else 0
+            if used >= self.reviewer.daily_limit:
+                return {"status": "UNCERTAIN", "reason_code": "QLOO_DAILY_QUOTA_EXHAUSTED"}
+            db.execute(
+                "update ofc_private.dynamic_qloo_budget "
+                "set utc_day=%s,reserved=%s where id=1",
+                (today, used + 1),
+            )
+            db.execute(
+                "insert into ofc_private.copilot_discoveries "
+                "(run_id,fingerprint,state) values(%s,%s,'RESERVED')",
+                (run_id, spec.fingerprint),
+            )
+        try:
+            capture = self.reviewer.client.probe(spec)
+            result = normalize_discovery(capture, spec)
+        except (QlooProbeError, TasteEvidenceError):
+            return {"status": "UNCERTAIN", "reason_code": "QLOO_DISCOVERY_UNAVAILABLE"}
+        with store._connect() as db:
+            updated = db.execute(
+                "update ofc_private.copilot_discoveries "
+                "set state='COMPLETE',result=%s,result_digest=%s "
+                "where run_id=%s and fingerprint=%s and state='RESERVED'",
+                (json.dumps(result, sort_keys=True), digest_obj(result),
+                 run_id, spec.fingerprint),
+            )
+            if updated.rowcount != 1:
+                raise StorageIntegrityError("lost discovery reservation")
         return result
