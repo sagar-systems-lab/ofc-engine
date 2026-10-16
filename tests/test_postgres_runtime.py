@@ -923,15 +923,31 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
             assert headers["x-goog-api-key"] == "private-gemini-key-not-real"
             payload = json.loads(data)
             schema = payload["generationConfig"]["responseJsonSchema"]
-            if "off_answer" in schema["properties"]:
-                text = {
-                    "off_answer": "Qloo ranks Brand B, but the proposal retained Brand A.",
-                    "on_answer": "With the same Qloo evidence, OFC revises to Brand B, pending review.",
+            if "answer" in schema["properties"]:
+                context = json.loads(payload["contents"][0]["parts"][0]["text"])
+                mode_on = context["view"]["ofc_enabled"]
+                assert set(context) == {
+                    "prompt", "model_id", "baseline_digest",
+                    "qloo_evidence_digest", "view",
                 }
+                if not mode_on:
+                    assert "on" not in context and "ofc_reason" not in json.dumps(context)
+                text = {"answer": (
+                    "With the same Qloo evidence, OFC repairs Brand A to Brand B."
+                    if mode_on else
+                    "Qloo ranks Brand B; my original proposal was Brand A."
+                )}
             else:
+                query = payload["contents"][0]["parts"][0]["text"]
+                prior = json.loads(query) if query.startswith("{") else {}
+                budget = 80000 if (
+                    isinstance(prior, dict)
+                    and "previous_plan" in prior
+                    and "80000" in prior.get("latest_user_message", "")
+                ) else None
                 text = {
                     "objective": "Check brand fit", "artist_name": "Artist Example",
-                    "budget_usd": None, "cities": [],
+                    "budget_usd": budget, "cities": [],
                     "choices": [{
                         "decision_id": "brand", "domain": "brand",
                         "selected_name": "Brand A",
@@ -1011,8 +1027,8 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert report["qloo_requests_this_run"] == 5
     assert report["qloo_search_requests"] == 3
     assert report["qloo_rank_requests"] == 2
-    assert report["llm_requests_this_run"] == 2
-    assert len(qloo.searches) == 3 and qloo.ranks == 2 and model.calls == 2
+    assert report["llm_requests_this_run"] == 3
+    assert len(qloo.searches) == 3 and qloo.ranks == 2 and model.calls == 3
     assert artist not in json.dumps(report)
     assert brand_a not in json.dumps(report)
     assert brand_b not in json.dumps(report)
@@ -1027,7 +1043,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         session_id=session["session_id"], ticket=session["ticket"],
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
-    assert qloo.ranks == model.calls == 2 and len(qloo.searches) == 3
+    assert qloo.ranks == 2 and model.calls == 3 and len(qloo.searches) == 3
     stored = copy.messages(session["session_id"], session["ticket"])["messages"]
     assert len(stored) == 1 and stored[0]["prompt"] == "Find a great sponsor"
     assert {key: value for key, value in stored[0].items() if key != "prompt"} == report
@@ -1045,8 +1061,43 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert (len(qloo.searches), qloo.ranks, model.calls) == saved_usage
     assert copy.test_connection(owner, "qloo")["status"] == "ACTIVE"
     assert copy.test_connection(owner, "gemini")["status"] == "ACTIVE"
-    assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 3)
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 4)
     assert copy.capabilities()["product"] == "ACTIVE"
+
+    followup = copy.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-followup-budget-001",
+        prompt="Change the campaign budget to $80000; keep the brand options",
+        parent_run_id=report["run_id"],
+    )
+    assert followup["status"] == "REVIEW_REQUIRED"
+    assert followup["parent_run_id"] == report["run_id"]
+    assert followup["plan"]["budget_usd"] == 80000
+    assert followup["plan"]["choices"] == report["plan"]["choices"]
+    assert followup["off"]["qloo"] == followup["on"]["qloo"]
+    assert followup["llm_requests_this_run"] == 3
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (7, 4, 7)
+    assert copy.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-followup-budget-001",
+        prompt="Change the campaign budget to $80000; keep the brand options",
+        parent_run_id=report["run_id"],
+    ) == followup
+    with pytest.raises(SessionDenied):
+        copy.submit(
+            session_id=session["session_id"], ticket=session["ticket"],
+            request_id="visitor-followup-budget-001",
+            prompt="Change the campaign budget to $80000; keep the brand options",
+            parent_run_id=None,
+        )
+    outsider = copy.session()
+    with pytest.raises(SessionDenied):
+        copy.submit(
+            session_id=outsider["session_id"], ticket=outsider["ticket"],
+            request_id="outsider-replay-001", prompt="Change campaign budget",
+            parent_run_id=report["run_id"],
+        )
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (7, 4, 7)
 
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
@@ -1054,7 +1105,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         session_id=session["session_id"], ticket=session["ticket"],
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
-    assert qloo.ranks == 2 and model.calls == 3 and len(qloo.searches) == 4
+    assert qloo.ranks == 4 and model.calls == 7 and len(qloo.searches) == 7
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
