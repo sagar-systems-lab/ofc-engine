@@ -145,6 +145,55 @@ class HostedCopilot:
         ):
             raise SessionDenied("INVALID_SESSION")
 
+    def delete_session(self, session_id: str, ticket: str) -> dict:
+        self._check_session(session_id, ticket)
+        with self.store._connect() as db:
+            ids = [
+                row[0] for row in db.execute(
+                    "select run_id from ofc_private.copilot_messages "
+                    "where session_id=%s for update", (session_id,),
+                ).fetchall()
+            ]
+            if ids:
+                db.execute(
+                    "delete from ofc_private.copilot_business_proofs "
+                    "where run_id=any(%s)", (ids,),
+                )
+                for table in (
+                    "copilot_discoveries", "copilot_domain_observations",
+                    "copilot_search",
+                ):
+                    db.execute(
+                        "delete from ofc_private." + table + " where run_id=any(%s)",
+                        (ids,),
+                    )
+                for table in (
+                    "dynamic_qloo_attempts", "browser_runs",
+                    "requests", "events",
+                ):
+                    db.execute(
+                        "delete from ofc_private." + table + " where plan_id=any(%s)",
+                        (ids,),
+                    )
+                db.execute(
+                    "delete from ofc_private.plans where plan_id=any(%s)", (ids,),
+                )
+                db.execute(
+                    "delete from ofc_private.copilot_messages "
+                    "where session_id=%s", (session_id,),
+                )
+            deleted = db.execute(
+                "delete from ofc_private.copilot_sessions "
+                "where session_id=%s", (session_id,),
+            )
+            if deleted.rowcount != 1:
+                raise SessionDenied("SESSION_ALREADY_DELETED")
+        return {
+            "status": "SESSION_DELETED",
+            "removed_conversation_runs": len(ids),
+            "provider_quota_history_preserved": True,
+        }
+
     @staticmethod
     def _validate_message(request_id: str, prompt: str) -> str:
         if (
