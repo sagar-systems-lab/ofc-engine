@@ -16,6 +16,8 @@ from urllib.request import Request, urlopen
 import psycopg
 from playwright.sync_api import sync_playwright
 
+from browser_smoke import run_browser
+
 from ofc_engine.hosted_agent import HostedAgentFlow
 from ofc_engine.hosted_live import HostedLiveReview
 from ofc_engine.hosted_preview import HostedFixtureServer
@@ -242,6 +244,10 @@ def qualify(dsn):
             headers={"Authorization": "Bearer " + other["ticket"]}
         )["source_mode"] == "EVIDENCE_UNAVAILABLE"
         assert browser_test(origin) == (1440, 375, 320)
+        full_journey = run_browser(origin)
+        assert full_journey["result"] == "PASS"
+        assert full_journey["viewports"] == [1440, 375, 320]
+        assert full_journey["external_action_executed"] is False
         assert transport.calls == 1
     finally:
         stop(server, worker)
@@ -281,6 +287,8 @@ def qualify(dsn):
         "result": "PASS",
         "scope": "POSTGRES_PERSISTED_TEST_ONLY_QLOO_OBSERVATION",
         "browser_widths": [1440, 375, 320],
+        "hosted_synthetic_proof": "PASS",
+        "five_stage_published_tour": "PASS",
         "reload": "PASS",
         "expired_ticket_restart": "PASS",
         "wrong_ticket": "BLOCKED",
