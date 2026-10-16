@@ -194,6 +194,19 @@ def browser_test(origin):
                             next_button.focus()
                             next_button.press("Enter")
                     assert page.locator("#qloo-journey-previous").is_enabled()
+                    assert page.locator("#qloo-journey-body").evaluate(
+                        "el => getComputedStyle(el).overflowWrap"
+                    ) == "anywhere"
+                    page.locator("#qloo-journey-body ul").last.evaluate("""ul => {
+                        const item = document.createElement('li');
+                        item.id = 'long-blocker-regression';
+                        item.textContent = 'INDEPENDENTLY_UNVERIFIED_DEPENDENT_RECHECK_'.repeat(3);
+                        ul.append(item);
+                    }""")
+                    assert not page.evaluate(
+                        "document.documentElement.scrollWidth > innerWidth + 1"
+                    ), "long handoff blocker overflows viewport"
+                    page.locator("#long-blocker-regression").evaluate("el => el.remove()")
                     page.locator("#qloo-journey-previous").click()
                     assert page.locator("#qloo-journey-heading").inner_text() == "04 / VERIFY"
                     assert page.locator("#view-plan .state-item").nth(2).locator(

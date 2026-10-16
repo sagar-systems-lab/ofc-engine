@@ -105,8 +105,49 @@ def qualify(origin: str, expected_sha: str):
                             page.locator("#qloo-journey-next").press("Enter")
                     assert "HANDOFF BLOCKED" == page.locator(
                         "#view-plan .state-item").nth(2).locator("small").inner_text()
-                    assert not page.evaluate(
-                        "document.documentElement.scrollWidth > innerWidth + 1"
+                    overflow = page.evaluate("""() => {
+                        const width = innerWidth;
+                        const documentWidth = document.documentElement.scrollWidth;
+                        const nodes = [...document.querySelectorAll('*')]
+                          .filter(el => {
+                            const style = getComputedStyle(el);
+                            return style.display !== 'none' &&
+                              style.visibility !== 'hidden';
+                          })
+                          .map(el => {
+                            const rect = el.getBoundingClientRect();
+                            const style = getComputedStyle(el);
+                            return {
+                              tag: el.tagName.toLowerCase(),
+                              id: el.id || null,
+                              className: typeof el.className === 'string'
+                                ? el.className.slice(0, 110) : '',
+                              docRight: Math.round(rect.right + scrollX),
+                              docLeft: Math.round(rect.left + scrollX),
+                              width: Math.round(rect.width),
+                              scrollWidth: el.scrollWidth,
+                              clientWidth: el.clientWidth,
+                              overflowX: style.overflowX,
+                              whiteSpace: style.whiteSpace
+                            };
+                          });
+                        const candidates = nodes.filter(el =>
+                          el.docRight > width + 1 ||
+                          el.scrollWidth > el.clientWidth + 1
+                        );
+                        candidates.sort((a, b) =>
+                          Math.max(b.docRight, b.scrollWidth) -
+                          Math.max(a.docRight, a.scrollWidth));
+                        return {
+                          viewport: width, scrollWidth: documentWidth,
+                          scrollX, bodyScrollWidth: document.body.scrollWidth,
+                          overflow: documentWidth > width + 1,
+                          offenders: candidates.slice(0, 20)
+                        };
+                    }""")
+                    assert not overflow["overflow"], (
+                        "published tour horizontal overflow: " +
+                        json.dumps(overflow, sort_keys=True)
                     )
                     page.reload(wait_until="domcontentloaded")
                     page.locator("#start-qloo-journey").wait_for(state="visible")
