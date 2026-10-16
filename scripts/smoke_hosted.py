@@ -119,15 +119,18 @@ def _wait_for_ready(client: PreviewProbe, *, seconds: int) -> dict:
             time.sleep(min(3, max(0, until - time.monotonic())))
 
 
-def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = None) -> dict:
+def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = None,
+            expected_mode: str = "SYNTHETIC") -> dict:
     if type(wait_seconds) is not int or not 0 <= wait_seconds <= 180:
         raise ValueError("wait_seconds must be between 0 and 180")
     if expected_sha is not None and not re.fullmatch(r"[0-9a-f]{7,40}", expected_sha):
         raise ValueError("expected SHA must be lowercase hexadecimal, length 7–40")
+    if expected_mode not in ("SYNTHETIC", "PUBLIC_REDACTED_QLOO_REVIEW"):
+        raise ValueError("invalid expected hosted mode")
     client = PreviewProbe(origin)
     health = _wait_for_ready(client, seconds=wait_seconds)
     live = _json(client.get("/healthz"))
-    if health != live or health.get("status") != "ok" or health.get("mode") != "SYNTHETIC":
+    if health != live or health.get("status") != "ok" or health.get("mode") != expected_mode:
         raise SmokeFailure("health/readiness provenance mismatch")
     if expected_sha is not None and health.get("build_sha") != expected_sha:
         raise SmokeFailure("unexpected deployed build identity")
@@ -198,7 +201,7 @@ def qualify(origin: str, *, wait_seconds: int = 0, expected_sha: str | None = No
         raise SmokeFailure("mutation route unexpectedly accessible")
     if client.get("/.env").status != 404:
         raise SmokeFailure("private file path unexpectedly accessible")
-    return {"result": "PASS", "mode": "SYNTHETIC", "build_sha": health.get("build_sha"),
+    return {"result": "PASS", "mode": expected_mode, "build_sha": health.get("build_sha"),
             "scenarios": observed, "real_qloo_requests": 0, "release_authorized": False}
 
 
@@ -207,9 +210,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--wait-seconds", type=int, default=0)
     parser.add_argument("--expected-sha")
+    parser.add_argument("--expected-mode", choices=("SYNTHETIC", "PUBLIC_REDACTED_QLOO_REVIEW"),
+                        default="SYNTHETIC")
     args = parser.parse_args(argv)
     try:
-        report = qualify(args.base_url, wait_seconds=args.wait_seconds, expected_sha=args.expected_sha)
+        report = qualify(args.base_url, wait_seconds=args.wait_seconds,
+                         expected_sha=args.expected_sha, expected_mode=args.expected_mode)
     except (ValueError, SmokeFailure) as exc:
         print(json.dumps({"result": "FAIL", "reason": str(exc)}), file=sys.stderr)
         return 1

@@ -34,12 +34,14 @@ jobs:
       - name: Verify live fixture deployment
         run: |
           python scripts/smoke_hosted.py --base-url "$DEPLOY_URL" \
-            --wait-seconds 150 --expected-sha "$EXPECTED_SHA"
+            --wait-seconds 150 --expected-sha "$EXPECTED_SHA" \
+            --expected-mode PUBLIC_REDACTED_QLOO_REVIEW
   browser_smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 14
     env:
       DEPLOY_URL: ${{ inputs.base_url }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,3 +55,4 @@ jobs:
         run: |
           python scripts/browser_smoke.py --base-url "$DEPLOY_URL"
           python scripts/accessibility_smoke.py --base-url "$DEPLOY_URL"
+          python scripts/smoke_published_release.py --base-url "$DEPLOY_URL" --expected-sha "$EXPECTED_SHA"

@@ -5,6 +5,8 @@ on:
       - ".github/workflows/preview-browser.yml"
       - "scripts/browser_smoke.py"
       - "scripts/journey_smoke.py"
+      - "scripts/hosted_published_e2e.py"
+      - "scripts/smoke_published_release.py"
       - "scripts/smoke_recorded_browser.py"
       - "scripts/capture_ui.py"
       - "scripts/accessibility_smoke.py"
@@ -19,7 +21,20 @@ permissions:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: ofc_browser
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ofc_browser"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -49,11 +64,16 @@ jobs:
           test "$ready" -eq 1
           python scripts/smoke_hosted.py --base-url http://127.0.0.1:18080 --expected-sha abc123d
           python scripts/browser_smoke.py --base-url http://127.0.0.1:18080
+          python -m py_compile scripts/smoke_published_release.py
           python scripts/journey_smoke.py --base-url http://127.0.0.1:18080
           python scripts/smoke_recorded_browser.py --base-url http://127.0.0.1:18080
           python scripts/accessibility_smoke.py --base-url http://127.0.0.1:18080
           python scripts/bench_preview.py --base-url http://127.0.0.1:18080 --samples 64 --workers 4 --warmup 8
           python scripts/capture_ui.py --base-url http://127.0.0.1:18080 --output ui-review
+      - name: Qualify persisted Qloo-shaped evidence through Postgres and Chromium
+        env:
+          OFC_TEST_POSTGRES_URL: postgresql://postgres:ci-only@127.0.0.1:5432/ofc_browser
+        run: python scripts/hosted_published_e2e.py
       - name: Archive synthetic UI review screenshots
         if: always()
         uses: actions/upload-artifact@v4

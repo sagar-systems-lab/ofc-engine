@@ -6,8 +6,8 @@ OFC Engine checks the choices in an agent's three-city tour before action. It ma
 
 Open `https://ofc-fixture-preview.onrender.com/#plan`.
 
-- **Start six-decision tour review** stores a fresh six-decision proposal for 24 hours. This button does **not** call Qloo. The page reports `REVIEW_REQUIRED`.
-- When the operator has separately approved publication of a real acquired Qloo rank observation, the same Plan Builder shows a **Qloo decision review**. It states when the response was collected, the brand decision that changed, unaffected choices, dependent checks, and the reasons plan handoff is withheld.
+- **Review the Qloo-backed tour** opens a five-stage, read-only walkthrough of the already-saved original run: PROPOSE → QLOO CHECK → REPAIR → VERIFY → HANDOFF BLOCKED. It shows frozen scope, redacted original/current candidate positions, exact rank-supported brand change, unchanged choices, invalidated dependents and revision-bound withheld handoff. It never makes a new provider request.
+- The **separate draft editor** validates and saves its own proposals with evidence unavailable; it cannot attach the published rank observation to an unrelated plan.
 - The published example is read-only and uses an already acquired rank observation; visiting the site does **not** make a new Qloo request. Raw Qloo responses, credentials, operator tokens and anonymous browser tickets are not public.
 - **Try the demo** and **Recorded proof** are separately labeled fixture/historical examples, not live provider results.
 
