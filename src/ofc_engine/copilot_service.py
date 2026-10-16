@@ -8,6 +8,7 @@ from typing import Callable
 
 from .copilot_compare import build_copilot_pair
 from .copilot_intake import draft_plan, EntityResolutionRequired
+from .intake import freeze_proposal
 from .copilot_llm import CopilotLLM
 from .copilot_resolver import normalize_qloo_search
 from .dynamic import DynamicQlooReview
@@ -35,6 +36,8 @@ class LocalCopilotService:
     ):
         if not isinstance(llm, CopilotLLM) or not isinstance(engine, DynamicQlooReview):
             raise TypeError("configured LLM and OFC reviewer required")
+        if not isinstance(engine.store, SQLiteRevisionStore):
+            raise TypeError("local workflow requires SQLite durability")
         if not callable(search):
             raise TypeError("budgeted search transport required")
         self.llm = llm
@@ -172,9 +175,7 @@ class LocalCopilotService:
             resolved_artist=artist, resolved_brands=brands,
         )
         evaluated = self.engine.evaluate(proposal)
-        baseline, _ = __import__(
-            "ofc_engine.intake", fromlist=["freeze_proposal"]
-        ).freeze_proposal(proposal)
+        baseline, _ = freeze_proposal(proposal)
         reviewed = self.engine.store.get(run_id)
         pair = build_copilot_pair(
             prompt=prompt, model_id=self.llm.model,
