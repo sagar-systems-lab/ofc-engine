@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import base64
+import binascii
 from typing import Mapping
 
 from cryptography.exceptions import InvalidSignature
@@ -101,7 +102,7 @@ def _verify_claim(
         Ed25519PublicKey.from_public_bytes(authority.public_key).verify(
             signature, canonical_bytes(proof.signed_fields()),
         )
-    except (InvalidSignature, ValueError, TypeError):
+    except (InvalidSignature, ValueError, TypeError, binascii.Error):
         return False
     return _claims_satisfy(proof)
 
