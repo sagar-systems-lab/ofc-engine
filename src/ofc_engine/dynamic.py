@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
-import sqlite3
 
 from .contracts import RepairPatch
 from .durable import SQLiteRevisionStore, StorageIntegrityError
@@ -219,6 +218,7 @@ class DynamicQlooReview:
         results = []
         spent = 0
         eligible = 0
+        saw_observation = False
         for decision in baseline.decisions:
             report = {
                 "decision_id": decision.decision_id,
@@ -245,6 +245,7 @@ class DynamicQlooReview:
                 report["reason_code"] = reason or "FIRST_RANK_STALE"
                 results.append(report)
                 continue
+            saw_observation = True
             top = first["ranking"][0]
             current = self.store.get(baseline.plan_id)
             selected = next(x.candidate_id for x in current.decisions
@@ -303,10 +304,14 @@ class DynamicQlooReview:
             old.decision_id for old, new in zip(baseline.decisions, current.decisions)
             if old.candidate_id != new.candidate_id
         ]
+        selected = {decision.decision_id: decision.candidate_id
+                    for decision in current.decisions}
+        for item in results:
+            item["selected_candidate_id"] = selected[item["decision_id"]]
         return {
             "run_id": baseline.plan_id,
             "policy_version": _POLICY,
-            "source_mode": "LIVE_HTTP_UNVERIFIED" if eligible else "EVIDENCE_UNAVAILABLE",
+            "source_mode": "LIVE_HTTP_UNVERIFIED" if saw_observation else "EVIDENCE_UNAVAILABLE",
             "baseline_plan_digest": baseline_digest,
             "plan_digest": plan_digest(current),
             "revision": current.revision,
