@@ -1620,3 +1620,125 @@ def test_user_selected_qloo_identity_is_bound_to_prior_session(pg_url):
     assert provider.calls == 6
     vault.revoke(token, "qloo")
     vault.revoke(token, "gemini")
+
+
+def test_cross_domain_movie_evidence_is_shared_but_never_auto_verified(pg_url):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.copilot_llm_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+
+    ids = {
+        "Artist Example": "0a0a0a0a-0000-4000-8000-000000000001",
+        "Movie A": "0a0a0a0a-0000-4000-8000-000000000002",
+        "Movie B": "0a0a0a0a-0000-4000-8000-000000000003",
+    }
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            payload = json.loads(data)
+            fields = payload["generationConfig"]["responseJsonSchema"]["properties"]
+            if "answer" in fields:
+                view = json.loads(payload["contents"][0]["parts"][0]["text"])["view"]
+                answer = {"answer": (
+                    "OFC cannot independently certify the movie relationship."
+                    if view["ofc_enabled"] else
+                    "Qloo suggests a cultural movie ranking."
+                )}
+            else:
+                answer = {
+                    "objective": "Compare movies for a music artist",
+                    "artist_name": "Artist Example",
+                    "budget_usd": None, "cities": [],
+                    "choices": [{
+                        "decision_id": "film", "domain": "movie",
+                        "selected_name": "Movie A",
+                        "candidate_names": ["Movie A", "Movie B"],
+                        "mutable": True, "depends_on": [],
+                    }],
+                    "baseline_answer": "Movie A is only a draft.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(answer)}]},
+            }]}).encode())
+
+    class Provider:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            route = urlsplit(url)
+            args = parse_qs(route.query)
+            self.calls.append(route.path)
+            if route.path == "/search":
+                name = args["query"][0]
+                payload = {"success": True, "results": {"entities": [{
+                    "name": name, "entity_id": ids[name],
+                    "type": "urn:entity",
+                    "subtype": args["types"][0],
+                }]}}
+            else:
+                assert args["filter.type"] == ["urn:entity:movie"]
+                payload = {"success": True, "results": {"entities": [
+                    {"entity_id": id_, "type": "urn:entity",
+                     "query": {"affinity": affinity}}
+                    for id_, affinity in ((ids["Movie B"], 0.92), (ids["Movie A"], 0.6))
+                ]}}
+            return TransportReply(200, json.dumps(payload).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="catalog-owner-" + "k" * 47,
+    )
+    owner = vault.login("catalog-owner-" + "k" * 47)
+    vault.configure(owner, "qloo", "private-test-qloo-catalog-key")
+    vault.configure(owner, "gemini", "private-test-gemini-catalog-key")
+    model, provider = Model(), Provider()
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=30, llm_daily_limit=30,
+        browser_daily_limit=70, model_transport=model, qloo_transport=provider,
+    )
+    session = service.session()
+    reply = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="movie-observation-001",
+        prompt="Which movies culturally resonate with Artist Example?",
+    )
+    assert reply["status"] == "REVIEW_REQUIRED"
+    assert reply["off"]["qloo"] == reply["on"]["qloo"]
+    assert reply["off"]["ofc_enabled"] is False
+    assert reply["on"]["ofc_enabled"] is True
+    assert reply["on"]["changed_ids"] == []
+    assert reply["on"]["decisions"][0]["ofc_verdict"] == "UNCERTAIN"
+    assert reply["on"]["decisions"][0]["ofc_reason"] == "CATALOG_POLICY_NOT_LIVE_QUALIFIED"
+    catalog = reply["off"]["qloo"]["catalog_observations"]
+    assert catalog[0]["status"] == "OBSERVED_NOT_POLICY_QUALIFIED"
+    assert catalog[0]["ranked_candidates"] == ["Movie B", "Movie A"]
+    assert catalog[0]["policy_qualified"] is False
+    assert reply["qloo_requests_this_run"] == 4
+    assert reply["qloo_search_requests"] == 3
+    assert reply["qloo_catalog_requests"] == 1
+    assert reply["llm_requests_this_run"] == 3
+    assert len(provider.calls) == 4 and model.calls == 3
+    assert service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="movie-observation-001",
+        prompt="Which movies culturally resonate with Artist Example?",
+    ) == reply
+    assert len(provider.calls) == 4 and model.calls == 3
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
