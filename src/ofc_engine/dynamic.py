@@ -255,8 +255,10 @@ class DynamicQlooReview:
             }
             top = first["ranking"][0]
             current = self.store.get(baseline.plan_id)
-            selected = next(x.candidate_id for x in current.decisions
-                            if x.decision_id == decision.decision_id)
+            selected = next(
+                x.candidate_id for x in current.decisions
+                if x.decision_id == decision.decision_id
+            )
             if selected != top:
                 if selected != decision.candidate_id:
                     report["reason_code"] = "STORED_SELECTION_CONFLICT"
@@ -266,13 +268,32 @@ class DynamicQlooReview:
                     report["reason_code"] = "REPAIR_NOT_ALLOWED"
                     results.append(report)
                     continue
+
+            # A repair must never be committed using only one observation.
+            second, used, reason = self._observation(
+                baseline.plan_id, decision.decision_id, 2, baseline_digest, spec
+            )
+            spent += used
+            if second is None or not self._fresh(first, second):
+                report["reason_code"] = reason or "RANK_RECHECK_STALE"
+                results.append(report)
+                continue
+            if second["ranking"] != first["ranking"]:
+                report["reason_code"] = "FRESH_RANK_RECHECK_DISAGREES"
+                results.append(report)
+                continue
+
+            if selected != top:
                 patch = RepairPatch(
                     patch_id="dynamic:" + baseline.plan_id + ":" + decision.decision_id,
                     decision_id=decision.decision_id,
                     base_revision=current.revision,
                     old_candidate_id=selected,
                     new_candidate_id=top,
-                    evidence_refs=("qloo:" + spec.fingerprint + ":" + first["capture_digest"],),
+                    evidence_refs=(
+                        "qloo:" + spec.fingerprint + ":" + first["capture_digest"],
+                        "qloo-recheck:" + spec.fingerprint + ":" + second["capture_digest"],
+                    ),
                     precondition_digest=plan_digest(current),
                 )
                 try:
@@ -284,23 +305,14 @@ class DynamicQlooReview:
                     report["reason_code"] = "CONCURRENT_REPAIR_CONFLICT"
                     results.append(report)
                     continue
-            second, used, reason = self._observation(
-                baseline.plan_id, decision.decision_id, 2, baseline_digest, spec
-            )
-            spent += used
-            if second is None or not self._fresh(first, second):
-                report["reason_code"] = reason or "RANK_RECHECK_STALE"
-            elif second["ranking"][0] != top:
-                report["reason_code"] = "FRESH_RANK_RECHECK_DISAGREES"
-            else:
-                report.update({
-                    "verdict": "PASS",
-                    "reason_code": "QLOO_RANK_RECHECK_MATCHED",
-                    "rank_recheck_completed": True,
-                    "evidence_fingerprints": [spec.fingerprint],
-                    "original_capture_digest": first["capture_digest"],
-                    "recheck_capture_digest": second["capture_digest"],
-                })
+            report.update({
+                "verdict": "PASS",
+                "reason_code": "QLOO_RANK_RECHECK_MATCHED",
+                "rank_recheck_completed": True,
+                "evidence_fingerprints": [spec.fingerprint],
+                "original_capture_digest": first["capture_digest"],
+                "recheck_capture_digest": second["capture_digest"],
+            })
             results.append(report)
 
         current = self.store.get(baseline.plan_id)
