@@ -1752,3 +1752,126 @@ def test_cross_domain_movie_evidence_is_shared_but_never_auto_verified(pg_url):
     assert len(provider.calls) == 4 and model.calls == 3
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
+
+
+def test_native_qloo_discovery_from_candidate_free_taste_prompt(pg_url):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.copilot_llm_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+    ids = {
+        "Movie Example": "0a0a0a0a-0000-4000-8000-000000000001",
+        "Restaurant Alpha": "0a0a0a0a-0000-4000-8000-000000000002",
+        "Restaurant Beta": "0a0a0a0a-0000-4000-8000-000000000003",
+    }
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            payload = json.loads(data)
+            fields = payload["generationConfig"]["responseJsonSchema"]["properties"]
+            if "answer" in fields:
+                view = json.loads(payload["contents"][0]["parts"][0]["text"])["view"]
+                answer = {"answer": (
+                    "OFC withholds restaurant availability and unverified claims."
+                    if view["ofc_enabled"] else
+                    "Qloo provided cultural candidates, not reservations."
+                )}
+            else:
+                answer = {
+                    "objective": "Recommend places for a movie audience",
+                    "artist_name": None,
+                    "taste_seed_name": "Movie Example",
+                    "taste_seed_category": "movie",
+                    "discovery_category": "place",
+                    "taste_location": "New York",
+                    "budget_usd": None, "cities": [],
+                    "choices": [],
+                    "baseline_answer": "I need Qloo recommendations.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(answer)}]},
+            }]}).encode())
+
+    class Provider:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            route = urlsplit(url)
+            args = parse_qs(route.query)
+            self.calls.append(route.path)
+            if route.path == "/search":
+                assert args["types"] == ["urn:entity:movie"]
+                body = {"success": True, "results": {"entities": [{
+                    "name": "Movie Example", "entity_id": ids["Movie Example"],
+                    "type": "urn:entity", "subtype": "urn:entity:movie",
+                }]}}
+            else:
+                assert args["filter.type"] == ["urn:entity:place"]
+                assert args["filter.location.query"] == ["New York"]
+                assert "filter.results.entities" not in args
+                body = {"success": True, "results": {"entities": [
+                    {"entity_id": ids["Restaurant Beta"], "name": "Restaurant Beta",
+                     "type": "urn:entity",
+                     "query": {"affinity": 0.9, "explainability": {
+                         "signal.interests.entities": {
+                             ids["Movie Example"]: 0.77
+                         }
+                     }}},
+                    {"entity_id": ids["Restaurant Alpha"], "name": "Restaurant Alpha",
+                     "type": "urn:entity",
+                     "query": {"affinity": 0.4}},
+                ]}}
+            return TransportReply(200, json.dumps(body).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="discovery-owner-" + "d" * 47,
+    )
+    owner = vault.login("discovery-owner-" + "d" * 47)
+    vault.configure(owner, "qloo", "test-qloo-discovery-key-12345")
+    vault.configure(owner, "gemini", "test-gemini-discovery-key-12345")
+    transport, provider = Model(), Provider()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=50, llm_daily_limit=50,
+        browser_daily_limit=75, model_transport=transport, qloo_transport=provider,
+    )
+    session = runtime.session()
+    args = {
+        "session_id": session["session_id"], "ticket": session["ticket"],
+        "request_id": "candidate-free-local-001",
+        "prompt": "Suggest New York restaurants for people who enjoy Movie Example.",
+    }
+    result = runtime.submit(**args)
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert result["plan"]["choices"][0]["candidate_names"] == [
+        "Restaurant Beta", "Restaurant Alpha"
+    ]
+    assert result["off"]["qloo"] == result["on"]["qloo"]
+    assert result["taste_policy"]["automatic_repair"] == "NOT_QUALIFIED"
+    assert result["on"]["changed_ids"] == []
+    assert result["on"]["decisions"][0]["ofc_verdict"] == "UNCERTAIN"
+    assert result["off"]["qloo"]["native_discovery"]["candidates"][0]["name"] == "Restaurant Beta"
+    assert "entity_id" not in json.dumps(result["off"]["qloo"]["native_discovery"])
+    assert result["qloo_discovery_requests"] == 1
+    assert result["qloo_requests_this_run"] == 2
+    assert result["llm_requests_this_run"] == 3
+    assert len(provider.calls) == 2 and transport.calls == 3
+    assert runtime.submit(**args) == result
+    assert len(provider.calls) == 2 and transport.calls == 3
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
