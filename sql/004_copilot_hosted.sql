@@ -31,6 +31,10 @@ create table if not exists ofc_private.copilot_messages (
     unique(session_id,request_id)
 );
 
+-- Safe if a previous B2 draft of this private migration was applied.
+alter table ofc_private.copilot_messages
+    add column if not exists llm_attempts smallint not null default 0;
+
 create table if not exists ofc_private.copilot_search (
     run_id text not null references ofc_private.copilot_messages(run_id),
     fingerprint text not null,
