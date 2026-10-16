@@ -230,6 +230,13 @@ class HostedCopilot:
         data = pair.as_dict()
         aliases = {artist.entity_id: artist.name}
         aliases.update({resolved.entity_id: name for name, resolved in brands.items()})
+        for choice in draft.choices:
+            if choice.domain.lower() not in ("brand", "partner", "brand_partner"):
+                for name in choice.candidate_names:
+                    provisional = "unverified:" + sha256(
+                        (choice.decision_id + ":" + name).encode()
+                    ).hexdigest()[:32]
+                    aliases[provisional] = name
         for mode in ("off", "on"):
             for decision in data[mode]["decisions"]:
                 decision["candidate_id"] = aliases.get(
