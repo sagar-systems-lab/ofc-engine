@@ -780,8 +780,6 @@ def test_dynamic_postgres_qloo_budget_and_authenticated_hosted_api(pg_url):
                  "query": {"affinity": 0.9, "explainability": {"signal.interests.entities": {}}}},
                 {"entity_id": "brand-a", "type": "urn:entity",
                  "query": {"affinity": 0.6, "explainability": {"signal.interests.entities": {}}}},
-                {"entity_id": "brand-c", "type": "urn:entity",
-                 "query": {"affinity": 0.3, "explainability": {"signal.interests.entities": {}}}},
             ]}}
             return TransportReply(200, json.dumps(payload).encode())
 
