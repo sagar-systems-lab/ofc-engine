@@ -188,19 +188,31 @@ async function readSavedRun(runId) {
   return {...body.snapshot, run_id: runId};
 }
 
+async function fixturePreview(scenario) {
+  const preview = await fetch("/api/demo?scenario=" + encodeURIComponent(scenario), {cache: "no-store"});
+  if (!preview.ok) throw new Error("Preview unavailable");
+  return {snapshot: await preview.json(), runId: null};
+}
+
 async function createOrPreview(scenario) {
+  const capability = await fetch("/api/runs/status", {cache: "no-store"});
+  if (capability.ok) {
+    const state = await capability.json();
+    if (typeof state.enabled !== "boolean" || state.release_authorized !== false
+        || state.real_qloo_requests !== 0) {
+      throw new Error("Hosted proof mode unavailable");
+    }
+    return fixturePreview(scenario);
+  }
+  if (capability.status !== 404) throw new Error("Proof capability unavailable");
+
   const requestId = window.crypto.randomUUID().replaceAll("-", "");
   const created = await fetch("/api/runs", {
     method: "POST", cache: "no-store",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({scenario, request_id: requestId}),
   });
-  if (created.status === 405) {
-    // Compatibility with the original read-only fixture viewer.
-    const preview = await fetch("/api/demo?scenario=" + encodeURIComponent(scenario), {cache: "no-store"});
-    if (!preview.ok) throw new Error("Preview unavailable");
-    return {snapshot: await preview.json(), runId: null};
-  }
+  if (created.status === 405) return fixturePreview(scenario);
   if (!created.ok) throw new Error("Could not save the run");
   const value = await created.json();
   if (!/^[0-9a-f]{32}$/.test(value.run_id) || value.source_mode !== "SYNTHETIC") {
