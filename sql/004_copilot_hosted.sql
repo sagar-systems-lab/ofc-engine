@@ -59,6 +59,14 @@ create table if not exists ofc_private.copilot_owner_sessions (
     token_digest text primary key,
     expires_at timestamptz not null
 );
+create table if not exists ofc_private.copilot_owner_login_budget (
+    id smallint primary key check(id=1),
+    window_start timestamptz not null,
+    attempts smallint not null check(attempts >= 0)
+);
+insert into ofc_private.copilot_owner_login_budget(id,window_start,attempts)
+values (1, now(), 0) on conflict(id) do nothing;
+
 create table if not exists ofc_private.copilot_connection_attempts (
     id smallint primary key check(id=1),
     utc_day date not null,
@@ -75,6 +83,7 @@ alter table ofc_private.copilot_search enable row level security;
 alter table ofc_private.copilot_llm_budget enable row level security;
 alter table ofc_private.copilot_credentials enable row level security;
 alter table ofc_private.copilot_owner_sessions enable row level security;
+alter table ofc_private.copilot_owner_login_budget enable row level security;
 alter table ofc_private.copilot_connection_attempts enable row level security;
 revoke all on
     ofc_private.copilot_browser_budget,
@@ -84,5 +93,6 @@ revoke all on
     ofc_private.copilot_llm_budget,
     ofc_private.copilot_credentials,
     ofc_private.copilot_owner_sessions,
+    ofc_private.copilot_owner_login_budget,
     ofc_private.copilot_connection_attempts
 from public, anon, authenticated;
