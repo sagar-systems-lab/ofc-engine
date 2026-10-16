@@ -14,13 +14,14 @@ from .copilot_hosted_quota import (
     CopilotQuotaReached, HostedQlooResolver,
     reserve_model_call, reserve_qloo_request,
 )
-from .copilot_intake import EntityResolutionRequired, draft_plan
+from .copilot_intake import EntityResolutionRequired, QlooSelectionRequired, draft_plan
 from .copilot_llm import CopilotLLM, LLMUnavailable
 from .dynamic_postgres import PostgresDynamicQlooReview
 from .durable import StorageIntegrityError
 from .intake import freeze_proposal
 from .postgres_store import PostgresRevisionStore
 from .qloo import QlooProbeClient, QlooProbeError, search_probe
+from .qloo_catalog import capability_registry
 from .revisions import digest_obj
 
 
@@ -485,6 +486,23 @@ class HostedCopilot:
             }
             self._complete(run_id, result)
             return result
+        except QlooSelectionRequired as exc:
+            result = {
+                "schema_version": "copilot.v1",
+                "run_id": run_id,
+                "status": "CLARIFICATION_REQUIRED",
+                "reason_code": exc.reason_code,
+                "question": "Please select a matching Qloo entity or enter its exact name.",
+                "suggestions": exc.suggestions,
+                "plan": self._draft_plan_projection(draft),
+                "qloo_status": "ENTITY_RESOLUTION_PENDING",
+                "model_id": model.model,
+                "release_authorized": False,
+                "external_action_executed": False,
+                **self._run_usage(run_id),
+            }
+            self._complete(run_id, result)
+            return result
         except (LLMUnavailable, QlooProbeError, EntityResolutionRequired,
                 CopilotQuotaReached, ValueError) as exc:
             # Provider bodies and secrets must never be presented in public errors.
@@ -532,6 +550,7 @@ class HostedCopilot:
             "qloo": qloo_state,
             "llm": model_state,
             "product": product_state,
+            "qloo_catalog": capability_registry(),
             "release_authorized": False,
         }
 
