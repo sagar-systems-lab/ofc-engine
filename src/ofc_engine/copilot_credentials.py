@@ -18,6 +18,10 @@ class OwnerUnauthorized(ValueError):
     pass
 
 
+class OwnerRateLimited(OwnerUnauthorized):
+    pass
+
+
 class CredentialVault:
     def __init__(self, store: PostgresRevisionStore, *, master_key: str,
                  owner_secret: str):
@@ -36,8 +40,27 @@ class CredentialVault:
         with store._connect() as db:
             db.execute("select provider from ofc_private.copilot_credentials limit 0")
             db.execute("select token_digest from ofc_private.copilot_owner_sessions limit 0")
+            db.execute("select id from ofc_private.copilot_owner_login_budget limit 0")
 
     def login(self, owner_secret: str) -> str:
+        # Lock owner guessing across processes, even for incorrect credentials.
+        with self.store._connect() as db:
+            row = db.execute(
+                "select window_start,attempts from "
+                "ofc_private.copilot_owner_login_budget where id=1 for update"
+            ).fetchone()
+            if row is None:
+                raise StorageIntegrityError("owner login quota migration missing")
+            now = datetime.now(timezone.utc)
+            within_window = now - row[0] < timedelta(minutes=15)
+            attempts = row[1] if within_window else 0
+            if attempts >= 20:
+                raise OwnerRateLimited("OWNER_LOGIN_RATE_LIMITED")
+            db.execute(
+                "update ofc_private.copilot_owner_login_budget "
+                "set window_start=%s,attempts=%s where id=1",
+                (row[0] if within_window else now, attempts + 1),
+            )
         if not isinstance(owner_secret, str) or not hmac.compare_digest(
             sha256(owner_secret.encode()).digest(), self._owner_digest
         ):
