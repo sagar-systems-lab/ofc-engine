@@ -1205,6 +1205,18 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
             ).fetchone()[0] == 0
     with pytest.raises(SessionDenied):
         copy.messages(session["session_id"], session["ticket"])
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_sessions "
+            "set expires_at=now()-interval '1 minute' where session_id=%s",
+            (outsider["session_id"],),
+        )
+    assert copy.cleanup_expired(limit=8) >= 1
+    with store._connect() as db:
+        assert db.execute(
+            "select count(*) from ofc_private.copilot_sessions "
+            "where session_id=%s", (outsider["session_id"],),
+        ).fetchone()[0] == 0
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
