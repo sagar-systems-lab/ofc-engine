@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from hashlib import sha256
+from cryptography.fernet import InvalidToken
 import hmac
 import json
 import secrets
@@ -141,14 +142,23 @@ class HostedCopilot:
         self._check_session(session_id, ticket)
         with self.store._connect() as db:
             rows = db.execute(
-                "select run_id,request_id,status,result,result_digest from "
+                "select run_id,request_id,status,result,result_digest,"
+                "prompt_ciphertext from "
                 "ofc_private.copilot_messages where session_id=%s "
                 "order by created_at,run_id", (session_id,),
             ).fetchall()
         outputs = []
-        for run_id, request_id, status, raw, digest in rows:
+        for run_id, request_id, status, raw, digest, encrypted_prompt in rows:
+            try:
+                prompt = self.vault.cipher.decrypt(
+                    bytes(encrypted_prompt)
+                ).decode("utf-8")
+            except (InvalidToken, ValueError, UnicodeError):
+                raise StorageIntegrityError("invalid saved user prompt") from None
             if status == "RESERVED":
-                outputs.append({"run_id": run_id, "status": "PROCESSING"})
+                outputs.append({
+                    "run_id": run_id, "status": "PROCESSING", "prompt": prompt,
+                })
                 continue
             try:
                 result = json.loads(raw)
@@ -159,7 +169,7 @@ class HostedCopilot:
                 or result.get("run_id") != run_id
             ):
                 raise StorageIntegrityError("saved Copilot projection corrupted")
-            outputs.append(result)
+            outputs.append({"prompt": prompt, **result})
         return {"session_id": session_id, "messages": outputs}
 
     def _cached_message(self, session_id: str, request_id: str, prompt_digest: str):
@@ -189,7 +199,7 @@ class HostedCopilot:
         return value
 
     def _admit_message(self, session_id: str, request_id: str,
-                       prompt_digest: str, model_id: str) -> tuple[str, dict | None]:
+                       prompt_digest: str, model_id: str, prompt: str) -> tuple[str, dict | None]:
         with self.store._connect() as db:
             row = db.execute(
                 "select prompt_count from ofc_private.copilot_sessions "
@@ -227,9 +237,11 @@ class HostedCopilot:
             )
             db.execute(
                 "insert into ofc_private.copilot_messages "
-                "(run_id,session_id,request_id,prompt_digest,model_id,status) "
-                "values(%s,%s,%s,%s,%s,'RESERVED')",
-                (run_id, session_id, request_id, prompt_digest, model_id),
+                "(run_id,session_id,request_id,prompt_digest,"
+                "prompt_ciphertext,model_id,status) "
+                "values(%s,%s,%s,%s,%s,%s,'RESERVED')",
+                (run_id, session_id, request_id, prompt_digest,
+                 self.vault.cipher.encrypt(prompt.encode("utf-8")), model_id),
             )
             return run_id, None
 
@@ -306,7 +318,9 @@ class HostedCopilot:
             return cached
         self._require_credentials()
         model = self._model()
-        run_id, cached = self._admit_message(session_id, request_id, digest, model.model)
+        run_id, cached = self._admit_message(
+            session_id, request_id, digest, model.model, prompt,
+        )
         if cached is not None:
             return cached
         try:
