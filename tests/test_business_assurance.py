@@ -190,3 +190,23 @@ def test_partial_policy_or_empty_requirement_never_marks_full_plan_complete():
     )
     assert completely_absent["business_evidence_satisfied"] is False
     assert completely_absent["external_action_authorized"] is False
+
+
+def test_malformed_provider_signature_is_rejected_without_throwing():
+    snapshot = plan()
+    provider, private = authority("contract_rights")
+    good = signed(snapshot, "contract_rights", "brand", {
+        "signed_contract": True,
+        "counterparty": "Rights owner",
+        "scope_covers_plan": True,
+    }, provider.issuer, private)
+    malformed = replace(good, signature_b64="not-base64!!!")
+    report = assess_business_readiness(
+        snapshot, required={
+            "brand": ("contract_rights",), "venue": ("venue_availability",),
+        },
+        proofs=(malformed,), authorities={provider.issuer: provider}, as_of=NOW,
+    )
+    assert report["invalid_evidence_count"] == 1
+    assert report["status"] == "REVIEW_REQUIRED"
+    assert report["external_action_authorized"] is False
