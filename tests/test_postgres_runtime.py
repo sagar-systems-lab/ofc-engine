@@ -982,6 +982,11 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     )
     assert report["status"] == "REVIEW_REQUIRED"
+    assert report["plan"]["objective"] == "Check brand fit"
+    assert report["plan"]["artist_name"] == "Artist Example"
+    assert report["plan"]["budget_usd"] is None
+    assert report["plan"]["choices"][0]["selected_name"] == "Brand A"
+    assert report["plan"]["choices"][0]["source"] == "UNVERIFIED_LLM_PROPOSAL"
     assert report["off"]["qloo"] == report["on"]["qloo"]
     assert report["off"]["ofc_enabled"] is False
     assert report["on"]["ofc_enabled"] is True
