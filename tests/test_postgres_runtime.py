@@ -880,7 +880,10 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     artist = "0a0a0a0a-0000-4000-8000-000000000001"
     brand_a = "0a0a0a0a-0000-4000-8000-000000000002"
     brand_b = "0a0a0a0a-0000-4000-8000-000000000003"
-    known = {"Artist Example": artist, "Brand A": brand_a, "Brand B": brand_b}
+    known = {
+        "Artist Example": artist, "Brand A": brand_a, "Brand B": brand_b,
+        "Taylor Swift": "c70ce2b8-0ad1-4150-bf18-5a6347f2e860",
+    }
 
     class FakeQloo:
         def __init__(self):
@@ -1006,13 +1009,21 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     with pytest.raises(SessionDenied):
         copy.messages(session["session_id"], "unauthorized-visitor-token")
 
+    saved_usage = (len(qloo.searches), qloo.ranks, model.calls)
+    assert copy.capabilities()["qloo"] == "NOT_TESTED"
+    assert (len(qloo.searches), qloo.ranks, model.calls) == saved_usage
+    assert copy.test_connection(owner, "qloo")["status"] == "ACTIVE"
+    assert copy.test_connection(owner, "gemini")["status"] == "ACTIVE"
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 3)
+    assert copy.capabilities()["product"] == "ACTIVE"
+
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
     assert copy.submit(
         session_id=session["session_id"], ticket=session["ticket"],
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
-    assert qloo.ranks == model.calls == 2 and len(qloo.searches) == 3
+    assert qloo.ranks == 2 and model.calls == 3 and len(qloo.searches) == 4
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
