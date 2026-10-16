@@ -556,6 +556,23 @@ class HostedCopilot:
                                 run_id=run_id, name=name, kind="brand",
                                 selection_ref=entity_selection_ref,
                             )
+            catalog_identities = {}
+            for choice in draft.choices:
+                if choice.decision_id not in catalog_domains:
+                    continue
+                category = catalog_domains[choice.decision_id]
+                entities = [
+                    resolver.resolve(
+                        run_id=run_id, name=name, kind=category,
+                        selection_ref=entity_selection_ref,
+                    )
+                    for name in choice.candidate_names
+                ]
+                if len({item.entity_id for item in entities}) != len(entities):
+                    raise EntityResolutionRequired("AMBIGUOUS_CATALOG_IDENTITY")
+                catalog_identities[choice.decision_id] = (
+                    choice, category, entities,
+                )
             if entity_selection_ref is not None and not resolver.selection_consumed:
                 raise EntityResolutionRequired("QLOO_SELECTION_SCOPE_MISMATCH")
             proposal = draft_plan(
@@ -569,6 +586,52 @@ class HostedCopilot:
                 prompt=prompt, model_id=model.model,
                 baseline=baseline, reviewed=reviewed, evaluated=evaluated,
             )
+            if catalog_identities:
+                engine = HostedDomainObservations(reviewer)
+                catalog_results = []
+                for decision_id, (choice, category, entities) in catalog_identities.items():
+                    observation = engine.inspect(
+                        run_id=run_id, decision_id=decision_id, category=category,
+                        subject_id=artist.entity_id,
+                        candidate_ids=tuple(item.entity_id for item in entities),
+                    )
+                    name_map = {item.entity_id: item.name for item in entities}
+                    catalog_results.append({
+                        "decision_id": decision_id,
+                        "category": category,
+                        "source_mode": observation.get(
+                            "source_mode", "EVIDENCE_UNAVAILABLE"
+                        ),
+                        "status": observation["status"],
+                        "reason_code": observation.get(
+                            "reason_code", "POLICY_SCOPE_NOT_LIVE_QUALIFIED"
+                        ),
+                        "query_fingerprint": observation.get("query_fingerprint"),
+                        "ranked_candidates": [
+                            name_map[item] for item in observation.get("ranking", [])
+                        ],
+                        "policy_qualified": False,
+                        "external_action_authorized": False,
+                    })
+                # Both arms receive the identical catalog observations.
+                shared = {
+                    **pair.off["qloo"],
+                    "catalog_observations": catalog_results,
+                }
+                shared["evidence_digest"] = digest_obj({
+                    "original": pair.qloo_evidence_digest,
+                    "catalog": catalog_results,
+                })
+                off = {**pair.off, "qloo": shared}
+                on = {**pair.on, "qloo": shared}
+                for decision in on["decisions"]:
+                    if decision["decision_id"] in catalog_identities:
+                        decision["ofc_verdict"] = "UNCERTAIN"
+                        decision["ofc_reason"] = "CATALOG_POLICY_NOT_LIVE_QUALIFIED"
+                pair = replace_dataclass(
+                    pair, off=off, on=on,
+                    qloo_evidence_digest=shared["evidence_digest"],
+                )
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
