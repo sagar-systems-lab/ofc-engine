@@ -1280,3 +1280,94 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
     assert bad.requests == 1
     assert runtime.capabilities()["qloo"] == "UNAVAILABLE"
     vault.revoke(owner, "qloo")
+
+
+def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
+    """Do not spend Qloo calls or misstate grounded answers outside qualified scopes."""
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    class DraftOnly:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            prompt = json.loads(data)["contents"][0]["parts"][0]["text"]
+            brand = "brand" in prompt.lower()
+            decision = (
+                {
+                    "decision_id": "brand", "domain": "brand",
+                    "selected_name": "Brand A",
+                    "candidate_names": ["Brand A", "Brand B"],
+                    "mutable": True, "depends_on": [],
+                } if brand else {
+                    "decision_id": "venue", "domain": "venue",
+                    "selected_name": "Venue A",
+                    "candidate_names": ["Venue A", "Venue B"],
+                    "mutable": False, "depends_on": [],
+                }
+            )
+            payload = {
+                "objective": "Propose a fictional event", "artist_name": None,
+                "budget_usd": None, "cities": [],
+                "choices": [decision],
+                "baseline_answer": "These are draft options, not verified.",
+                "clarification_question": None,
+            }
+            return JSONReply(200, json.dumps({
+                "candidates": [{
+                    "finishReason": "STOP",
+                    "content": {"parts": [{"text": json.dumps(payload)}]},
+                }],
+            }).encode())
+
+    class NoQloo:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            raise AssertionError("unqualified scope should never query Qloo")
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="clarify-owner-" + "c" * 45,
+    )
+    owner = vault.login("clarify-owner-" + "c" * 45)
+    vault.configure(owner, "qloo", "local-test-qloo-credential-12345")
+    vault.configure(owner, "gemini", "local-test-model-credential-12345")
+    llm, qloo = DraftOnly(), NoQloo()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=80, model_transport=llm, qloo_transport=qloo,
+    )
+    visitor = runtime.session()
+    args = {
+        "session_id": visitor["session_id"], "ticket": visitor["ticket"],
+        "request_id": "missing-artist-123",
+        "prompt": "Pick a brand partner",
+    }
+    missing = runtime.submit(**args)
+    assert missing["status"] == "CLARIFICATION_REQUIRED"
+    assert missing["reason_code"] == "ARTIST_NAME_REQUIRED"
+    assert missing["qloo_status"] == "NOT_QUERIED"
+    assert missing["plan"]["choices"][0]["domain"] == "brand"
+    assert missing["release_authorized"] is False
+    assert runtime.submit(**args) == missing
+
+    unsupported = runtime.submit(
+        session_id=visitor["session_id"], ticket=visitor["ticket"],
+        request_id="unsupported-venue-456", prompt="Plan a venue",
+    )
+    assert unsupported["status"] == "CAPABILITY_UNAVAILABLE"
+    assert unsupported["reason_code"] == "QLOO_DECISION_DOMAIN_UNQUALIFIED"
+    assert unsupported["plan"]["choices"][0]["domain"] == "venue"
+    assert unsupported["qloo_status"] == "NOT_QUERIED"
+    assert llm.calls == 2
+    assert qloo.calls == 0
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
