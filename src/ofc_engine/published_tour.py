@@ -8,6 +8,7 @@ from .hosted_runs import HostedRunRegistry
 from .intake import freeze_proposal
 from .qloo import brand_affinity_probe
 from .revisions import plan_digest
+from .webdemo import canonical_proposal
 
 
 class PublishedTourReview:
@@ -61,6 +62,16 @@ class PublishedTourReview:
             not isinstance(value, dict) for value in decisions
         ):
             raise ValueError("invalid decision reviews")
+        canonical = canonical_proposal()
+        if (
+            proposal.intent.objective != canonical.intent.objective
+            or proposal.intent.constraints.get("budget_usd") != 60000
+            or proposal.intent.constraints.get("cities") != ["Chicago", "Austin", "Seattle"]
+            or proposal.intent.constraints.get("external_action") is not False
+            or proposal.intent.taste_context.get("audience") != "Indie music audiences"
+            or len(proposal.decisions) != 6
+        ):
+            raise ValueError("public tour must match the approved canonical scope")
         if (
             current.revision != 1 or len(history) != 2
             or len(baseline.decisions) != 6
@@ -106,7 +117,61 @@ class PublishedTourReview:
             ]
         ):
             raise ValueError("published Qloo review is not revision-bound")
+        baseline_brand = baseline.decisions[0]
+        repaired_brand = current.decisions[0]
+        if (
+            baseline_brand.decision_id != "brand"
+            or repaired_brand.decision_id != "brand"
+            or baseline_brand.candidate_id == repaired_brand.candidate_id
+            or baseline_brand.candidate_pool != repaired_brand.candidate_pool
+            or repaired_brand.candidate_id not in baseline_brand.candidate_pool
+            or any(
+                d.get("pending_recheck") != (d["decision_id"] in run["pending_rechecks"])
+                for d in decisions
+            )
+            or set(run["pending_rechecks"]) != {"brand", "afterparty"}
+            or set(run["invalidated_ids"]) != {"brand", "afterparty"}
+        ):
+            raise ValueError("unqualified tour transition")
+        tour_decisions = []
+        for previous, revised, verdict in zip(
+            baseline.decisions, current.decisions, decisions
+        ):
+            if (
+                previous.candidate_pool != revised.candidate_pool
+                or previous.candidate_id not in previous.candidate_pool
+                or revised.candidate_id not in previous.candidate_pool
+                or previous.decision_id != revised.decision_id
+                or previous.depends_on != revised.depends_on
+                or verdict["changed"] != (previous.candidate_id != revised.candidate_id)
+                or verdict["pending_recheck"] != (
+                    previous.decision_id in run["pending_rechecks"]
+                )
+            ):
+                raise ValueError("published decision does not match frozen plan")
+            tour_decisions.append({
+                "decision_id": previous.decision_id,
+                "domain": previous.domain,
+                "required": previous.required,
+                "depends_on": list(previous.depends_on),
+                "candidate_count": len(previous.candidate_pool),
+                "baseline_option": previous.candidate_pool.index(previous.candidate_id) + 1,
+                "reviewed_option": previous.candidate_pool.index(revised.candidate_id) + 1,
+                "verdict": verdict["verdict"],
+                "changed": verdict["changed"],
+                "pending_recheck": verdict["pending_recheck"],
+            })
         return {
+            "journey_version": 1,
+            "tour": {
+                "objective": canonical.intent.objective,
+                "budget_usd": 60000,
+                "cities": ["Chicago", "Austin", "Seattle"],
+                "audience": "Indie music audiences",
+                "candidate_labels": "Redacted option indices from frozen candidate pools",
+                "operator_constructed_unverified_decisions": 5,
+                "decisions": tour_decisions,
+            },
             "status": "OBSERVED_QLOO_REVIEW_REQUIRED",
             "source_mode": "CAPTURED_LIVE_QLOO_UNVERIFIED",
             "decision_count": 6,
