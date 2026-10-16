@@ -157,7 +157,7 @@ def stop(server, worker):
     worker.join(timeout=5)
 
 
-def browser_test(origin):
+def browser_test(origin, brand):
     viewports = (1440, 375, 320)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -179,6 +179,40 @@ def browser_test(origin):
                     assert page.locator("#start-hosted-tour").is_hidden()
                     launch.focus()
                     launch.press("Enter")
+                    copilot = page.locator("#qloo-copilot")
+                    assert copilot.is_visible()
+                    assert page.locator("#qloo-copilot-off").get_attribute(
+                        "aria-pressed") == "true"
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "UNCERTAIN"
+                    assert "I will not guess" in page.locator(
+                        "#qloo-copilot-thread").inner_text()
+                    page.locator("#qloo-copilot-on").focus()
+                    page.locator("#qloo-copilot-on").press("Enter")
+                    assert page.locator("#qloo-copilot-on").get_attribute(
+                        "aria-pressed") == "true"
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "REPAIR"
+                    expected_change = (
+                        f"option {brand['baseline_option']} → "
+                        f"{brand['reviewed_option']} of {brand['candidate_count']}"
+                    )
+                    assert expected_change in page.locator(
+                        "#qloo-copilot-choice").inner_text()
+                    assert "five other selections stay as proposed" in page.locator(
+                        "#qloo-copilot-thread").inner_text()
+                    assert "HANDOFF WITHHELD" in page.locator(
+                        "#qloo-copilot-safety").inner_text()
+                    assert not page.evaluate(
+                        "document.documentElement.scrollWidth > innerWidth + 1"
+                    ), "copilot ON caused horizontal overflow"
+                    page.locator("#qloo-copilot-off").click()
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "UNCERTAIN"
+                    page.locator("#qloo-copilot-on").click()
+                    page.locator("#toggle-qloo-copilot").click()
+                    assert copilot.is_hidden()
+                    assert page.locator("#toggle-qloo-copilot").get_attribute(
+                        "aria-expanded") == "false"
+                    page.locator("#toggle-qloo-copilot").click()
+                    assert copilot.is_visible()
                     stages = (
                         ("01 / PROPOSE", "$60,000"),
                         ("02 / QLOO CHECK", "Qloo OFF"),
@@ -217,6 +251,8 @@ def browser_test(origin):
                     ), "horizontal overflow"
                     assert not errors, errors
                     assert not outgoing, outgoing
+                    assert page.locator("#qloo-copilot-on").get_attribute(
+                        "aria-pressed") == "true"
                     assert page.evaluate(
                         "window.matchMedia('(prefers-reduced-motion: reduce)').matches"
                     )
@@ -269,7 +305,9 @@ def qualify(dsn):
             origin + "/api/runs/" + other["run_id"] + "/review",
             headers={"Authorization": "Bearer " + other["ticket"]}
         )["source_mode"] == "EVIDENCE_UNAVAILABLE"
-        assert browser_test(origin) == (1440, 375, 320)
+        assert browser_test(
+            origin, preview["tour"]["decisions"][0]
+        ) == (1440, 375, 320)
         full_journey = run_browser(origin)
         assert full_journey["result"] == "PASS"
         assert full_journey["viewports"] == [1440, 375, 320]

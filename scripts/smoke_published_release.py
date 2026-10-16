@@ -91,6 +91,22 @@ def qualify(origin: str, expected_sha: str):
                     launch.wait_for(state="visible", timeout=40000)
                     launch.focus()
                     launch.press("Enter")
+                    assert page.locator("#qloo-copilot").is_visible()
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "UNCERTAIN"
+                    assert page.locator("#qloo-copilot-off").get_attribute(
+                        "aria-pressed") == "true"
+                    page.locator("#qloo-copilot-on").focus()
+                    page.locator("#qloo-copilot-on").press("Enter")
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "REPAIR"
+                    assert page.locator("#qloo-copilot-on").get_attribute(
+                        "aria-pressed") == "true"
+                    assert "option 1 → 2 of 3" in page.locator(
+                        "#qloo-copilot-choice").inner_text()
+                    assert "HANDOFF WITHHELD" in page.locator(
+                        "#qloo-copilot-safety").inner_text()
+                    page.locator("#qloo-copilot-off").click()
+                    assert page.locator("#qloo-copilot-decision").inner_text() == "UNCERTAIN"
+                    page.locator("#qloo-copilot-on").click()
                     for name, content in (
                         ("01 / PROPOSE", "$60,000"),
                         ("02 / QLOO CHECK", "Qloo OFF"),

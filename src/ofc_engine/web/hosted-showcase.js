@@ -165,7 +165,223 @@
     next.type = "button";
     next.id = "qloo-journey-next";
     navigation.append(previous, next);
-    card.append(progress, heading, body, navigation);
+    const stage = element("div", "", "qloo-review-stage");
+    stage.style.minWidth = "0";
+    const stageTop = element("div", "", "section-head");
+    stageTop.style.alignItems = "center";
+    stageTop.style.marginBottom = "12px";
+    const copilotToggle = element("button", "Hide Copilot", "secondary small");
+    copilotToggle.id = "toggle-qloo-copilot";
+    copilotToggle.type = "button";
+    copilotToggle.setAttribute("aria-controls", "qloo-copilot");
+    copilotToggle.setAttribute("aria-expanded", "true");
+    stageTop.append(progress, copilotToggle);
+    stage.append(stageTop, heading, body, navigation);
+
+    const copilot = element("aside", "", "summary-panel");
+    copilot.id = "qloo-copilot";
+    copilot.setAttribute("aria-label", "OFC Copilot: recorded Qloo evidence comparison");
+    copilot.style.minWidth = "0";
+    copilot.style.padding = "20px";
+    copilot.style.border = "1px solid #cbd9ef";
+    copilot.style.borderRadius = "16px";
+    copilot.style.boxShadow = "0 12px 32px #162d4c0b";
+    copilot.style.background = "linear-gradient(160deg,#f8fbff,#fff 44%)";
+    copilot.style.overflowWrap = "anywhere";
+
+    const copilotTop = element("div");
+    copilotTop.style.display = "flex";
+    copilotTop.style.alignItems = "center";
+    copilotTop.style.gap = "10px";
+    copilotTop.style.marginBottom = "7px";
+    const mark = element("span", "◇");
+    mark.setAttribute("aria-hidden", "true");
+    Object.assign(mark.style, {
+      display: "grid", placeItems: "center", width: "35px", height: "35px",
+      flex: "none", borderRadius: "11px", background: "#172642",
+      color: "#fff", fontSize: "22px"
+    });
+    const identity = element("div");
+    const assistantTitle = element("strong", "OFC Copilot");
+    Object.assign(assistantTitle.style, {
+      display: "block", fontSize: "15px", color: "#142442", letterSpacing: "-.02em"
+    });
+    const assistantRole = element("small", "Decision explanation · read-only");
+    Object.assign(assistantRole.style, {
+      display: "block", color: "#637796", fontSize: "10px", marginTop: "3px"
+    });
+    identity.append(assistantTitle, assistantRole);
+    copilotTop.append(mark, identity);
+
+    const recordLabel = element("p",
+      "One frozen tour · compare saved evidence OFF / ON");
+    Object.assign(recordLabel.style, {
+      margin: "0 0 13px", fontSize: "11px", lineHeight: "1.5",
+      color: "#657894"
+    });
+
+    const switcher = element("div");
+    switcher.setAttribute("role", "group");
+    switcher.setAttribute("aria-label", "Qloo evidence for the same frozen baseline");
+    Object.assign(switcher.style, {
+      display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px",
+      padding: "5px", background: "#eaf0f8", borderRadius: "12px",
+      marginBottom: "14px"
+    });
+    const off = element("button", "Qloo OFF");
+    const on = element("button", "Qloo ON");
+    off.id = "qloo-copilot-off";
+    on.id = "qloo-copilot-on";
+    for (const button of [off, on]) {
+      button.type = "button";
+      Object.assign(button.style, {
+        minHeight: "38px", minWidth: "0", border: "1px solid transparent",
+        borderRadius: "8px", fontWeight: "750", fontSize: "12px",
+        padding: "8px", transition: "background .15s, box-shadow .15s"
+      });
+      switcher.append(button);
+    }
+
+    const decisionStatus = element("div");
+    decisionStatus.id = "qloo-copilot-status";
+    decisionStatus.setAttribute("role", "status");
+    Object.assign(decisionStatus.style, {
+      borderRadius: "11px", border: "1px solid #d8e3f2",
+      padding: "13px", marginBottom: "13px"
+    });
+    const statusEyebrow = element("div", "BRAND DECISION");
+    Object.assign(statusEyebrow.style, {
+      fontSize: "10px", letterSpacing: ".09em", fontWeight: "800",
+      marginBottom: "6px"
+    });
+    const statusValue = element("strong", "", "");
+    statusValue.id = "qloo-copilot-decision";
+    Object.assign(statusValue.style, {
+      display: "block", fontSize: "24px", letterSpacing: "-.05em",
+      lineHeight: "1.15", marginBottom: "5px"
+    });
+    const statusChoice = element("small");
+    statusChoice.id = "qloo-copilot-choice";
+    Object.assign(statusChoice.style, {
+      display: "block", fontSize: "11px", lineHeight: "1.5"
+    });
+    decisionStatus.append(statusEyebrow, statusValue, statusChoice);
+
+    const thread = element("div");
+    thread.id = "qloo-copilot-thread";
+    thread.setAttribute("aria-live", "polite");
+    thread.setAttribute("aria-atomic", "true");
+
+    const safety = element("p");
+    safety.id = "qloo-copilot-safety";
+    Object.assign(safety.style, {
+      fontSize: "11px", lineHeight: "1.6", color: "#624c28",
+      background: "#fff7e9", border: "1px solid #f3dfbd",
+      padding: "11px 12px", borderRadius: "10px",
+      margin: "11px 0 0"
+    });
+    const provenance = element("p",
+      "Recorded comparison, not a live switch. No Qloo request, " +
+      "booking or payment occurs here. Brand names are redacted. " +
+      "Provider status describes new live queries; this is saved evidence.");
+    Object.assign(provenance.style, {
+      fontSize: "10px", lineHeight: "1.55", color: "#697990",
+      margin: "13px 2px 0"
+    });
+    copilot.append(copilotTop, recordLabel, switcher, decisionStatus,
+      thread, safety, provenance);
+
+    const layout = element("div", "", "columns");
+    layout.id = "qloo-review-layout";
+    layout.style.gap = "20px";
+    layout.append(stage, copilot);
+    card.append(layout);
+
+    let evidenceMode = "off";
+    function message(label, text, assistant) {
+      const box = element("div");
+      Object.assign(box.style, {
+        borderRadius: "12px", padding: "12px 13px", marginBottom: "9px",
+        background: assistant ? "#ecf3ff" : "#f1f3f7",
+        border: assistant ? "1px solid #d4e4ff" : "1px solid #e6ebf1"
+      });
+      const name = element("div", label);
+      Object.assign(name.style, {
+        color: assistant ? "#2356ad" : "#63718a",
+        fontSize: "9px", fontWeight: "850", letterSpacing: ".09em",
+        marginBottom: "7px"
+      });
+      const content = element("p", text);
+      Object.assign(content.style, {
+        fontSize: "12px", lineHeight: "1.65", color: "#1c2d49", margin: "0"
+      });
+      box.append(name, content);
+      return box;
+    }
+
+    function renderCopilot() {
+      const enabled = evidenceMode === "on";
+      for (const [button, selected] of [[off, !enabled], [on, enabled]]) {
+        button.setAttribute("aria-pressed", String(selected));
+        button.style.background = selected ? "#fff" : "transparent";
+        button.style.color = selected ? "#17294b" : "#62728c";
+        button.style.borderColor = selected ? "#c8d6eb" : "transparent";
+        button.style.boxShadow = selected ? "0 2px 6px #162d4c12" : "none";
+      }
+      decisionStatus.style.background = enabled ? "#eaf3ff" : "#fff7e9";
+      decisionStatus.style.borderColor = enabled ? "#b9d2fa" : "#efd7ad";
+      decisionStatus.style.color = enabled ? "#1b4d9e" : "#95601d";
+      statusValue.textContent = enabled ? proof.off_on.on_brand : proof.off_on.off_brand;
+      statusChoice.textContent = enabled
+        ? "Brand option " + brand.baseline_option + " → " +
+          brand.reviewed_option + " of " + brand.candidate_count +
+          " · revision 0 → " + proof.revision
+        : "Original option " + brand.baseline_option + " of " +
+          brand.candidate_count + " · evidence excluded, not approved";
+      thread.replaceChildren();
+      thread.append(message("DECISION QUESTION",
+        "Can we justify this tour's brand partner for indie music audiences?", false));
+      if (enabled) {
+        thread.append(message("OFC · WITH SAVED QLOO EVIDENCE",
+          "The previously captured Qloo artist-to-brand rank favors option " +
+          brand.reviewed_option + " over the original option " +
+          brand.baseline_option + " in the same frozen shortlist. " +
+          "I recommend a bounded brand repair. Only that choice changed; " +
+          "the five other selections stay as proposed.", true));
+        thread.append(message("WHAT I STILL CANNOT APPROVE",
+          "The brand and its dependent afterparty need independent rechecks. " +
+          "Opening act and venues remain unverified. This rank cannot predict " +
+          "ticket sales, sponsor ROI or tour success.", true));
+      } else {
+        thread.append(message("OFC · WITHOUT QLOO EVIDENCE",
+          "I can see the original brand option " + brand.baseline_option +
+          " of " + brand.candidate_count +
+          ", but have no cultural-affinity ranking to justify keeping " +
+          "or replacing it. My decision is uncertain; I will not guess.", true));
+        thread.append(message("WHAT HAPPENS NEXT",
+          "The six frozen choices still lack adequate evidence. " +
+          "No recommendation is authorized from this no-evidence view.", true));
+      }
+      safety.textContent = enabled
+        ? "HANDOFF WITHHELD · Brand rank supports a repair, not permission to execute."
+        : "HANDOFF WITHHELD · Missing evidence does not become permission.";
+    }
+
+    off.addEventListener("click", () => {
+      evidenceMode = "off";
+      renderCopilot();
+    });
+    on.addEventListener("click", () => {
+      evidenceMode = "on";
+      renderCopilot();
+    });
+    copilotToggle.addEventListener("click", () => {
+      copilot.hidden = !copilot.hidden;
+      copilotToggle.setAttribute("aria-expanded", String(!copilot.hidden));
+      copilotToggle.textContent = copilot.hidden ? "Show Copilot" : "Hide Copilot";
+      layout.style.gridTemplateColumns = copilot.hidden ? "minmax(0,1fr)" : "";
+    });
+    renderCopilot();
 
     const put = (message) => body.append(element("p", message));
     let position = 0;
