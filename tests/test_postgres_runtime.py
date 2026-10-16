@@ -983,6 +983,15 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     )
     assert report["status"] == "REVIEW_REQUIRED"
     assert report["schema_version"] == "copilot.v1"
+    from scripts.qualify_copilot_hosted import (
+        QualificationFailure, validate_saved_result,
+    )
+    validate_saved_result(report)
+    with pytest.raises(QualificationFailure, match="OFC_ONLY"):
+        validate_saved_result({
+            **report,
+            "on": {**report["on"], "qloo": {"source_mode": "EVIDENCE_UNAVAILABLE"}},
+        })
     assert report["journal_head"]
     assert report["revision"] == 1
     assert report["rank_evidence_rechecked"] == 1
