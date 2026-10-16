@@ -39,7 +39,7 @@ def test_search_is_bounded_and_encoded():
     assert spec.fingerprint == search_probe("A & B", entity_type="urn:entity:artist").fingerprint
 
 
-@pytest.mark.parametrize("entity_type", ["urn:entity:locality", "person", "", "urn:entity:place"])
+@pytest.mark.parametrize("entity_type", ["urn:entity:locality", "person", "", "urn:entity:neon_car"])
 def test_search_type_restriction(entity_type):
     with pytest.raises(ValueError):
         search_probe("artist", entity_type=entity_type)
@@ -200,3 +200,13 @@ def test_payload_injection_must_not_set_qualified_status():
     assert summary["normalized_for_policy"] is False
     assert summary["live_capability_qualified"] is False
     assert "PASS" not in json.dumps(summary)
+
+
+@pytest.mark.parametrize("kind", [
+    "artist", "book", "brand", "destination", "movie", "person",
+    "place", "podcast", "tv_show", "videogame",
+])
+def test_qloo_public_category_search_admitted_without_live_provider_calls(kind):
+    spec = search_probe("Example", entity_type="urn:entity:" + kind)
+    assert dict(spec.params)["types"] == "urn:entity:" + kind
+    assert spec.path == "/search"
