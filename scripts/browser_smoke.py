@@ -91,8 +91,19 @@ def run_browser(origin: str) -> dict:
                         message = shown.inner_text()
                         if ("Qloo changed one decision" not in message or
                             "Handoff WITHHELD" not in message or
-                            "Provider" not in message):
+                            "Provider" not in message or
+                            "RANK PASS · REPAIRED · RECHECK PENDING" not in message):
                             raise BrowserFailure("published Qloo proof lacks source or safety boundary")
+                        if "QLOO RANK OBSERVED · REVIEW REQUIRED" not in page.locator(".status-label").inner_text():
+                            raise BrowserFailure("published Qloo result still displays provider-pending status")
+                        if "previously acquired Qloo" not in page.locator("#view-plan > .intro p").inner_text():
+                            raise BrowserFailure("published Qloo evidence is mislabeled as unavailable")
+                        if page.locator("#view-plan .state-item").nth(1).locator("small").inner_text() != "RANK OBSERVED":
+                            raise BrowserFailure("Qloo progress does not reflect acquired evidence")
+                        if page.locator("#view-plan .state-item").nth(2).locator("small").inner_text() != "HANDOFF BLOCKED":
+                            raise BrowserFailure("Qloo progress falsely permits a handoff")
+                        if "independent verification pending" not in page.locator("#view-plan .boundary-panel").inner_text():
+                            raise BrowserFailure("published Qloo proof lacks the verification limit")
                     elif published.status not in (404,):
                         raise BrowserFailure("public Qloo showcase did not fail closed")
                     run_status = page.request.get(origin + "/api/runs/status")
