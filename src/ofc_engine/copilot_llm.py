@@ -28,6 +28,11 @@ _INSTRUCTIONS = (
     "If a required detail is missing, leave it null/empty and ask one "
     "clarifying question. Preserve user-offered choices faithfully. "
     "candidate_names are unverified plain-text labels, never provider IDs. "
+    "When users request recommendations without naming candidates, set "
+    "discovery_category to exactly one target entity category and choices to empty. "
+    "For that use case, supply an existing named taste_seed_name and "
+    "taste_seed_category (artist, brand, movie, place etc); do not invent a seed. "
+    "Only set taste_location for a place-based local search. "
     "Answer in natural, concise English without claiming any choice is "
     "culturally validated."
 )
@@ -37,6 +42,10 @@ _SCHEMA = {
     "properties": {
         "objective": {"type": "string"},
         "artist_name": {"type": ["string", "null"]},
+        "taste_seed_name": {"type": ["string", "null"]},
+        "taste_seed_category": {"type": ["string", "null"]},
+        "discovery_category": {"type": ["string", "null"]},
+        "taste_location": {"type": ["string", "null"]},
         "budget_usd": {"type": ["integer", "null"]},
         "cities": {"type": "array", "items": {"type": "string"}},
         "choices": {
@@ -68,7 +77,8 @@ _SCHEMA = {
         "clarification_question": {"type": ["string", "null"]},
     },
     "required": [
-        "objective", "artist_name", "budget_usd", "cities", "choices",
+        "objective", "artist_name", "taste_seed_name", "taste_seed_category",
+        "discovery_category", "taste_location", "budget_usd", "cities", "choices",
         "baseline_answer", "clarification_question",
     ],
     "additionalProperties": False,
@@ -102,6 +112,10 @@ class DraftChoice(StrictModel):
 class CopilotDraft(StrictModel):
     objective: str = Field(min_length=1, max_length=2048)
     artist_name: str | None = Field(default=None, max_length=160)
+    taste_seed_name: str | None = Field(default=None, max_length=160)
+    taste_seed_category: str | None = Field(default=None, max_length=32)
+    discovery_category: str | None = Field(default=None, max_length=32)
+    taste_location: str | None = Field(default=None, max_length=100)
     budget_usd: int | None = Field(default=None, ge=0, le=100_000_000)
     cities: tuple[str, ...] = Field(max_length=12)
     choices: tuple[DraftChoice, ...] = Field(max_length=6)
@@ -124,7 +138,7 @@ class CopilotDraft(StrictModel):
             for choice in self.choices
         ):
             raise ValueError("invalid dependency")
-        if not self.choices and not self.clarification_question:
+        if not self.choices and not (self.clarification_question or self.discovery_category):
             raise ValueError("empty proposed decisions need a clarification")
         return self
 
