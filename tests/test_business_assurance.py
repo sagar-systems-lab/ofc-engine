@@ -172,3 +172,21 @@ def test_untrusted_key_and_expired_evidence_fail_closed():
     )
     assert stale["status"] == "REVIEW_REQUIRED"
     assert stale["external_action_authorized"] is False
+
+
+def test_partial_policy_or_empty_requirement_never_marks_full_plan_complete():
+    incomplete = assess_business_readiness(
+        plan(), required={"brand": ()}, as_of=NOW,
+    )
+    assert incomplete["status"] == "REVIEW_REQUIRED"
+    assert incomplete["missing_requirements"]["brand"] == [
+        "BUSINESS_REQUIREMENT_POLICY_MISSING"
+    ]
+    assert incomplete["missing_requirements"]["venue"] == [
+        "UNQUALIFIED_DECISION_DOMAIN"
+    ]
+    completely_absent = assess_business_readiness(
+        plan(), required={}, as_of=NOW,
+    )
+    assert completely_absent["business_evidence_satisfied"] is False
+    assert completely_absent["external_action_authorized"] is False
