@@ -277,10 +277,10 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        if self._copilot_post():
-            return
         if self.command != "POST":
             self._send(405, b'{"error":"METHOD_NOT_ALLOWED"}', "application/json")
+            return
+        if self._copilot_post():
             return
         if self.path == "/api/agent/evaluate":
             if self.server.dynamic_review is None:
