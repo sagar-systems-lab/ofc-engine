@@ -27,6 +27,7 @@ create table if not exists ofc_private.copilot_messages (
     status text not null check(status in ('RESERVED','COMPLETE','BLOCKED')),
     llm_attempts smallint not null default 0 check(llm_attempts between 0 and 4),
     result text,
+    result_ciphertext bytea,
     result_digest text,
     created_at timestamptz not null default now(),
     unique(session_id,request_id)
@@ -37,6 +38,8 @@ alter table ofc_private.copilot_messages
     add column if not exists llm_attempts smallint not null default 0;
 alter table ofc_private.copilot_messages
     add column if not exists parent_run_id text;
+alter table ofc_private.copilot_messages
+    add column if not exists result_ciphertext bytea;
 
 create table if not exists ofc_private.copilot_search (
     run_id text not null references ofc_private.copilot_messages(run_id),
