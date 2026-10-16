@@ -938,9 +938,16 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
                     "Qloo ranks Brand B; my original proposal was Brand A."
                 )}
             else:
+                query = payload["contents"][0]["parts"][0]["text"]
+                prior = json.loads(query) if query.startswith("{") else {}
+                budget = 80000 if (
+                    isinstance(prior, dict)
+                    and "previous_plan" in prior
+                    and "80000" in prior.get("latest_user_message", "")
+                ) else None
                 text = {
                     "objective": "Check brand fit", "artist_name": "Artist Example",
-                    "budget_usd": None, "cities": [],
+                    "budget_usd": budget, "cities": [],
                     "choices": [{
                         "decision_id": "brand", "domain": "brand",
                         "selected_name": "Brand A",
@@ -1057,13 +1064,48 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 4)
     assert copy.capabilities()["product"] == "ACTIVE"
 
+    followup = copy.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-followup-budget-001",
+        prompt="Change the campaign budget to $80000; keep the brand options",
+        parent_run_id=report["run_id"],
+    )
+    assert followup["status"] == "REVIEW_REQUIRED"
+    assert followup["parent_run_id"] == report["run_id"]
+    assert followup["plan"]["budget_usd"] == 80000
+    assert followup["plan"]["choices"] == report["plan"]["choices"]
+    assert followup["off"]["qloo"] == followup["on"]["qloo"]
+    assert followup["llm_requests_this_run"] == 3
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (7, 4, 7)
+    assert copy.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-followup-budget-001",
+        prompt="Change the campaign budget to $80000; keep the brand options",
+        parent_run_id=report["run_id"],
+    ) == followup
+    with pytest.raises(SessionDenied):
+        copy.submit(
+            session_id=session["session_id"], ticket=session["ticket"],
+            request_id="visitor-followup-budget-001",
+            prompt="Change the campaign budget to $80000; keep the brand options",
+            parent_run_id=None,
+        )
+    outsider = copy.session()
+    with pytest.raises(SessionDenied):
+        copy.submit(
+            session_id=outsider["session_id"], ticket=outsider["ticket"],
+            request_id="outsider-replay-001", prompt="Change campaign budget",
+            parent_run_id=report["run_id"],
+        )
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (7, 4, 7)
+
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
     assert copy.submit(
         session_id=session["session_id"], ticket=session["ticket"],
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
-    assert qloo.ranks == 2 and model.calls == 4 and len(qloo.searches) == 4
+    assert qloo.ranks == 4 and model.calls == 7 and len(qloo.searches) == 7
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
