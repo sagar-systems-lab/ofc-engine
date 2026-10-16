@@ -188,18 +188,52 @@ class HostedCopilot:
             outputs.append({"prompt": prompt, **result})
         return {"session_id": session_id, "messages": outputs}
 
-    def _cached_message(self, session_id: str, request_id: str, prompt_digest: str):
+    def _parent_context(self, session_id: str, parent_run_id: str | None):
+        if parent_run_id is None:
+            return None
+        if (
+            not isinstance(parent_run_id, str)
+            or not parent_run_id.startswith("cp-run-")
+            or len(parent_run_id) != 39
+            or any(c not in "0123456789abcdef" for c in parent_run_id[7:])
+        ):
+            raise SessionDenied("INVALID_CONVERSATION_PARENT")
+        with self.store._connect() as db:
+            row = db.execute(
+                "select status,result,result_digest from "
+                "ofc_private.copilot_messages where run_id=%s and session_id=%s",
+                (parent_run_id, session_id),
+            ).fetchone()
+        if row is None or row[0] != "COMPLETE":
+            raise SessionDenied("CONVERSATION_PARENT_NOT_COMPLETE")
+        try:
+            prior = json.loads(row[1])
+        except (ValueError, TypeError) as exc:
+            raise StorageIntegrityError("invalid conversation parent") from exc
+        if (
+            not isinstance(prior, dict) or digest_obj(prior) != row[2]
+            or prior.get("run_id") != parent_run_id
+            or prior.get("status") not in (
+                "REVIEW_REQUIRED", "CLARIFICATION_REQUIRED",
+                "CAPABILITY_UNAVAILABLE"
+            ) or not isinstance(prior.get("plan"), dict)
+        ):
+            raise StorageIntegrityError("parent plan provenance invalid")
+        return prior["plan"]
+
+    def _cached_message(self, session_id: str, request_id: str,
+                        prompt_digest: str, parent_run_id: str | None):
         """Previously saved answers remain readable even after key revocation."""
         with self.store._connect() as db:
             row = db.execute(
-                "select run_id,prompt_digest,status,result,result_digest,created_at "
-                "from ofc_private.copilot_messages "
+                "select run_id,prompt_digest,status,result,result_digest,created_at,"
+                "parent_run_id from ofc_private.copilot_messages "
                 "where session_id=%s and request_id=%s",
                 (session_id, request_id),
             ).fetchone()
         if row is None:
             return None
-        if row[1] != prompt_digest:
+        if row[1] != prompt_digest or row[6] != parent_run_id:
             raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
         if row[2] == "RESERVED":
             return self._pending_status(row[0], row[5])
@@ -215,7 +249,8 @@ class HostedCopilot:
         return value
 
     def _admit_message(self, session_id: str, request_id: str,
-                       prompt_digest: str, model_id: str, prompt: str) -> tuple[str, dict | None]:
+                       prompt_digest: str, model_id: str, prompt: str,
+                       parent_run_id: str | None) -> tuple[str, dict | None]:
         with self.store._connect() as db:
             row = db.execute(
                 "select prompt_count from ofc_private.copilot_sessions "
@@ -224,13 +259,16 @@ class HostedCopilot:
             if row is None:
                 raise SessionDenied("INVALID_SESSION")
             existing = db.execute(
-                "select run_id,prompt_digest,model_id,status,result,result_digest "
-                "from ofc_private.copilot_messages "
+                "select run_id,prompt_digest,model_id,status,result,result_digest,"
+                "parent_run_id from ofc_private.copilot_messages "
                 "where session_id=%s and request_id=%s",
                 (session_id, request_id),
             ).fetchone()
             if existing:
-                if existing[1] != prompt_digest or existing[2] != model_id:
+                if (
+                    existing[1] != prompt_digest or existing[2] != model_id
+                    or existing[6] != parent_run_id
+                ):
                     raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
                 if existing[3] == "RESERVED":
                     return existing[0], {"run_id": existing[0], "status": "PROCESSING"}
@@ -253,10 +291,10 @@ class HostedCopilot:
             )
             db.execute(
                 "insert into ofc_private.copilot_messages "
-                "(run_id,session_id,request_id,prompt_digest,"
+                "(run_id,session_id,request_id,parent_run_id,prompt_digest,"
                 "prompt_ciphertext,model_id,status) "
-                "values(%s,%s,%s,%s,%s,%s,'RESERVED')",
-                (run_id, session_id, request_id, prompt_digest,
+                "values(%s,%s,%s,%s,%s,%s,%s,'RESERVED')",
+                (run_id, session_id, request_id, parent_run_id, prompt_digest,
                  self.vault.cipher.encrypt(prompt.encode("utf-8")), model_id),
             )
             return run_id, None
@@ -388,16 +426,20 @@ class HostedCopilot:
         return result
 
     def submit(self, *, session_id: str, ticket: str,
-               request_id: str, prompt: str) -> dict:
+               request_id: str, prompt: str,
+               parent_run_id: str | None = None) -> dict:
         self._check_session(session_id, ticket)
         digest = self._validate_message(request_id, prompt)
-        cached = self._cached_message(session_id, request_id, digest)
+        cached = self._cached_message(
+            session_id, request_id, digest, parent_run_id,
+        )
         if cached is not None:
             return cached
         self._require_credentials()
         model = self._model()
+        prior_plan = self._parent_context(session_id, parent_run_id)
         run_id, cached = self._admit_message(
-            session_id, request_id, digest, model.model, prompt,
+            session_id, request_id, digest, model.model, prompt, parent_run_id,
         )
         if cached is not None:
             return cached
@@ -405,7 +447,7 @@ class HostedCopilot:
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
-            draft = model.extract(prompt)
+            draft = model.extract(prompt, prior_plan=prior_plan)
             if not draft.choices:
                 return self._needs_input(
                     run_id, draft, model.model,
@@ -466,20 +508,26 @@ class HostedCopilot:
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
-            words = model.narrate_pair(pair, prompt=prompt)
+            off_answer = model.narrate_arm(pair, prompt=prompt, mode="off")
+            reserve_model_call(
+                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+            )
+            on_answer = model.narrate_arm(pair, prompt=prompt, mode="on")
             result = {
                 **self._public_pair(pair, draft, brands, artist),
                 "schema_version": "copilot.v1",
                 "session_id": session_id,
                 "request_id": request_id,
+                "parent_run_id": parent_run_id,
                 "journal_head": evaluated["journal_head"],
                 "revision": evaluated["revision"],
                 "rank_evidence_rechecked": evaluated["rank_evidence_rechecked"],
                 "full_plan_independently_verified": False,
                 "plan": self._draft_plan_projection(draft),
                 "status": "REVIEW_REQUIRED",
-                "original_answer": words.off_answer,
-                "ofc_answer": words.on_answer,
+                "original_answer": off_answer,
+                "ofc_answer": on_answer,
+                "comparison_method": "INDEPENDENT_LLM_ARMS_SHARED_QLOO",
                 **self._run_usage(run_id),
                 "release_authorized": False,
                 "external_action_executed": False,
