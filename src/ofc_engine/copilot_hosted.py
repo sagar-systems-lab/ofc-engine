@@ -365,6 +365,11 @@ class HostedCopilot:
             )
             reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
             words = model.narrate_pair(pair, prompt=prompt)
+            with self.store._connect() as db:
+                lookup_count = db.execute(
+                    "select count(*) from ofc_private.copilot_search "
+                    "where run_id=%s", (run_id,),
+                ).fetchone()[0]
             result = {
                 **self._public_pair(pair, draft, brands, artist),
                 "plan": {
@@ -387,7 +392,12 @@ class HostedCopilot:
                 "status": "REVIEW_REQUIRED",
                 "original_answer": words.off_answer,
                 "ofc_answer": words.on_answer,
-                "qloo_requests_this_run": evaluated["new_qloo_requests"],
+                "qloo_requests_this_run": (
+                    lookup_count + evaluated["new_qloo_requests"]
+                ),
+                "qloo_search_requests": lookup_count,
+                "qloo_rank_requests": evaluated["new_qloo_requests"],
+                "llm_requests_this_run": 2,
                 "release_authorized": False,
                 "external_action_executed": False,
             }
