@@ -1008,6 +1008,11 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
 
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
+    assert copy.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="visitor-idempotent-001", prompt="Find a great sponsor",
+    ) == report
+    assert qloo.ranks == model.calls == 2 and len(qloo.searches) == 3
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
