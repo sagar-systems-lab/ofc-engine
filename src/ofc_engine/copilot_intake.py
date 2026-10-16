@@ -56,6 +56,12 @@ def draft_plan(
         resolved_artist is None or resolved_artist.name != (
             draft.taste_seed_name or draft.artist_name
         )
+        or (
+            resolved_artist.entity_type != "urn:entity:artist"
+            and draft.taste_seed_category != resolved_artist.entity_type.removeprefix(
+                "urn:entity:"
+            )
+        )
     ):
         raise EntityResolutionRequired("QLOO_ARTIST_RESOLUTION_REQUIRED")
 
