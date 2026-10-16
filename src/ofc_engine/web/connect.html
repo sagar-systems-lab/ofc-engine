@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>OFC · API Connectivity</title>
+  <link rel="stylesheet" href="/connect.css">
+  <script defer src="/connect.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <a href="/" aria-label="Return to OFC Studio">← OFC Engine</a>
+    <div class="heading"><h1>API Connectivity</h1><span class="tag">Owner only</span></div>
+    <p>Configure private provider keys for the Copilot. Keys are encrypted on the server and never displayed again.</p>
+    <p class="notice">This is the configuration portal. The final integrated Settings experience will replace it during the product UI phase.</p>
+  </header>
+  <section id="login">
+    <h2>Owner access</h2>
+    <form id="login-form">
+      <label for="owner-secret">Owner secret</label>
+      <input id="owner-secret" type="password" autocomplete="off" spellcheck="false" required minlength="40">
+      <button type="submit">Unlock connectivity</button>
+    </form>
+  </section>
+  <section id="manager" hidden>
+    <div class="inline">
+      <h2>Providers</h2>
+      <button id="logout" type="button" class="secondary">Lock</button>
+    </div>
+    <p>Configured is not the same as connected. The explicit test button makes one provider request and consumes API quota.</p>
+    <div class="providers">
+      <div class="provider" data-provider="qloo">
+        <div class="inline"><h3>Qloo Taste AI</h3><span class="state">Checking</span></div>
+        <label for="key-qloo">API key</label>
+        <input id="key-qloo" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste Qloo API key">
+        <div class="actions">
+          <button type="button" data-action="save">Save encrypted</button>
+          <button type="button" data-action="test" class="secondary">Test connection</button>
+          <button type="button" data-action="revoke" class="danger">Revoke</button>
+        </div>
+      </div>
+      <div class="provider" data-provider="gemini">
+        <div class="inline"><h3>Gemini (primary)</h3><span class="state">Checking</span></div>
+        <label for="key-gemini">API key</label>
+        <input id="key-gemini" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste Gemini API key">
+        <div class="actions">
+          <button type="button" data-action="save">Save encrypted</button>
+          <button type="button" data-action="test" class="secondary">Test connection</button>
+          <button type="button" data-action="revoke" class="danger">Revoke</button>
+        </div>
+      </div>
+      <div class="provider" data-provider="groq">
+        <div class="inline"><h3>Groq (fallback)</h3><span class="state">Checking</span></div>
+        <label for="key-groq">API key</label>
+        <input id="key-groq" type="password" autocomplete="new-password" spellcheck="false" placeholder="Paste Groq API key">
+        <div class="actions">
+          <button type="button" data-action="save">Save encrypted</button>
+          <button type="button" data-action="test" class="secondary">Test connection</button>
+          <button type="button" data-action="revoke" class="danger">Revoke</button>
+        </div>
+      </div>
+    </div>
+  </section>
+  <p id="feedback" role="status" aria-live="polite"></p>
+  <footer>Secrets are never saved in this browser. Changes take effect server-side. Qloo and model requests remain quota-limited.</footer>
+</main>
+</body>
+</html>

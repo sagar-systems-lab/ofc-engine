@@ -25,6 +25,9 @@ from .intake import AgentProposal
 from .postgres_store import PostgresRevisionStore
 from .published_tour import PublishedTourReview
 from .dynamic import DynamicScopeConflict
+from .copilot_credentials import CredentialVault
+from .copilot_hosted import HostedCopilot
+from .copilot_hosted_http import CopilotHTTPMixin
 from .dynamic_postgres import PostgresDynamicQlooReview
 from .qloo import QlooProbeClient
 from pydantic import ValidationError
@@ -65,7 +68,7 @@ def _verified_fixture(scenario: str) -> bytes:
     return _encoded(value)
 
 
-class HostedFixtureHandler(DemoHandler):
+class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
     server_version = "OFCPreview"
     sys_version = ""
 
@@ -98,6 +101,8 @@ class HostedFixtureHandler(DemoHandler):
             return False
 
     def do_GET(self) -> None:
+        if self._copilot_get():
+            return
         if len(self.path) > _MAX_TARGET_LENGTH:
             self._send(414, b'{"error":"URI_TOO_LONG"}', "application/json")
             return
@@ -275,6 +280,8 @@ class HostedFixtureHandler(DemoHandler):
         if self.command != "POST":
             self._send(405, b'{"error":"METHOD_NOT_ALLOWED"}', "application/json")
             return
+        if self._copilot_post():
+            return
         if self.path == "/api/agent/evaluate":
             if self.server.dynamic_review is None:
                 self._send(405, b'{"error":"DYNAMIC_QLOO_DISABLED"}', "application/json")
@@ -447,6 +454,7 @@ class HostedFixtureServer(ThreadingHTTPServer):
         public_showcase: PublishedTourReview | None = None,
         dynamic_review: PostgresDynamicQlooReview | None = None,
         dynamic_token: str | None = None,
+        copilot: HostedCopilot | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -465,6 +473,9 @@ class HostedFixtureServer(ThreadingHTTPServer):
             raise ValueError("unsafe dynamic API token")
         self.dynamic_review = dynamic_review
         self.dynamic_token = dynamic_token
+        if copilot is not None and not isinstance(copilot, HostedCopilot):
+            raise ValueError("invalid hosted Copilot runtime")
+        self.copilot = copilot
         self.run_registry = run_registry
         self.tour_proposal = tour_proposal
         self.public_showcase = public_showcase
@@ -587,11 +598,33 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("dynamic PostgreSQL Qloo review is unavailable")
     elif os.environ.get("OFC_DYNAMIC_QLOO_DAILY_LIMIT"):
         parser.error("dynamic request budget requires an explicit mode")
+    copilot = None
+    copilot_mode = os.environ.get("OFC_COPILOT_MODE", "")
+    if copilot_mode:
+        if copilot_mode != "PRIVATE_BETA" or registry is None:
+            parser.error("Copilot requires PRIVATE_BETA and private PostgreSQL")
+        try:
+            qloo_limit = int(os.environ.get("OFC_COPILOT_QLOO_DAILY_LIMIT", "0"))
+            llm_limit = int(os.environ.get("OFC_COPILOT_LLM_DAILY_LIMIT", "0"))
+            browser_limit = int(os.environ.get("OFC_COPILOT_BROWSER_DAILY_LIMIT", "20"))
+            vault = CredentialVault(
+                registry.store,
+                master_key=os.environ.get("OFC_COPILOT_MASTER_KEY", ""),
+                owner_secret=os.environ.get("OFC_OWNER_BOOTSTRAP_SECRET", ""),
+            )
+            copilot = HostedCopilot(
+                registry.store, vault,
+                qloo_daily_limit=qloo_limit, llm_daily_limit=llm_limit,
+                browser_daily_limit=browser_limit,
+            )
+        except (ValueError, TypeError, RuntimeError, psycopg.Error):
+            parser.error("private Copilot configuration or migrations unavailable")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
         run_registry=registry, tour_proposal=tour, public_showcase=showcase,
         dynamic_review=dynamic_review, dynamic_token=dynamic_token,
+        copilot=copilot,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()

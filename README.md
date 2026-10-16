@@ -31,6 +31,12 @@ The editable Plan Builder beneath the walkthrough is **separate**. Visitors can 
 
 **Limitation:** The real Qloo HTTP response is not cryptographically provider-attested or independently rechecked. The relative brand rank does not prove tour suitability, valid contracts, venue readiness, budget feasibility or business outcomes. The same-baseline OFF/ON comparison is a *decision-policy contrast*, not an experiment establishing business causality. Full-plan release remains blocked.
 
+## Optional hosted Copilot backend
+
+The B2 backend supports an opt-in, authenticated Copilot service with visitor sessions, an encrypted owner-managed Qloo/Gemini/Groq credential vault, PostgreSQL evidence and request reservations, and a shared-evidence **LLM + Qloo** (OFC OFF) versus **LLM + Qloo + OFC** (OFC ON) decision comparison. Provider keys are configured privately through the temporary website owner portal at `/connect` after the one-time server trust anchor is provisioned.
+
+**This feature is disabled by default**; the existing hosted saved-review page does not become a live Copilot merely by merging the code. Review [hosted setup and qualification](docs/HOSTED_COPILOT_BACKEND.md) for private migration and provider-test gates. Unsupported Qloo domains remain unverified. No model or Qloo request is made by loading the settings or status endpoints.
+
 ## Develop and test
 
 Python 3.11+:
