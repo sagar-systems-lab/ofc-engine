@@ -53,8 +53,13 @@ def draft_plan(
     if len(draft.choices) == 0:
         raise EntityResolutionRequired("CLARIFICATION_REQUIRED")
     if (
-        resolved_artist is None or resolved_artist.name != draft.artist_name
-        or resolved_artist.entity_type != "urn:entity:artist"
+        resolved_artist is None or resolved_artist.name != (
+            draft.taste_seed_name or draft.artist_name
+        )
+        or (
+            resolved_artist.entity_type != "urn:entity:artist"
+            and any(c.domain.lower() in _SUPPORTED for c in draft.choices)
+        )
     ):
         raise EntityResolutionRequired("QLOO_ARTIST_RESOLUTION_REQUIRED")
 
@@ -104,7 +109,12 @@ def draft_plan(
                 "cities": list(draft.cities),
             },
             taste_context={
-                "artist_id": resolved_artist.entity_id,
+                "artist_id": (
+                    resolved_artist.entity_id
+                    if resolved_artist.entity_type == "urn:entity:artist" else None
+                ),
+                "taste_seed_id": resolved_artist.entity_id,
+                "taste_seed_type": resolved_artist.entity_type,
                 "qloo_resolution": "SCOPED_LOOKUP",
                 "unverified_decision_domains": sorted({
                     choice.domain for choice in draft.choices
