@@ -1362,6 +1362,7 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
             self.calls += 1
             prompt = json.loads(data)["contents"][0]["parts"][0]["text"]
             brand = "brand" in prompt.lower()
+            outside_catalog = "contract" in prompt.lower()
             decision = (
                 {
                     "decision_id": "brand", "domain": "brand",
@@ -1369,7 +1370,8 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
                     "candidate_names": ["Brand A", "Brand B"],
                     "mutable": True, "depends_on": [],
                 } if brand else {
-                    "decision_id": "venue", "domain": "venue",
+                    "decision_id": "venue",
+                    "domain": "contract" if outside_catalog else "venue",
                     "selected_name": "Venue A",
                     "candidate_names": ["Venue A", "Venue B"],
                     "mutable": False, "depends_on": [],
@@ -1427,18 +1429,26 @@ def test_hosted_copilot_clarifies_missing_artist_and_unsupported_scopes(pg_url):
     assert missing["release_authorized"] is False
     assert runtime.submit(**args) == missing
 
+    venue = runtime.submit(
+        session_id=visitor["session_id"], ticket=visitor["ticket"],
+        request_id="venue-needs-artist-456", prompt="Plan a venue",
+    )
+    assert venue["status"] == "CLARIFICATION_REQUIRED"
+    assert venue["reason_code"] == "ARTIST_NAME_REQUIRED"
+    assert venue["plan"]["choices"][0]["domain"] == "venue"
+    assert venue["qloo_requests_this_run"] == 0
     unsupported = runtime.submit(
         session_id=visitor["session_id"], ticket=visitor["ticket"],
-        request_id="unsupported-venue-456", prompt="Plan a venue",
+        request_id="unsupported-contract-789", prompt="Plan a contract",
     )
     assert unsupported["status"] == "CAPABILITY_UNAVAILABLE"
     assert unsupported["reason_code"] == "QLOO_DECISION_DOMAIN_UNQUALIFIED"
     assert unsupported["llm_requests_this_run"] == 1
     assert unsupported["qloo_search_requests"] == 0
     assert unsupported["qloo_rank_requests"] == 0
-    assert unsupported["plan"]["choices"][0]["domain"] == "venue"
+    assert unsupported["plan"]["choices"][0]["domain"] == "contract"
     assert unsupported["qloo_status"] == "NOT_QUERIED"
-    assert llm.calls == 2
+    assert llm.calls == 3
     assert qloo.calls == 0
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
