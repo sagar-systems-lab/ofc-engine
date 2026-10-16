@@ -10,6 +10,7 @@ import json
 import secrets
 
 from .business_assurance import assess_business_readiness
+from .copilot_receipt import decision_receipt, grounded_explanations
 from .copilot_compare import build_copilot_pair
 from .copilot_domain_observations import HostedDomainObservations
 from .copilot_credentials import CredentialVault
@@ -761,8 +762,15 @@ class HostedCopilot:
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
             on_answer = model.narrate_arm(pair, prompt=prompt, mode="on")
+            projection = self._public_pair(pair, draft, brands, artist)
+            receipt = decision_receipt(
+                projection, business_review=business_review,
+            )
             result = {
-                **self._public_pair(pair, draft, brands, artist),
+                **projection,
+                "value_receipt": receipt,
+                "grounded_explanations": grounded_explanations(receipt),
+                "narrative_trust": "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED",
                 "schema_version": "copilot.v1",
                 "session_id": session_id,
                 "request_id": request_id,
