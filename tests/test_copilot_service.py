@@ -171,3 +171,108 @@ def test_failed_inference_cannot_respend_by_retry(tmp_path):
         )
     assert model.calls == 1
     assert qloo.calls == len(qloo.search_calls) == 0
+
+
+def test_search_shares_daily_qloo_budget_with_rank_review(tmp_path):
+    service, model, qloo = setup(tmp_path, qloo_limit=4)
+    result = service.submit(
+        run_id="budget-run", request_id="budget-request",
+        prompt="Find a sponsor that fits this artist",
+    )
+    assert len(qloo.search_calls) == 3
+    assert qloo.calls == 1
+    assert result["qloo_requests_this_run"] == 1
+    assert result["on"]["decisions"][0]["ofc_verdict"] == "UNCERTAIN"
+    assert result["on"]["decisions"][0]["ofc_reason"] == "DAILY_QLOO_BUDGET_EXHAUSTED"
+    assert result["on"]["release_authorized"] is False
+
+    from sqlite3 import connect
+    with connect(tmp_path / "copilot.sqlite3") as db:
+        used = db.execute("SELECT sum(reserved) FROM dynamic_qloo_daily").fetchone()[0]
+        assert used == 4  # Three entity resolutions plus one rank request.
+    assert model.calls == 2
+
+
+def test_search_budget_exhaustion_fails_before_unadmitted_request(tmp_path):
+    service, model, qloo = setup(tmp_path, qloo_limit=2)
+    from ofc_engine.copilot_intake import EntityResolutionRequired
+    with pytest.raises(EntityResolutionRequired, match="DAILY_QLOO_BUDGET_EXHAUSTED"):
+        service.submit(
+            run_id="limited", request_id="limit-req", prompt="Find a sponsor",
+        )
+    assert len(qloo.search_calls) == 2
+    assert qloo.calls == 0
+    with pytest.raises(CopilotRunReserved):
+        service.submit(
+            run_id="limited", request_id="limit-req", prompt="Find a sponsor",
+        )
+    assert model.calls == 1
+    assert len(qloo.search_calls) == 2
+
+
+def test_llm_global_budget_counts_both_inference_requests(tmp_path):
+    service, model, qloo = setup(tmp_path, llm_limit=1)
+    with pytest.raises(CopilotRunReserved, match="DAILY_LLM_BUDGET_EXHAUSTED"):
+        service.submit(
+            run_id="llm-capped", request_id="cap-1", prompt="Find a sponsor",
+        )
+    assert model.calls == 1
+    assert len(qloo.search_calls) == 3
+    assert qloo.calls == 2
+    with pytest.raises(CopilotRunReserved):
+        service.submit(
+            run_id="llm-capped", request_id="cap-1", prompt="Find a sponsor",
+        )
+    assert model.calls == 1
+
+
+def test_corrupted_saved_projection_blocks_replay(tmp_path):
+    import sqlite3
+    from ofc_engine.durable import StorageIntegrityError
+    service, model, qloo = setup(tmp_path)
+    service.submit(
+        run_id="tampered", request_id="tamper-1", prompt="Find a sponsor",
+    )
+    with sqlite3.connect(tmp_path / "copilot.sqlite3") as db:
+        db.execute(
+            "UPDATE copilot_reviews SET projection='{}' WHERE run_id='tampered'"
+        )
+    with pytest.raises(StorageIntegrityError):
+        service.submit(
+            run_id="tampered", request_id="tamper-1", prompt="Find a sponsor",
+        )
+    assert model.calls == 2
+    assert qloo.calls == 2
+    assert len(qloo.search_calls) == 3
+
+
+def test_parallel_same_run_cannot_double_spend(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    started, allow = Event(), Event()
+
+    class HeldModel(FakeModel):
+        def post(self, *args, **kwargs):
+            started.set()
+            assert allow.wait(timeout=8)
+            return super().post(*args, **kwargs)
+
+    service, model, qloo = setup(tmp_path, model=HeldModel())
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(
+            service.submit, run_id="parallel", request_id="req-p",
+            prompt="Find a sponsor",
+        )
+        assert started.wait(timeout=8)
+        second = pool.submit(
+            service.submit, run_id="parallel", request_id="req-p",
+            prompt="Find a sponsor",
+        )
+        with pytest.raises(CopilotRunReserved):
+            second.result(timeout=8)
+        allow.set()
+        result = first.result(timeout=12)
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert model.calls == 2 and qloo.calls == 2
+    assert len(qloo.search_calls) == 3
