@@ -31,6 +31,10 @@ class SessionLimitReached(ValueError):
     pass
 
 
+class CopilotNotReady(RuntimeError):
+    pass
+
+
 class HostedCopilot:
     def __init__(
         self, store: PostgresRevisionStore, vault: CredentialVault, *,
@@ -64,7 +68,18 @@ class HostedCopilot:
     def _digest(token: str) -> str:
         return sha256(token.encode("utf-8")).hexdigest()
 
+    def _require_credentials(self) -> None:
+        status = self.vault.status()
+        if (
+            not status["qloo"]["configured"]
+            or not (
+                status["gemini"]["configured"] or status["groq"]["configured"]
+            )
+        ):
+            raise CopilotNotReady("COPILOT_PROVIDERS_NOT_CONFIGURED")
+
     def session(self) -> dict:
+        self._require_credentials()
         token = secrets.token_urlsafe(40)
         session_id = "cp-" + secrets.token_hex(16)
         today = datetime.now(timezone.utc).date()
@@ -289,6 +304,7 @@ class HostedCopilot:
         cached = self._cached_message(session_id, request_id, digest)
         if cached is not None:
             return cached
+        self._require_credentials()
         model = self._model()
         run_id, cached = self._admit_message(session_id, request_id, digest, model.model)
         if cached is not None:
@@ -375,11 +391,22 @@ class HostedCopilot:
             model = statuses["groq"]
         with self.store._connect() as db:
             db.execute("select 1")
+        qloo_state = statuses["qloo"]["status"]
+        model_state = model["status"]
+        if "NOT_CONFIGURED" in (qloo_state, model_state):
+            product_state = "NOT_CONFIGURED"
+        elif "UNAVAILABLE" in (qloo_state, model_state):
+            product_state = "DEGRADED"
+        elif qloo_state == model_state == "ACTIVE":
+            product_state = "ACTIVE"
+        else:
+            product_state = "CHECK_REQUIRED"
         return {
             "storage": "ACTIVE",
             "ofc": "ACTIVE",
-            "qloo": statuses["qloo"]["status"],
-            "llm": model["status"],
+            "qloo": qloo_state,
+            "llm": model_state,
+            "product": product_state,
             "release_authorized": False,
         }
 
