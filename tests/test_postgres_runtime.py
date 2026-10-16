@@ -1487,3 +1487,136 @@ def test_provider_failure_admissions_visible_without_retry(pg_url):
     assert model.attempts == 1
     vault.revoke(owner, "gemini")
     vault.revoke(owner, "qloo")
+
+
+def test_user_selected_qloo_identity_is_bound_to_prior_session(pg_url):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot, SessionDenied
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.copilot_llm_budget set reserved=0,utc_day=current_date")
+        db.execute("update ofc_private.dynamic_qloo_budget set reserved=0,utc_day=current_date")
+
+    artist = "c70ce2b8-0ad1-4150-bf18-5a6347f2e860"
+    brand_a = "43a36e73-9bc7-4b09-a116-78e51554c3e3"
+    brand_b = "e26bc58d-18d2-405b-bc7b-7c556ade3829"
+
+    class Model:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            request = json.loads(data)
+            schema = request["generationConfig"]["responseJsonSchema"]
+            if "answer" in schema["properties"]:
+                statement = json.loads(request["contents"][0]["parts"][0]["text"])
+                answer = {"answer": (
+                    "OFC checks and repairs the brand." if statement["view"]["ofc_enabled"]
+                    else "Qloo ranks candidate brands against the artist."
+                )}
+            else:
+                answer = {
+                    "objective": "Select brand", "artist_name": "Taylor Swft",
+                    "budget_usd": None, "cities": [],
+                    "choices": [{
+                        "decision_id": "brand", "domain": "brand",
+                        "selected_name": "Brand A",
+                        "candidate_names": ["Brand A", "Brand B"],
+                        "mutable": True, "depends_on": [],
+                    }],
+                    "baseline_answer": "Brand A is a proposal.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(answer)}]},
+            }]}).encode())
+
+    class Provider:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.calls += 1
+            route = urlsplit(url)
+            if route.path == "/search":
+                args = parse_qs(route.query)
+                query = args["query"][0]
+                names = {
+                    "Taylor Swft": ("Taylor Swift", artist),
+                    "Brand A": ("Brand A", brand_a),
+                    "Brand B": ("Brand B", brand_b),
+                }
+                name, entity_id = names[query]
+                body = {"success": True, "results": {"entities": [{
+                    "name": name, "entity_id": entity_id,
+                    "type": "urn:entity", "subtype": args["types"][0],
+                }]}}
+            else:
+                body = {"success": True, "results": {"entities": [
+                    {"entity_id": i, "type": "urn:entity",
+                     "query": {"affinity": score, "explainability": {
+                         "signal.interests.entities": {},
+                     }}}
+                    for i, score in ((brand_b, 0.9), (brand_a, 0.6))
+                ]}}
+            return TransportReply(200, json.dumps(body).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="selection-owner-" + "q" * 47,
+    )
+    token = vault.login("selection-owner-" + "q" * 47)
+    vault.configure(token, "qloo", "fake-qloo-selection-key")
+    vault.configure(token, "gemini", "fake-gemini-selection-key")
+    model, provider = Model(), Provider()
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=20, llm_daily_limit=20,
+        browser_daily_limit=60, model_transport=model, qloo_transport=provider,
+    )
+    session = service.session()
+    first = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="first-disambiguation", prompt="Taylor Swft brand suggestions",
+    )
+    assert first["status"] == "CLARIFICATION_REQUIRED"
+    assert first["reason_code"] == "SEARCH_SELECTION_REQUIRED"
+    assert first["suggestions"][0]["name"] == "Taylor Swift"
+    ref = first["suggestions"][0]["option_ref"]
+    assert "entity_id" not in json.dumps(first["suggestions"])
+
+    stranger = service.session()
+    with pytest.raises(SessionDenied):
+        service.submit(
+            session_id=stranger["session_id"], ticket=stranger["ticket"],
+            request_id="wrong-session-choice", prompt="Choose that artist",
+            parent_run_id=first["run_id"], entity_selection_ref=ref,
+        )
+
+    followup = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="confirm-taylor-option",
+        prompt="Use the suggested artist and retain both brands",
+        parent_run_id=first["run_id"], entity_selection_ref=ref,
+    )
+    assert followup["status"] == "REVIEW_REQUIRED"
+    assert followup["on"]["changed_ids"] == ["brand"]
+    assert followup["parent_run_id"] == first["run_id"]
+    assert followup["off"]["qloo"] == followup["on"]["qloo"]
+    assert service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="confirm-taylor-option",
+        prompt="Use the suggested artist and retain both brands",
+        parent_run_id=first["run_id"], entity_selection_ref=ref,
+    ) == followup
+    assert model.calls == 4
+    assert provider.calls == 6
+    vault.revoke(token, "qloo")
+    vault.revoke(token, "gemini")
