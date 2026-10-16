@@ -1,6 +1,7 @@
 """Hosted Copilot: private Postgres sessions, bounded live providers and safe projections."""
 from __future__ import annotations
 
+from dataclasses import replace as replace_dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from cryptography.fernet import InvalidToken
@@ -9,6 +10,7 @@ import json
 import secrets
 
 from .copilot_compare import build_copilot_pair
+from .copilot_domain_observations import HostedDomainObservations
 from .copilot_credentials import CredentialVault
 from .copilot_hosted_quota import (
     CopilotQuotaReached, HostedQlooResolver,
@@ -21,7 +23,7 @@ from .durable import StorageIntegrityError
 from .intake import freeze_proposal
 from .postgres_store import PostgresRevisionStore
 from .qloo import QlooProbeClient, QlooProbeError, search_probe
-from .qloo_catalog import capability_registry
+from .qloo_catalog import capability_registry, category_for
 from .revisions import digest_obj
 
 
@@ -429,6 +431,10 @@ class HostedCopilot:
                 "select count(*) from ofc_private.dynamic_qloo_attempts "
                 "where plan_id=%s", (run_id,),
             ).fetchone()[0]
+            catalog = db.execute(
+                "select count(*) from ofc_private.copilot_domain_observations "
+                "where run_id=%s", (run_id,),
+            ).fetchone()[0]
             model = db.execute(
                 "select llm_attempts from ofc_private.copilot_messages "
                 "where run_id=%s", (run_id,),
@@ -437,8 +443,9 @@ class HostedCopilot:
             raise StorageIntegrityError("missing Copilot request admission")
         return {
             "qloo_search_requests": searches,
-            "qloo_rank_requests": insights,
-            "qloo_requests_this_run": searches + insights,
+            "qloo_rank_requests": insights + catalog,
+            "qloo_catalog_requests": catalog,
+            "qloo_requests_this_run": searches + insights + catalog,
             "llm_requests_this_run": model[0],
         }
 
@@ -507,7 +514,15 @@ class HostedCopilot:
                 choice.domain.lower() in ("brand", "partner", "brand_partner")
                 for choice in draft.choices
             )
-            if not supported:
+            catalog_domains = {}
+            for choice in draft.choices:
+                if choice.domain.lower() in ("brand", "partner", "brand_partner"):
+                    continue
+                try:
+                    catalog_domains[choice.decision_id] = category_for(choice.domain)
+                except ValueError:
+                    continue
+            if not supported and not catalog_domains:
                 return self._needs_input(
                     run_id, draft, model.model,
                     status="CAPABILITY_UNAVAILABLE",
