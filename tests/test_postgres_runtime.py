@@ -1164,3 +1164,119 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_interrupted_copilot_job_blocks_after_timeout_without_provider_retry(pg_url):
+    """A restart cannot leave a RESERVED run in PROCESSING forever."""
+    from cryptography.fernet import Fernet
+    from hashlib import sha256
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="stale-owner-" + "v" * 45,
+    )
+    owner = vault.login("stale-owner-" + "v" * 45)
+    vault.configure(owner, "qloo", "stale-qloo-example-key-123456")
+    vault.configure(owner, "gemini", "stale-model-example-key-123456")
+    service = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=8,
+        browser_daily_limit=40,
+    )
+    session = service.session()
+    prompt = "Evaluate this fictional artist and sponsors"
+    run_id = "cp-run-" + uuid4().hex
+    request_id = "interrupted-job-001"
+    with store._connect() as db:
+        db.execute(
+            "insert into ofc_private.copilot_messages("
+            "run_id,session_id,request_id,prompt_digest,prompt_ciphertext,model_id,"
+            "status,created_at) values(%s,%s,%s,%s,%s,%s,'RESERVED',"
+            "now()-interval '10 minutes')",
+            (run_id, session["session_id"], request_id,
+             sha256(prompt.encode()).hexdigest(), vault.cipher.encrypt(prompt.encode()),
+             "gemini-3.1-flash-lite"),
+        )
+    before = service.messages(session["session_id"], session["ticket"])["messages"]
+    assert before[0]["prompt"] == prompt
+    assert before[0]["status"] == "BLOCKED"
+    assert before[0]["reason_code"] == "WORKFLOW_INTERRUPTED"
+    saved = service.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id=request_id, prompt=prompt,
+    )
+    assert saved["status"] == "BLOCKED"
+    assert saved["reason_code"] == "WORKFLOW_INTERRUPTED"
+    assert saved["release_authorized"] is False
+    assert saved["external_action_executed"] is False
+    vault.revoke(owner, "qloo")
+    vault.revoke(owner, "gemini")
+
+
+def test_owner_login_throttled_in_private_postgres(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import (
+        CredentialVault, OwnerUnauthorized, OwnerRateLimited,
+    )
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_owner_login_budget "
+            "set attempts=0,window_start=now()-interval '20 minutes' where id=1"
+        )
+    secret = "rate-gate-" + "q" * 48
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(), owner_secret=secret,
+    )
+    for _ in range(20):
+        with pytest.raises(OwnerUnauthorized):
+            vault.login("wrong-owner")
+    with pytest.raises(OwnerRateLimited, match="OWNER_LOGIN_RATE_LIMITED"):
+        vault.login(secret)
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_owner_login_budget "
+            "set attempts=0,window_start=now()-interval '20 minutes' where id=1"
+        )
+    assert vault.login(secret)
+
+
+def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.qloo import TransportReply
+
+    class BadQloo:
+        def __init__(self):
+            self.requests = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.requests += 1
+            # An HTTP 200 can still carry a failed Qloo response.
+            return TransportReply(
+                200, json.dumps({
+                    "success": False,
+                    "results": {"entities": []},
+                }).encode(),
+            )
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="bad-qloo-owner-" + "m" * 46,
+    )
+    owner = vault.login("bad-qloo-owner-" + "m" * 46)
+    vault.configure(owner, "qloo", "bad-qloo-test-api-key-00001")
+    bad = BadQloo()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=40, qloo_transport=bad,
+    )
+    observed = runtime.test_connection(owner, "qloo")
+    assert observed == {"provider": "qloo", "status": "UNAVAILABLE"}
+    assert bad.requests == 1
+    assert runtime.capabilities()["qloo"] == "UNAVAILABLE"
+    vault.revoke(owner, "qloo")
