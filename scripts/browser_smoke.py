@@ -158,7 +158,7 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("plan section heading is not using the crisp display role")
                     if heading_style["size"] < 20:
                         raise BrowserFailure("plan section heading size was unintentionally reduced")
-                    card_style = page.locator(".editor-panel").evaluate("""el => ({
+                    card_style = page.locator('#view-plan .editor-panel[aria-labelledby="draft-title"]').evaluate("""el => ({
                         shadow: getComputedStyle(el).boxShadow,
                         textColor: getComputedStyle(el.querySelector('.section-head h2')).color
                     })""")
