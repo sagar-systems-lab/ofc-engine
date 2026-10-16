@@ -23,6 +23,7 @@ from .hosted_tour import configured_tour
 from .intake import AgentProposal
 from .postgres_store import PostgresRevisionStore
 from .published_tour import PublishedTourReview
+from .durable import StorageIntegrityError
 
 _MAX_TARGET_LENGTH = 512
 _MAX_CONNECTIONS = 16
@@ -120,7 +121,7 @@ class HostedFixtureHandler(DemoHandler):
                 return
             try:
                 report = self.server.public_showcase.review()
-            except (ValueError, KeyError, psycopg.Error, sqlite3.Error):
+            except (ValueError, KeyError, StorageIntegrityError, psycopg.Error, sqlite3.Error):
                 self._send(503, b'{"error":"SHOWCASE_UNAVAILABLE"}', "application/json")
                 return
             self._send(200, _encoded(report), "application/json")
@@ -507,7 +508,7 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("public Qloo review requires explicit matched operator approval")
         try:
             showcase = PublishedTourReview(registry, published_id)
-        except (ValueError, KeyError, psycopg.Error):
+        except (ValueError, KeyError, StorageIntegrityError, psycopg.Error):
             parser.error("published Qloo review is unavailable or unqualified")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
