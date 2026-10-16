@@ -1005,7 +1005,15 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
     assert qloo.ranks == model.calls == 2 and len(qloo.searches) == 3
-    assert copy.messages(session["session_id"], session["ticket"])["messages"] == [report]
+    stored = copy.messages(session["session_id"], session["ticket"])["messages"]
+    assert len(stored) == 1 and stored[0]["prompt"] == "Find a great sponsor"
+    assert {key: value for key, value in stored[0].items() if key != "prompt"} == report
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        encrypted = bytes(db.execute(
+            "select prompt_ciphertext from ofc_private.copilot_messages "
+            "where run_id=%s", (report["run_id"],)
+        ).fetchone()[0])
+        assert b"Find a great sponsor" not in encrypted
     with pytest.raises(SessionDenied):
         copy.messages(session["session_id"], "unauthorized-visitor-token")
 
