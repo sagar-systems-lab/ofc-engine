@@ -24,6 +24,7 @@ create table if not exists ofc_private.copilot_messages (
     prompt_ciphertext bytea not null,
     model_id text not null,
     status text not null check(status in ('RESERVED','COMPLETE','BLOCKED')),
+    llm_attempts smallint not null default 0 check(llm_attempts between 0 and 4),
     result text,
     result_digest text,
     created_at timestamptz not null default now(),
