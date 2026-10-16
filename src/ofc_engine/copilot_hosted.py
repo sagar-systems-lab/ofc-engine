@@ -1,7 +1,7 @@
 """Hosted Copilot: private Postgres sessions, bounded live providers and safe projections."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from cryptography.fernet import InvalidToken
 import hmac
@@ -37,6 +37,20 @@ class CopilotNotReady(RuntimeError):
 
 
 class HostedCopilot:
+    _MAX_PENDING_AGE = timedelta(minutes=3)
+
+    @classmethod
+    def _pending_status(cls, run_id: str, created_at: datetime) -> dict:
+        if datetime.now(timezone.utc) - created_at < cls._MAX_PENDING_AGE:
+            return {"run_id": run_id, "status": "PROCESSING"}
+        return {
+            "run_id": run_id,
+            "status": "BLOCKED",
+            "reason_code": "WORKFLOW_INTERRUPTED",
+            "release_authorized": False,
+            "external_action_executed": False,
+        }
+
     def __init__(
         self, store: PostgresRevisionStore, vault: CredentialVault, *,
         qloo_daily_limit: int, llm_daily_limit: int,
@@ -143,12 +157,12 @@ class HostedCopilot:
         with self.store._connect() as db:
             rows = db.execute(
                 "select run_id,request_id,status,result,result_digest,"
-                "prompt_ciphertext from "
+                "prompt_ciphertext,created_at from "
                 "ofc_private.copilot_messages where session_id=%s "
                 "order by created_at,run_id", (session_id,),
             ).fetchall()
         outputs = []
-        for run_id, request_id, status, raw, digest, encrypted_prompt in rows:
+        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at in rows:
             try:
                 prompt = self.vault.cipher.decrypt(
                     bytes(encrypted_prompt)
@@ -157,7 +171,8 @@ class HostedCopilot:
                 raise StorageIntegrityError("invalid saved user prompt") from None
             if status == "RESERVED":
                 outputs.append({
-                    "run_id": run_id, "status": "PROCESSING", "prompt": prompt,
+                    "prompt": prompt,
+                    **self._pending_status(run_id, created_at),
                 })
                 continue
             try:
@@ -176,7 +191,7 @@ class HostedCopilot:
         """Previously saved answers remain readable even after key revocation."""
         with self.store._connect() as db:
             row = db.execute(
-                "select run_id,prompt_digest,status,result,result_digest "
+                "select run_id,prompt_digest,status,result,result_digest,created_at "
                 "from ofc_private.copilot_messages "
                 "where session_id=%s and request_id=%s",
                 (session_id, request_id),
@@ -186,7 +201,7 @@ class HostedCopilot:
         if row[1] != prompt_digest:
             raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
         if row[2] == "RESERVED":
-            return {"run_id": row[0], "status": "PROCESSING"}
+            return self._pending_status(row[0], row[5])
         try:
             value = json.loads(row[3])
         except (ValueError, TypeError) as exc:
