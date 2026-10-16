@@ -157,7 +157,7 @@ def stop(server, worker):
     worker.join(timeout=5)
 
 
-def browser_test(origin):
+def browser_test(origin, brand):
     viewports = (1440, 375, 320)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
@@ -191,7 +191,11 @@ def browser_test(origin):
                     assert page.locator("#qloo-copilot-on").get_attribute(
                         "aria-pressed") == "true"
                     assert page.locator("#qloo-copilot-decision").inner_text() == "REPAIR"
-                    assert "option 1 → 2 of 3" in page.locator(
+                    expected_change = (
+                        f"option {brand['baseline_option']} → "
+                        f"{brand['reviewed_option']} of {brand['candidate_count']}"
+                    )
+                    assert expected_change in page.locator(
                         "#qloo-copilot-choice").inner_text()
                     assert "five other selections stay as proposed" in page.locator(
                         "#qloo-copilot-thread").inner_text()
@@ -301,7 +305,9 @@ def qualify(dsn):
             origin + "/api/runs/" + other["run_id"] + "/review",
             headers={"Authorization": "Bearer " + other["ticket"]}
         )["source_mode"] == "EVIDENCE_UNAVAILABLE"
-        assert browser_test(origin) == (1440, 375, 320)
+        assert browser_test(
+            origin, preview["tour"]["decisions"][0]
+        ) == (1440, 375, 320)
         full_journey = run_browser(origin)
         assert full_journey["result"] == "PASS"
         assert full_journey["viewports"] == [1440, 375, 320]
