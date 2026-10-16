@@ -324,6 +324,43 @@ class HostedCopilot:
                 ]
         return data
 
+    @staticmethod
+    def _draft_plan_projection(draft) -> dict:
+        return {
+            "objective": draft.objective,
+            "artist_name": draft.artist_name,
+            "budget_usd": draft.budget_usd,
+            "cities": list(draft.cities),
+            "choices": [
+                {
+                    "decision_id": choice.decision_id,
+                    "domain": choice.domain,
+                    "selected_name": choice.selected_name,
+                    "candidate_names": list(choice.candidate_names),
+                    "depends_on": list(choice.depends_on),
+                    "source": "UNVERIFIED_LLM_PROPOSAL",
+                }
+                for choice in draft.choices
+            ],
+        }
+
+    def _needs_input(self, run_id: str, draft, model_id: str, *,
+                     status: str, reason: str, question: str) -> dict:
+        result = {
+            "run_id": run_id,
+            "status": status,
+            "reason_code": reason,
+            "question": question,
+            "plan": self._draft_plan_projection(draft),
+            "model_id": model_id,
+            "qloo_status": "NOT_QUERIED",
+            "ofc_review_completed": False,
+            "release_authorized": False,
+            "external_action_executed": False,
+        }
+        self._complete(run_id, result)
+        return result
+
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str) -> dict:
         self._check_session(session_id, ticket)
@@ -341,18 +378,38 @@ class HostedCopilot:
         try:
             reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
             draft = model.extract(prompt)
-            if draft.clarification_question and not draft.choices:
-                report = {
-                    "run_id": run_id, "status": "CLARIFICATION_REQUIRED",
-                    "question": draft.clarification_question,
-                    "model_id": model.model,
-                    "qloo_status": "NOT_QUERIED",
-                    "release_authorized": False,
-                }
-                self._complete(run_id, report)
-                return report
+            if not draft.choices:
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CLARIFICATION_REQUIRED",
+                    reason="DECISIONS_MISSING",
+                    question=(
+                        draft.clarification_question
+                        or "What choices should the cultural review compare?"
+                    ),
+                )
+            supported = any(
+                choice.domain.lower() in ("brand", "partner", "brand_partner")
+                for choice in draft.choices
+            )
+            if not supported:
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CAPABILITY_UNAVAILABLE",
+                    reason="QLOO_DECISION_DOMAIN_UNQUALIFIED",
+                    question=(
+                        "Only artist-to-brand cultural affinity is currently "
+                        "qualified. A venue, contract or other domain needs "
+                        "a separately verified evidence adapter."
+                    ),
+                )
             if not draft.artist_name:
-                raise EntityResolutionRequired("ARTIST_NAME_REQUIRED")
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CLARIFICATION_REQUIRED",
+                    reason="ARTIST_NAME_REQUIRED",
+                    question="Which artist should Qloo use for cultural affinity?",
+                )
 
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
@@ -387,23 +444,7 @@ class HostedCopilot:
                 ).fetchone()[0]
             result = {
                 **self._public_pair(pair, draft, brands, artist),
-                "plan": {
-                    "objective": draft.objective,
-                    "artist_name": draft.artist_name,
-                    "budget_usd": draft.budget_usd,
-                    "cities": list(draft.cities),
-                    "choices": [
-                        {
-                            "decision_id": choice.decision_id,
-                            "domain": choice.domain,
-                            "selected_name": choice.selected_name,
-                            "candidate_names": list(choice.candidate_names),
-                            "depends_on": list(choice.depends_on),
-                            "source": "UNVERIFIED_LLM_PROPOSAL",
-                        }
-                        for choice in draft.choices
-                    ],
-                },
+                "plan": self._draft_plan_projection(draft),
                 "status": "REVIEW_REQUIRED",
                 "original_answer": words.off_answer,
                 "ofc_answer": words.on_answer,
