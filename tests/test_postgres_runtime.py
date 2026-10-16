@@ -1269,6 +1269,9 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
             assert "SPEND_ONE_PROVIDER_REQUEST" in script
             assert "localStorage" not in script
         assert call("/api/owner/credentials")[0] == 403
+        assert call("/api/owner/business", {
+            "action": "assess", "run_id": "unauthorized",
+        })[0] == 403
         assert call(
             "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
         )[0] == 503
@@ -1322,6 +1325,26 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
             "/api/copilot/sessions/" + visitors["session_id"],
             cookie=visitor_cookie,
         )[0] == 200
+        assert call("/api/owner/business", {
+            "action": "register", "issuer": "test-authority-001",
+            "requirements": ["contract_rights"], "public_key_b64": "invalid!",
+        }, cookie=owner_cookie)[0] == 422
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            {"confirm": "DELETE_MY_SESSION"},
+            cookie=owner_cookie,
+        )[0] == 403
+        status, removed, clear_cookie = call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            {"confirm": "DELETE_MY_SESSION"},
+            cookie=visitor_cookie,
+        )
+        assert status == 200 and removed["status"] == "SESSION_DELETED"
+        assert "Max-Age=0" in clear_cookie
+        assert call(
+            "/api/copilot/sessions/" + visitors["session_id"],
+            cookie=visitor_cookie,
+        )[0] == 403
         assert call("/api/owner/logout", {}, cookie=owner_cookie)[0] == 200
         assert call("/api/owner/credentials", cookie=owner_cookie)[0] == 403
     finally:
