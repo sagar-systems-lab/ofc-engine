@@ -4,9 +4,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 
-from .copilot_intake import ResolvedEntity, EntityResolutionRequired
+from .copilot_intake import ResolvedEntity, EntityResolutionRequired, QlooSelectionRequired
 from .copilot_resolver import normalize_qloo_search
-from .qloo_catalog import CATEGORIES
+from .qloo_catalog import CATEGORIES, qloo_suggestions
 from .durable import StorageIntegrityError
 from .dynamic_postgres import PostgresDynamicQlooReview
 from .postgres_store import PostgresRevisionStore
@@ -77,8 +77,12 @@ class HostedQlooResolver:
         if not isinstance(reviewer, PostgresDynamicQlooReview):
             raise TypeError("Postgres Qloo reviewer required")
         self.reviewer = reviewer
+        self.selection_consumed = False
 
-    def resolve(self, *, run_id: str, name: str, kind: str) -> ResolvedEntity:
+    def resolve(
+        self, *, run_id: str, name: str, kind: str,
+        selection_ref: str | None = None,
+    ) -> ResolvedEntity:
         if kind not in CATEGORIES:
             raise EntityResolutionRequired("UNSUPPORTED_QLOO_SEARCH_TYPE")
         spec = search_probe(name, entity_type="urn:entity:" + kind)
@@ -128,9 +132,27 @@ class HostedQlooResolver:
             )
         try:
             captured = self.reviewer.client.probe(spec)
-            resolved = normalize_qloo_search(
-                name, entity_type=kind, spec=spec, observation=captured,
-            )
+            try:
+                resolved = normalize_qloo_search(
+                    name, entity_type=kind, spec=spec, observation=captured,
+                )
+            except QlooSelectionRequired:
+                if selection_ref is None:
+                    raise
+                possible = qloo_suggestions(name, kind, captured, limit=8)
+                selected = [
+                    item for item in possible
+                    if item.safe_label()["option_ref"] == selection_ref
+                ]
+                if len(selected) != 1:
+                    raise EntityResolutionRequired("QLOO_SELECTION_SCOPE_MISMATCH")
+                target = selected[0]
+                resolved = ResolvedEntity(
+                    name=name, entity_id=target.entity_id,
+                    entity_type=target.entity_type,
+                    query_fingerprint=spec.fingerprint,
+                )
+                self.selection_consumed = True
         except QlooProbeError:
             raise EntityResolutionRequired("QLOO_SEARCH_UNAVAILABLE") from None
         payload = {
