@@ -101,3 +101,11 @@ This is an **example command**, not an authorization or a claim that the sample 
 `sql/004_copilot_hosted.sql` is idempotent for existing tables and backfills the model-attempt counter if an earlier private B2 migration was applied. Run migrations in the OFC database **only**. No migrations or deployments occur merely from merging this code.
 
 Code/test closure is not live-provider acceptance. The qualified evidence family is still scoped to artist→brand ranking; other cultural or business domains require separate real Qloo verification. Browser-level design remains the owner-directed U1 phase.
+
+## Conversation continuity and independent comparison
+
+A subsequent message may include an optional `parent_run_id` pointing to an existing **completed** run in the same visitor session. The server validates the parent digest and ownership, passes only the redacted structured prior plan to the LLM, and requires a full new typed plan. An unrelated run ID or an attempt to reuse the same request ID with a different parent is rejected. Each follow-up is a fresh bounded review; old Qloo captures are never silently borrowed for a new scope. This is contextual plan editing, not an unbounded long-term chat memory service.
+
+The OFF natural-language response is generated in a separate inference request **before** ON, using the original baseline plus the shared Qloo rank only. The OFF model never receives OFC changes, verdicts, repair reasons or reviewed decisions. ON receives the identical Qloo evidence plus OFC's scoped findings. Both arms keep the same model identity; inference totals are 3 per complete task (extraction + separate OFF + ON). UI toggles and saved-message reads are provider-free. These are controlled, evidence-blinded inference arms, not an independent randomized clinical-style causal experiment.
+
+The initial anonymous session limit remains 4 prompts for quota safety. This can be raised only together with explicit aggregate model/Qloo budgets and abuse controls.
