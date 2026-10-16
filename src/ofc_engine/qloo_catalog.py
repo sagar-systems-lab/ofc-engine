@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from difflib import SequenceMatcher
 from math import isfinite
 import re
@@ -68,6 +69,9 @@ class EntitySuggestion:
             "name": self.name,
             "category": self.entity_type.removeprefix("urn:entity:"),
             "is_exact": self.exact_name,
+            "option_ref": sha256(
+                (self.request_fingerprint + ":" + self.entity_id).encode()
+            ).hexdigest()[:16],
         }
 
 
