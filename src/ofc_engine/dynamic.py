@@ -246,6 +246,13 @@ class DynamicQlooReview:
                 results.append(report)
                 continue
             saw_observation = True
+            report["qloo_rank_evidence"] = {
+                "source_mode": "LIVE_HTTP_UNVERIFIED",
+                "query_fingerprint": spec.fingerprint,
+                "capture_digest": first["capture_digest"],
+                "collected_at": first["collected_at"],
+                "ranked_candidate_ids": list(first["ranking"]),
+            }
             top = first["ranking"][0]
             current = self.store.get(baseline.plan_id)
             selected = next(x.candidate_id for x in current.decisions
