@@ -55,7 +55,7 @@ def test_no_ambiguous_fuzzy_or_cross_category_claims():
         {"name": "Example Artist Remix", "entity_id": _A,
          "type": "urn:entity", "subtype": "urn:entity:artist"},
     ])
-    with pytest.raises(EntityResolutionRequired, match="EXACT_NAME"):
+    with pytest.raises(EntityResolutionRequired, match="SELECTION_REQUIRED"):
         normalize_qloo_search(
             "Example Artist", entity_type="artist",
             spec=spec, observation=source,
@@ -87,3 +87,32 @@ def test_wrong_query_fingerprint_and_malformed_entity_fail_closed():
             "Example Artist", entity_type="artist",
             spec=spec, observation=source,
         )
+
+
+def test_accent_folded_identity_accepts_only_unambiguous_exact_name():
+    spec, source = observation(name="Beyonce", records=[
+        {"name": "Beyoncé", "entity_id": _A,
+         "type": "urn:entity", "subtype": "urn:entity:artist"},
+    ])
+    resolved = normalize_qloo_search(
+        "Beyonce", entity_type="artist", spec=spec, observation=source,
+    )
+    assert resolved.entity_id == _A
+    assert resolved.entity_type == "urn:entity:artist"
+
+
+def test_fuzzy_mismatch_provides_selection_hints_not_provider_guesses():
+    from ofc_engine.copilot_intake import QlooSelectionRequired
+    spec, source = observation(name="Taylor Swft", records=[
+        {"name": "Taylor Swift", "entity_id": _A,
+         "type": "urn:entity", "subtype": "urn:entity:artist"},
+    ])
+    with pytest.raises(QlooSelectionRequired, match="SELECTION_REQUIRED") as err:
+        normalize_qloo_search(
+            "Taylor Swft", entity_type="artist", spec=spec,
+            observation=source,
+        )
+    hints = err.value.suggestions
+    assert hints[0]["name"] == "Taylor Swift"
+    assert len(hints[0]["option_ref"]) == 16
+    assert "entity_id" not in hints[0]
