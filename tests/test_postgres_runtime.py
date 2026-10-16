@@ -923,11 +923,20 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
             assert headers["x-goog-api-key"] == "private-gemini-key-not-real"
             payload = json.loads(data)
             schema = payload["generationConfig"]["responseJsonSchema"]
-            if "off_answer" in schema["properties"]:
-                text = {
-                    "off_answer": "Qloo ranks Brand B, but the proposal retained Brand A.",
-                    "on_answer": "With the same Qloo evidence, OFC revises to Brand B, pending review.",
+            if "answer" in schema["properties"]:
+                context = json.loads(payload["contents"][0]["parts"][0]["text"])
+                mode_on = context["view"]["ofc_enabled"]
+                assert set(context) == {
+                    "prompt", "model_id", "baseline_digest",
+                    "qloo_evidence_digest", "view",
                 }
+                if not mode_on:
+                    assert "on" not in context and "ofc_reason" not in json.dumps(context)
+                text = {"answer": (
+                    "With the same Qloo evidence, OFC repairs Brand A to Brand B."
+                    if mode_on else
+                    "Qloo ranks Brand B; my original proposal was Brand A."
+                )}
             else:
                 text = {
                     "objective": "Check brand fit", "artist_name": "Artist Example",
@@ -1011,8 +1020,8 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert report["qloo_requests_this_run"] == 5
     assert report["qloo_search_requests"] == 3
     assert report["qloo_rank_requests"] == 2
-    assert report["llm_requests_this_run"] == 2
-    assert len(qloo.searches) == 3 and qloo.ranks == 2 and model.calls == 2
+    assert report["llm_requests_this_run"] == 3
+    assert len(qloo.searches) == 3 and qloo.ranks == 2 and model.calls == 3
     assert artist not in json.dumps(report)
     assert brand_a not in json.dumps(report)
     assert brand_b not in json.dumps(report)
@@ -1027,7 +1036,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         session_id=session["session_id"], ticket=session["ticket"],
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
-    assert qloo.ranks == model.calls == 2 and len(qloo.searches) == 3
+    assert qloo.ranks == 2 and model.calls == 3 and len(qloo.searches) == 3
     stored = copy.messages(session["session_id"], session["ticket"])["messages"]
     assert len(stored) == 1 and stored[0]["prompt"] == "Find a great sponsor"
     assert {key: value for key, value in stored[0].items() if key != "prompt"} == report
@@ -1045,7 +1054,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert (len(qloo.searches), qloo.ranks, model.calls) == saved_usage
     assert copy.test_connection(owner, "qloo")["status"] == "ACTIVE"
     assert copy.test_connection(owner, "gemini")["status"] == "ACTIVE"
-    assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 3)
+    assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 4)
     assert copy.capabilities()["product"] == "ACTIVE"
 
     vault.revoke(owner, "qloo")
@@ -1054,7 +1063,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
         session_id=session["session_id"], ticket=session["ticket"],
         request_id="visitor-idempotent-001", prompt="Find a great sponsor",
     ) == report
-    assert qloo.ranks == 2 and model.calls == 3 and len(qloo.searches) == 4
+    assert qloo.ranks == 2 and model.calls == 4 and len(qloo.searches) == 4
     vault.logout(owner)
     with pytest.raises(OwnerUnauthorized):
         vault.authorize(owner)
