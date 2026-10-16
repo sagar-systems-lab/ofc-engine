@@ -147,6 +147,32 @@ class HostedCopilot:
             outputs.append(result)
         return {"session_id": session_id, "messages": outputs}
 
+    def _cached_message(self, session_id: str, request_id: str, prompt_digest: str):
+        """Previously saved answers remain readable even after key revocation."""
+        with self.store._connect() as db:
+            row = db.execute(
+                "select run_id,prompt_digest,status,result,result_digest "
+                "from ofc_private.copilot_messages "
+                "where session_id=%s and request_id=%s",
+                (session_id, request_id),
+            ).fetchone()
+        if row is None:
+            return None
+        if row[1] != prompt_digest:
+            raise SessionDenied("MESSAGE_IDEMPOTENCY_CONFLICT")
+        if row[2] == "RESERVED":
+            return {"run_id": row[0], "status": "PROCESSING"}
+        try:
+            value = json.loads(row[3])
+        except (ValueError, TypeError) as exc:
+            raise StorageIntegrityError("invalid saved message") from exc
+        if (
+            not isinstance(value, dict) or value.get("run_id") != row[0]
+            or digest_obj(value) != row[4]
+        ):
+            raise StorageIntegrityError("saved message digest mismatch")
+        return value
+
     def _admit_message(self, session_id: str, request_id: str,
                        prompt_digest: str, model_id: str) -> tuple[str, dict | None]:
         with self.store._connect() as db:
@@ -260,6 +286,9 @@ class HostedCopilot:
                request_id: str, prompt: str) -> dict:
         self._check_session(session_id, ticket)
         digest = self._validate_message(request_id, prompt)
+        cached = self._cached_message(session_id, request_id, digest)
+        if cached is not None:
+            return cached
         model = self._model()
         run_id, cached = self._admit_message(session_id, request_id, digest, model.model)
         if cached is not None:
