@@ -32,7 +32,7 @@ class ResolvedEntity:
 
     def __post_init__(self):
         if (
-            self.source != "QLOO_SEARCH"
+            self.source not in ("QLOO_SEARCH", "QLOO_DISCOVERY")
             or not self.name.strip() or not self.entity_id.strip()
             or len(self.entity_id) > 120
             or len(self.query_fingerprint) != 64
@@ -65,7 +65,10 @@ def draft_plan(
 
     decisions = []
     for choice in draft.choices:
-        supported = choice.domain.lower() in _SUPPORTED
+        supported = (
+            choice.domain.lower() in _SUPPORTED
+            and resolved_artist.entity_type == "urn:entity:artist"
+        )
         if supported:
             identities = []
             for name in choice.candidate_names:
