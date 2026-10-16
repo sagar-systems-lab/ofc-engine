@@ -21,6 +21,7 @@ create table if not exists ofc_private.copilot_messages (
     session_id text not null references ofc_private.copilot_sessions(session_id),
     request_id text not null,
     prompt_digest text not null,
+    prompt_ciphertext bytea not null,
     model_id text not null,
     status text not null check(status in ('RESERVED','COMPLETE','BLOCKED')),
     result text,
