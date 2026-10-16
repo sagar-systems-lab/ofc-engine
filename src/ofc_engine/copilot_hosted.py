@@ -557,7 +557,7 @@ class HostedCopilot:
                     **draft.model_dump(),
                     "taste_seed_name": seed_name,
                     "taste_seed_category": seed_category,
-                    "choices": [discovered_choice.model_dump()],
+                    "choices": (discovered_choice,),
                 })
             if not draft.choices:
                 return self._needs_input(
