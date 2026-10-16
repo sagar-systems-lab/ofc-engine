@@ -4,16 +4,14 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 import re
-from typing import Callable
 
 from .copilot_compare import build_copilot_pair
 from .copilot_intake import draft_plan, EntityResolutionRequired
 from .intake import freeze_proposal
 from .copilot_llm import CopilotLLM
-from .copilot_resolver import normalize_qloo_search
+from .copilot_search import BudgetedQlooResolver
 from .dynamic import DynamicQlooReview
 from .durable import SQLiteRevisionStore, StorageIntegrityError
-from .qloo import ProbeObservation, search_probe
 from .revisions import digest_obj
 
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
@@ -32,17 +30,20 @@ class LocalCopilotService:
 
     def __init__(
         self, *, llm: CopilotLLM, engine: DynamicQlooReview,
-        search: Callable[[str, str], ProbeObservation],
+        resolver: BudgetedQlooResolver, llm_daily_limit: int,
     ):
         if not isinstance(llm, CopilotLLM) or not isinstance(engine, DynamicQlooReview):
             raise TypeError("configured LLM and OFC reviewer required")
         if not isinstance(engine.store, SQLiteRevisionStore):
             raise TypeError("local workflow requires SQLite durability")
-        if not callable(search):
-            raise TypeError("budgeted search transport required")
+        if not isinstance(resolver, BudgetedQlooResolver) or resolver.engine is not engine:
+            raise TypeError("resolver must share the OFC daily Qloo budget")
+        if type(llm_daily_limit) is not int or not 1 <= llm_daily_limit <= 64:
+            raise ValueError("explicit daily LLM call budget required")
         self.llm = llm
         self.engine = engine
-        self.search = search
+        self.resolver = resolver
+        self.llm_daily_limit = llm_daily_limit
         with self.engine.store._connect() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS copilot_reviews (
@@ -54,7 +55,36 @@ class LocalCopilotService:
                     projection TEXT,
                     projection_digest TEXT
                 );
+                CREATE TABLE IF NOT EXISTS copilot_model_daily (
+                    utc_day TEXT PRIMARY KEY,
+                    reserved INTEGER NOT NULL CHECK(reserved >= 0)
+                );
             """)
+
+    def _reserve_model_call(self) -> None:
+        """Charge each external LLM request before network I/O, including failures."""
+        from datetime import datetime, timezone
+        day = datetime.now(timezone.utc).date().isoformat()
+        db = self.engine.store._connect()
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT reserved FROM copilot_model_daily WHERE utc_day=?", (day,)
+            ).fetchone()
+            if row is not None and row[0] >= self.llm_daily_limit:
+                db.execute("COMMIT")
+                raise CopilotRunReserved("DAILY_LLM_BUDGET_EXHAUSTED")
+            db.execute(
+                "INSERT INTO copilot_model_daily(utc_day,reserved) VALUES(?,1) "
+                "ON CONFLICT(utc_day) DO UPDATE SET reserved=reserved+1", (day,)
+            )
+            db.execute("COMMIT")
+        except BaseException:
+            if db.in_transaction:
+                db.execute("ROLLBACK")
+            raise
+        finally:
+            db.close()
 
     def _reserve(self, run_id: str, request_id: str, prompt_digest: str):
         db = self.engine.store._connect()
@@ -135,6 +165,7 @@ class LocalCopilotService:
         if cached is not None:
             return cached
 
+        self._reserve_model_call()
         draft = self.llm.extract(prompt)
         if draft.clarification_question is not None and not draft.choices:
             result = {
@@ -155,12 +186,7 @@ class LocalCopilotService:
             raise EntityResolutionRequired("QLOO_ARTIST_NAME_REQUIRED")
 
         def resolve(name: str, kind: str):
-            spec = search_probe(name, entity_type="urn:entity:" + kind)
-            # The supplied search callback MUST reserve its provider quota before I/O.
-            captured = self.search(name, kind)
-            return normalize_qloo_search(
-                name, entity_type=kind, spec=spec, observation=captured,
-            )
+            return self.resolver.resolve(run_id=run_id, name=name, kind=kind)
 
         artist = resolve(draft.artist_name, "artist")
         brands = {}
@@ -181,6 +207,7 @@ class LocalCopilotService:
             prompt=prompt, model_id=self.llm.model,
             baseline=baseline, reviewed=reviewed, evaluated=evaluated,
         )
+        self._reserve_model_call()
         narration = self.llm.narrate_pair(pair, prompt=prompt)
         result = {
             **pair.as_dict(),
