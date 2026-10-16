@@ -7,6 +7,7 @@ import binascii
 from importlib.resources import files
 from http.server import ThreadingHTTPServer
 import json
+import hmac
 import os
 import re
 import sqlite3
@@ -23,6 +24,10 @@ from .hosted_tour import configured_tour
 from .intake import AgentProposal
 from .postgres_store import PostgresRevisionStore
 from .published_tour import PublishedTourReview
+from .dynamic import DynamicScopeConflict
+from .dynamic_postgres import PostgresDynamicQlooReview
+from .qloo import QlooProbeClient
+from pydantic import ValidationError
 from .durable import StorageIntegrityError
 
 _MAX_TARGET_LENGTH = 512
@@ -270,6 +275,46 @@ class HostedFixtureHandler(DemoHandler):
         if self.command != "POST":
             self._send(405, b'{"error":"METHOD_NOT_ALLOWED"}', "application/json")
             return
+        if self.path == "/api/agent/evaluate":
+            if self.server.dynamic_review is None:
+                self._send(405, b'{"error":"DYNAMIC_QLOO_DISABLED"}', "application/json")
+                return
+            if (
+                self.headers.get("Origin") is not None
+                or self.headers.get("Sec-Fetch-Site") not in (None, "none")
+                or not hmac.compare_digest(
+                    self.headers.get("Authorization", ""),
+                    "Bearer " + self.server.dynamic_token,
+                )
+            ):
+                self._send(403, b'{"error":"OPERATOR_AUTH_REQUIRED"}', "application/json")
+                return
+            lengths = self.headers.get_all("Content-Length", [])
+            if (
+                self.headers.get("Transfer-Encoding") is not None
+                or len(lengths) != 1 or not lengths[0].isascii()
+                or not lengths[0].isdecimal()
+                or not 1 <= int(lengths[0]) <= 96 * 1024
+                or self.headers.get("Content-Type") != "application/json"
+            ):
+                self._send(400, b'{"error":"INVALID_REQUEST"}', "application/json")
+                return
+            try:
+                proposal = AgentProposal.model_validate_json(
+                    self.rfile.read(int(lengths[0]))
+                )
+                report = self.server.dynamic_review.evaluate(proposal)
+            except DynamicScopeConflict:
+                self._send(409, b'{"error":"DYNAMIC_SCOPE_CONFLICT"}', "application/json")
+                return
+            except (ValidationError, ValueError, TypeError):
+                self._send(422, b'{"error":"INVALID_PROPOSAL"}', "application/json")
+                return
+            except (StorageIntegrityError, psycopg.Error, sqlite3.Error):
+                self._send(503, b'{"error":"DYNAMIC_REVIEW_UNAVAILABLE"}', "application/json")
+                return
+            self._send(200, _encoded(report), "application/json")
+            return
         if self.path in ("/api/runs", "/api/runs/tour"):
             if self.server.run_registry is None:
                 self._send(405, b'{"error":"READ_ONLY"}', "application/json")
@@ -400,6 +445,8 @@ class HostedFixtureServer(ThreadingHTTPServer):
         run_registry: HostedRunRegistry | None = None,
         tour_proposal: AgentProposal | None = None,
         public_showcase: PublishedTourReview | None = None,
+        dynamic_review: PostgresDynamicQlooReview | None = None,
+        dynamic_token: str | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -409,6 +456,15 @@ class HostedFixtureServer(ThreadingHTTPServer):
             raise ValueError("build SHA must be a lowercase hex revision or unknown")
         if hosted_live is not None and public_recorded_document is not None:
             raise ValueError("only one Qloo presentation mode may be enabled")
+        if (dynamic_review is None) != (dynamic_token is None):
+            raise ValueError("dynamic API token and runtime must be configured together")
+        if dynamic_token is not None and (
+            not 32 <= len(dynamic_token) <= 256 or not dynamic_token.isascii()
+            or any(ord(c) < 33 or ord(c) > 126 for c in dynamic_token)
+        ):
+            raise ValueError("unsafe dynamic API token")
+        self.dynamic_review = dynamic_review
+        self.dynamic_token = dynamic_token
         self.run_registry = run_registry
         self.tour_proposal = tour_proposal
         self.public_showcase = public_showcase
@@ -510,10 +566,32 @@ def main(argv: list[str] | None = None) -> None:
             showcase = PublishedTourReview(registry, published_id)
         except (ValueError, KeyError, StorageIntegrityError, psycopg.Error):
             parser.error("published Qloo review is unavailable or unqualified")
+    dynamic_mode = os.environ.get("OFC_DYNAMIC_QLOO_MODE", "")
+    dynamic_review = None
+    dynamic_token = None
+    if dynamic_mode:
+        if dynamic_mode != "OPERATOR_BUDGETED" or registry is None:
+            parser.error("dynamic Qloo requires explicit mode and durable PostgreSQL")
+        try:
+            limit = int(os.environ.get("OFC_DYNAMIC_QLOO_DAILY_LIMIT", "0"))
+        except ValueError:
+            parser.error("invalid dynamic Qloo daily budget")
+        dynamic_token = os.environ.get("OFC_DYNAMIC_AGENT_TOKEN", "")
+        if not 1 <= limit <= 64 or not os.environ.get("QLOO_API_KEY"):
+            parser.error("dynamic Qloo requires API key and a bounded daily budget")
+        try:
+            dynamic_review = PostgresDynamicQlooReview(
+                registry.store, QlooProbeClient.from_environment(), daily_limit=limit
+            )
+        except (ValueError, RuntimeError, psycopg.Error):
+            parser.error("dynamic PostgreSQL Qloo review is unavailable")
+    elif os.environ.get("OFC_DYNAMIC_QLOO_DAILY_LIMIT"):
+        parser.error("dynamic request budget requires an explicit mode")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
         run_registry=registry, tour_proposal=tour, public_showcase=showcase,
+        dynamic_review=dynamic_review, dynamic_token=dynamic_token,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
