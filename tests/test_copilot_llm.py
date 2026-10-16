@@ -104,20 +104,20 @@ def test_invalid_candidate_and_dependency_rejected():
     data = draft()
     data["choices"][0]["selected_name"] = "Unknown Brand"
     with pytest.raises(ValueError):
-        CopilotDraft.model_validate(data)
+        CopilotDraft.model_validate_json(json.dumps(data))
     data = draft()
     data["choices"][0]["depends_on"] = ["not-a-decision"]
     with pytest.raises(ValueError):
-        CopilotDraft.model_validate(data)
+        CopilotDraft.model_validate_json(json.dumps(data))
 
 
 def test_missing_required_choices_requires_clarification():
     data = draft()
     data["choices"] = []
     with pytest.raises(ValueError):
-        CopilotDraft.model_validate(data)
+        CopilotDraft.model_validate_json(json.dumps(data))
     data["clarification_question"] = "Which brands should I compare?"
-    assert CopilotDraft.model_validate(data).choices == ()
+    assert CopilotDraft.model_validate_json(json.dumps(data)).choices == ()
 
 
 def test_budget_and_input_guards_are_fail_closed():
