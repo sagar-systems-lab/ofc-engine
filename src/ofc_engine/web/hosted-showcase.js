@@ -282,7 +282,8 @@
     });
     const provenance = element("p",
       "Recorded comparison, not a live switch. No Qloo request, " +
-      "booking or payment occurs here. Brand names are redacted.");
+      "booking or payment occurs here. Brand names are redacted. " +
+      "Provider status describes new live queries; this is saved evidence.");
     Object.assign(provenance.style, {
       fontSize: "10px", lineHeight: "1.55", color: "#697990",
       margin: "13px 2px 0"
