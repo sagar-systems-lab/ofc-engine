@@ -198,6 +198,23 @@ class CredentialVault:
             }
         return result
 
+    def connection_test_budget(self, ticket: str, *, daily_limit: int = 3) -> dict:
+        self.authorize(ticket)
+        with self.store._connect() as db:
+            row = db.execute(
+                "select utc_day,reserved from ofc_private.copilot_connection_attempts "
+                "where id=1"
+            ).fetchone()
+        if row is None:
+            raise StorageIntegrityError("connection test quota not initialized")
+        today = datetime.now(timezone.utc).date()
+        used = row[1] if row[0] == today else 0
+        return {
+            "limit": daily_limit, "used": used,
+            "remaining": max(0, daily_limit - used),
+            "resets_at_utc": (today + timedelta(days=1)).isoformat() + "T00:00:00Z",
+        }
+
     def reserve_test(self, ticket: str, *, daily_limit: int = 3) -> None:
         self.authorize(ticket)
         if type(daily_limit) is not int or not 1 <= daily_limit <= 8:
