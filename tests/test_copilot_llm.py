@@ -11,6 +11,10 @@ def draft():
     return {
         "objective": "Select a brand partner",
         "artist_name": "Example Artist",
+        "taste_seed_name": None,
+        "taste_seed_category": None,
+        "discovery_category": None,
+        "taste_location": None,
         "budget_usd": 60000,
         "cities": ["Chicago", "Austin", "Seattle"],
         "choices": [{
@@ -79,6 +83,7 @@ def test_real_provider_request_shape_but_fake_transport(provider):
         assert "generativelanguage.googleapis.com" in url
         assert client.model == "gemini-3.1-flash-lite"
         assert body["generationConfig"]["responseMimeType"] == "application/json"
+        assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
         assert headers["x-goog-api-key"] == "test-key-not-public"
     else:
         assert url == "https://api.groq.com/openai/v1/chat/completions"
@@ -96,7 +101,11 @@ def test_provider_failure_never_invents_plan_or_exposes_raw_data(provider, failu
     )
     with pytest.raises(LLMUnavailable) as exc:
         client.extract("Pick a brand partner")
-    assert str(exc.value) in ("INVALID_MODEL_JSON", "MODEL_DRAFT_INVALID")
+    assert str(exc.value) == {
+        "bad-json": "INVALID_MODEL_JSON",
+        "malformed-draft": "MODEL_DRAFT_SCHEMA_INVALID",
+        "truncated": "MODEL_OUTPUT_TRUNCATED",
+    }[failure]
     assert "private-token-here" not in str(exc.value)
 
 
@@ -148,3 +157,31 @@ def test_provider_429_does_not_autoretry():
     with pytest.raises(LLMUnavailable, match="PROVIDER_HTTP_429"):
         client.extract("Choose a brand")
     assert len(fake.calls) == 1
+
+
+@pytest.mark.parametrize(("reply", "expected"), [
+    ({"candidates": []}, "MODEL_RESPONSE_MISSING"),
+    ({"candidates": [{"finishReason": "MAX_TOKENS"}]}, "MODEL_OUTPUT_TRUNCATED"),
+    ({"candidates": [{"finishReason": "SAFETY"}]}, "MODEL_FINISH_REJECTED"),
+    ({"candidates": [{"finishReason": "STOP", "content": {"parts": []}}]},
+     "MODEL_RESPONSE_MISSING"),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": "not valid json"}]}}]}, "MODEL_DRAFT_JSON_INVALID"),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": "{}"}]}}]}, "MODEL_DRAFT_SCHEMA_INVALID"),
+])
+def test_gemini_failure_subtype_is_safe_and_single_call(reply, expected):
+    class Stub:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            return JSONReply(200, json.dumps(reply).encode())
+
+    transport = Stub()
+    with pytest.raises(LLMUnavailable, match=expected):
+        CopilotLLM(provider="gemini", api_key="fake", transport=transport).extract(
+            "Compare Brand A and Brand B for Example Artist"
+        )
+    assert transport.calls == 1

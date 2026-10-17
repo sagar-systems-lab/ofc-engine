@@ -283,6 +283,7 @@ class CopilotLLM:
                 "generationConfig": {
                     "responseMimeType": "application/json",
                     "responseJsonSchema": _SCHEMA,
+                    "thinkingConfig": {"thinkingLevel": "minimal"},
                     "temperature": 0,
                     "maxOutputTokens": 2048,
                 },
@@ -328,20 +329,46 @@ class CopilotLLM:
         try:
             if self.provider == "gemini":
                 candidates = envelope["candidates"]
-                if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
-                    raise ValueError("incomplete inference")
+                if not isinstance(candidates, list) or len(candidates) != 1:
+                    raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+                candidate = candidates[0]
+                if candidate["finishReason"] == "MAX_TOKENS":
+                    raise LLMUnavailable("MODEL_OUTPUT_TRUNCATED")
+                if candidate["finishReason"] != "STOP":
+                    raise LLMUnavailable("MODEL_FINISH_REJECTED")
+                parts = candidate["content"]["parts"]
+                if not isinstance(parts, list):
+                    raise LLMUnavailable("MODEL_RESPONSE_MISSING")
                 raw = "".join(
-                    part.get("text", "") for part in candidates[0]["content"]["parts"]
+                    part["text"] for part in parts
+                    if isinstance(part, dict)
+                    and part.get("thought") is not True
+                    and isinstance(part.get("text"), str)
                 )
             else:
                 choices = envelope["choices"]
-                if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
-                    raise ValueError("incomplete inference")
-                raw = choices[0]["message"]["content"]
-            draft = CopilotDraft.model_validate_json(raw)
+                if not isinstance(choices, list) or len(choices) != 1:
+                    raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+                choice = choices[0]
+                if choice["finish_reason"] == "length":
+                    raise LLMUnavailable("MODEL_OUTPUT_TRUNCATED")
+                if choice["finish_reason"] != "stop":
+                    raise LLMUnavailable("MODEL_FINISH_REJECTED")
+                raw = choice["message"]["content"]
+            if not isinstance(raw, str) or not raw.strip():
+                raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+        except LLMUnavailable:
+            raise
         except (KeyError, IndexError, TypeError, ValueError):
-            raise LLMUnavailable("MODEL_DRAFT_INVALID") from None
-        return draft
+            raise LLMUnavailable("MODEL_RESPONSE_MISSING") from None
+        try:
+            json.loads(raw)
+        except (ValueError, TypeError):
+            raise LLMUnavailable("MODEL_DRAFT_JSON_INVALID") from None
+        try:
+            return CopilotDraft.model_validate_json(raw)
+        except (ValueError, TypeError):
+            raise LLMUnavailable("MODEL_DRAFT_SCHEMA_INVALID") from None
 
     def narrate_pair(self, pair, *, prompt: str) -> PairNarration:
         """Narrate one saved comparison; Qloo is shared, only OFC changes."""
