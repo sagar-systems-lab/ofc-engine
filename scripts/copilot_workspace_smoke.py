@@ -233,6 +233,30 @@ def qualify(origin: str) -> dict:
                 csv_bytes = Path(csv_file.value.path()).read_bytes()
                 assert b"Brand A" in csv_bytes and b"Brand B" in csv_bytes
                 assert calls["message"] == 1 and calls["provider"] == 0
+                if width == 1440:
+                    negative = page.evaluate("""saved => {
+                      const source = {...saved, _sessionReadConfirmed: true};
+                      const bad = {...source, on: {...source.on,
+                        qloo: {...source.on.qloo, evidence_digest: "0".repeat(64)}}};
+                      const partial = {...source, status: "BLOCKED", off: null, on: null};
+                      const injection = structuredClone(source);
+                      injection.off.decisions[0].candidate_id = "=HYPERLINK(1,2)";
+                      const blockedExport = window.OFCResults.buildProof(partial, "ON");
+                      const formulaCSV = window.OFCResults.csv(
+                        window.OFCResults.buildProof(injection, "ON"));
+                      return {
+                        mismatchRejected: window.OFCResults.pairing(bad) === null,
+                        blockedExport: blockedExport?.kind,
+                        blockedPaired: blockedExport?.comparison_available,
+                        formulaProtected: formulaCSV?.includes("\\\"'=HYPERLINK(1,2)\\\""),
+                        noPrompt: !Object.hasOwn(blockedExport, "prompt")
+                      };
+                    }""", SAVED)
+                    assert negative["mismatchRejected"]
+                    assert negative["blockedExport"] == "saved-status-export"
+                    assert negative["blockedPaired"] is False
+                    assert negative["formulaProtected"]
+                    assert negative["noPrompt"]
                 page.locator("#proof-close").click()
                 if width <= 1180:
                     page.locator("#activity-open").click()
