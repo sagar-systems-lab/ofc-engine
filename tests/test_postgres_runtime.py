@@ -1463,6 +1463,11 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
             )
 
     store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_connection_attempts "
+            "set utc_day=current_date,reserved=0 where id=1"
+        )
     vault = CredentialVault(
         store, master_key=Fernet.generate_key().decode(),
         owner_secret="bad-qloo-owner-" + "m" * 46,
