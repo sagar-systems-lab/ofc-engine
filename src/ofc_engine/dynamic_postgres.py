@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import logging
+import re
 
 from .dynamic import DynamicQlooReview
 from .durable import StorageIntegrityError
@@ -10,6 +12,9 @@ from .postgres_store import PostgresRevisionStore
 from .qloo import QlooProbeClient, QlooProbeError, ProbeSpec
 from .qloo_affinity import AffinityCaptureError, normalize_affinity_capture
 from .revisions import digest_obj
+
+
+_log = logging.getLogger(__name__)
 
 
 class PostgresDynamicQlooReview(DynamicQlooReview):
@@ -101,7 +106,15 @@ class PostgresDynamicQlooReview(DynamicQlooReview):
                 "ranking": [item["entity_id"] for item in ranking["ranking"]],
                 "capture_digest": digest_obj(observed.payload),
             }
-        except (QlooProbeError, AffinityCaptureError, ValueError, TypeError):
+        except AffinityCaptureError as exc:
+            # Only bounded validator codes, never provider payloads or entity IDs.
+            code = str(exc)
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", code):
+                code = "CAPTURE_REJECTED"
+            _log.warning("QLOO_RANK_VALIDATION_REJECTED code=%s", code)
+            return None, 1, "QLOO_EVIDENCE_UNAVAILABLE"
+        except (QlooProbeError, ValueError, TypeError):
+            _log.warning("QLOO_RANK_PROBE_UNAVAILABLE")
             return None, 1, "QLOO_EVIDENCE_UNAVAILABLE"
 
         with self.store._connect() as db:
