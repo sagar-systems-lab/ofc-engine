@@ -924,6 +924,12 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
             assert headers["x-goog-api-key"] == "private-gemini-key-not-real"
             payload = json.loads(data)
             schema = payload["generationConfig"]["responseJsonSchema"]
+            if "ready" in schema["properties"]:
+                assert schema["required"] == ["ready"]
+                return JSONReply(200, json.dumps({"candidates": [{
+                    "finishReason": "STOP",
+                    "content": {"parts": [{"text": '{"ready":true}'}]},
+                }]}).encode())
             if "answer" in schema["properties"]:
                 context = json.loads(payload["contents"][0]["parts"][0]["text"])
                 mode_on = context["view"]["ofc_enabled"]
@@ -1076,9 +1082,13 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert copy.capabilities()["qloo"] == "NOT_TESTED"
     assert (len(qloo.searches), qloo.ranks, model.calls) == saved_usage
     assert copy.test_connection(owner, "qloo")["status"] == "ACTIVE"
-    assert copy.test_connection(owner, "gemini")["status"] == "ACTIVE"
+    probe = copy.test_connection(owner, "gemini")
+    assert probe == {"provider": "gemini", "status": "CONNECTED",
+                     "qualification": "CONNECTIVITY_ONLY"}
+    assert copy.vault.status(private=True)["gemini"]["qualification"] == "CONNECTIVITY_ONLY"
     assert (len(qloo.searches), qloo.ranks, model.calls) == (4, 2, 4)
-    assert copy.capabilities()["product"] == "ACTIVE"
+    assert copy.capabilities()["product"] == "CHECK_REQUIRED"
+    assert copy.capabilities()["llm"] == "CONNECTED"
 
     followup = copy.submit(
         session_id=session["session_id"], ticket=session["ticket"],
