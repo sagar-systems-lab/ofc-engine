@@ -274,3 +274,48 @@ def test_seed_different_from_artist_not_reinterpreted():
     data["taste_seed_name"] = "Other Artist"
     data["taste_seed_category"] = "singer"
     assert CopilotDraft.model_validate(data).taste_seed_category == "singer"
+
+
+def test_explicit_artist_brand_scope_changes_only_model_taxonomy():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    data = draft()
+    data["artist_name"] = "Taylor Swift"
+    data["taste_seed_name"] = "Taylor Swift"
+    data["taste_seed_category"] = "celebrity"
+    data["choices"][0].update(
+        {"decision_id": "sponsor", "domain": "sponsorship",
+         "selected_name": "Nike", "candidate_names": ["Nike", "Nike Training Club"]}
+    )
+    parsed = CopilotDraft.model_validate(data)
+    prompt = (
+        "Artist: Taylor Swift. Original brand choice: Nike. "
+        "Candidate brands: Nike and Nike Training Club. "
+        "This is strictly a hypothetical plan."
+    )
+    corrected = HostedCopilot._explicit_brand_scope(parsed, prompt)
+    assert corrected.choices[0].domain == "brand"
+    assert corrected.taste_seed_category == "artist"
+    assert corrected.artist_name == parsed.artist_name
+    assert corrected.choices[0].candidate_names == parsed.choices[0].candidate_names
+    assert corrected.choices[0].selected_name == "Nike"
+    assert parsed.choices[0].domain == "sponsorship"
+
+
+def test_artist_brand_scope_never_relabels_contracts_or_ambiguous_requests():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    data = draft()
+    data["artist_name"] = "Taylor Swift"
+    data["choices"][0]["domain"] = "contract"
+    parsed = CopilotDraft.model_validate(data)
+    explicit = "Artist: Taylor Swift. Candidate brands: Nike and Nike Training Club. Original brand choice: Nike."
+    assert HostedCopilot._explicit_brand_scope(parsed, explicit).choices[0].domain == "contract"
+    data["choices"][0]["domain"] = "sponsorship"
+    ambiguous = CopilotDraft.model_validate(data)
+    assert HostedCopilot._explicit_brand_scope(
+        ambiguous, "A sponsorship for Taylor Swift"
+    ).choices[0].domain == "sponsorship"
+    data["taste_seed_name"] = "Another Artist"
+    mismatch = CopilotDraft.model_validate(data)
+    assert HostedCopilot._explicit_brand_scope(mismatch, explicit).choices[0].domain == "sponsorship"
