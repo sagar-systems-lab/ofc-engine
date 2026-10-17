@@ -7,6 +7,7 @@ from hashlib import sha256
 from cryptography.fernet import InvalidToken
 import hmac
 import json
+import re
 import secrets
 
 from .copilot_activity import activity_projection
@@ -86,6 +87,34 @@ class HostedCopilot:
             ):
                 db.execute("select 1 from ofc_private." + table + " limit 0")
             db.execute("select 1 from ofc_private.dynamic_qloo_budget limit 0")
+
+    @staticmethod
+    def _explicit_brand_scope(draft: CopilotDraft, prompt: str) -> CopilotDraft:
+        if (
+            len(draft.choices) != 1 or not draft.artist_name
+            or (draft.taste_seed_name is not None
+                and draft.taste_seed_name != draft.artist_name)
+            or not re.search(
+                r"\bartist\s*:\s*" + re.escape(draft.artist_name) + r"\b",
+                prompt, flags=re.IGNORECASE,
+            )
+            or not re.search(r"\bcandidate\s+brands?\s*:", prompt, re.IGNORECASE)
+            or not re.search(r"\boriginal\s+brand\s+choice\s*:", prompt, re.IGNORECASE)
+        ):
+            return draft
+        choice = draft.choices[0]
+        domain = " ".join(choice.domain.lower().replace("_", " ").replace("-", " ").split())
+        if domain in {
+            "sponsorship", "artist sponsorship", "sponsorship decision",
+            "brand endorsement", "artist brand endorsement",
+        }:
+            choice = choice.model_copy(update={"domain": "brand"})
+            draft = draft.model_copy(update={"choices": (choice,)})
+        if draft.taste_seed_category in {
+            "celebrity", "performer", "musician", "singer",
+        }:
+            draft = draft.model_copy(update={"taste_seed_category": "artist"})
+        return draft
 
     @staticmethod
     def _digest(token: str) -> str:
@@ -609,7 +638,9 @@ class HostedCopilot:
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
             )
-            draft = model.extract(prompt, prior_plan=prior_plan)
+            draft = self._explicit_brand_scope(
+                model.extract(prompt, prior_plan=prior_plan), prompt,
+            )
             native_discovery = None
             discovered_ids = {}
             context = None

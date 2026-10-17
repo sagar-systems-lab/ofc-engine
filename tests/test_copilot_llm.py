@@ -238,3 +238,84 @@ def test_minimal_probe_never_accepts_provider_http_rejection():
     with pytest.raises(LLMUnavailable, match="PROVIDER_HTTP_403"):
         CopilotLLM(provider="gemini", api_key="hidden", transport=fake).probe_connectivity()
     assert fake.calls == 1
+
+
+@pytest.mark.parametrize("alias", [
+    "brand partner", "brand partnership", "brand_sponsorship",
+    "brand sponsor", "sponsorship-brand", "artist brand sponsorship",
+])
+def test_explicit_brand_aliases_preserve_candidate_scope(alias):
+    data = draft()
+    data["choices"][0]["domain"] = alias
+    normalized = CopilotDraft.model_validate_json(json.dumps(data))
+    assert normalized.choices[0].domain == "brand"
+    assert normalized.choices[0].candidate_names == ("Brand A", "Brand B")
+
+
+@pytest.mark.parametrize("domain", [
+    "contract", "venue", "payment", "sponsorship", "restaurant",
+])
+def test_unqualified_domains_are_not_generalized_to_brand(domain):
+    data = draft()
+    data["choices"][0]["domain"] = domain
+    assert CopilotDraft.model_validate_json(json.dumps(data)).choices[0].domain == domain
+
+
+@pytest.mark.parametrize("category", ["musician", "singer", "musical_artist"])
+def test_explicit_named_artist_seed_can_normalize_music_labels(category):
+    data = draft()
+    data["taste_seed_category"] = category
+    data["taste_seed_name"] = data["artist_name"]
+    assert CopilotDraft.model_validate_json(json.dumps(data)).taste_seed_category == "artist"
+
+
+def test_seed_different_from_artist_not_reinterpreted():
+    data = draft()
+    data["taste_seed_name"] = "Other Artist"
+    data["taste_seed_category"] = "singer"
+    assert CopilotDraft.model_validate_json(json.dumps(data)).taste_seed_category == "singer"
+
+
+def test_explicit_artist_brand_scope_changes_only_model_taxonomy():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    data = draft()
+    data["artist_name"] = "Taylor Swift"
+    data["taste_seed_name"] = "Taylor Swift"
+    data["taste_seed_category"] = "celebrity"
+    data["choices"][0].update(
+        {"decision_id": "sponsor", "domain": "sponsorship",
+         "selected_name": "Nike", "candidate_names": ["Nike", "Nike Training Club"]}
+    )
+    parsed = CopilotDraft.model_validate_json(json.dumps(data))
+    prompt = (
+        "Artist: Taylor Swift. Original brand choice: Nike. "
+        "Candidate brands: Nike and Nike Training Club. "
+        "This is strictly a hypothetical plan."
+    )
+    corrected = HostedCopilot._explicit_brand_scope(parsed, prompt)
+    assert corrected.choices[0].domain == "brand"
+    assert corrected.taste_seed_category == "artist"
+    assert corrected.artist_name == parsed.artist_name
+    assert corrected.choices[0].candidate_names == parsed.choices[0].candidate_names
+    assert corrected.choices[0].selected_name == "Nike"
+    assert parsed.choices[0].domain == "sponsorship"
+
+
+def test_artist_brand_scope_never_relabels_contracts_or_ambiguous_requests():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    data = draft()
+    data["artist_name"] = "Taylor Swift"
+    data["choices"][0]["domain"] = "contract"
+    parsed = CopilotDraft.model_validate_json(json.dumps(data))
+    explicit = "Artist: Taylor Swift. Candidate brands: Nike and Nike Training Club. Original brand choice: Nike."
+    assert HostedCopilot._explicit_brand_scope(parsed, explicit).choices[0].domain == "contract"
+    data["choices"][0]["domain"] = "sponsorship"
+    ambiguous = CopilotDraft.model_validate_json(json.dumps(data))
+    assert HostedCopilot._explicit_brand_scope(
+        ambiguous, "A sponsorship for Taylor Swift"
+    ).choices[0].domain == "sponsorship"
+    data["taste_seed_name"] = "Another Artist"
+    mismatch = CopilotDraft.model_validate_json(json.dumps(data))
+    assert HostedCopilot._explicit_brand_scope(mismatch, explicit).choices[0].domain == "sponsorship"

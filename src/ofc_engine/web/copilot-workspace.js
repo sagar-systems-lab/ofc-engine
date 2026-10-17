@@ -395,7 +395,11 @@
   const submit = async () => {
     const prompt = state.pendingPrompt;
     if (!prompt || state.busy) return;
+    const draftInput = el("chat-input").value;
     setBusy(true);
+    state.selected = null;
+    el("chat-input").value = "";
+    render();
     statusText("Submitting one bounded request…");
     const requestId = "ui-" + crypto.randomUUID();
     state.activeRequestId = requestId;
@@ -418,6 +422,9 @@
     } catch (err) {
       statusText(safeStatus(err.message) + " Do not submit again until you check saved history.");
       if (state.sessionId) await restore(); // Safe GET only. Never re-POST.
+      if (!state.runs.some(run => run.prompt === prompt)) {
+        el("chat-input").value = draftInput;
+      }
     } finally {
       state.pendingPrompt = "";
       state.activeRequestId = null;
