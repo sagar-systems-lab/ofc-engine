@@ -157,3 +157,31 @@ def test_provider_429_does_not_autoretry():
     with pytest.raises(LLMUnavailable, match="PROVIDER_HTTP_429"):
         client.extract("Choose a brand")
     assert len(fake.calls) == 1
+
+
+@pytest.mark.parametrize(("reply", "expected"), [
+    ({"candidates": []}, "MODEL_RESPONSE_MISSING"),
+    ({"candidates": [{"finishReason": "MAX_TOKENS"}]}, "MODEL_OUTPUT_TRUNCATED"),
+    ({"candidates": [{"finishReason": "SAFETY"}]}, "MODEL_FINISH_REJECTED"),
+    ({"candidates": [{"finishReason": "STOP", "content": {"parts": []}}]},
+     "MODEL_RESPONSE_MISSING"),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": "not valid json"}]}}]}, "MODEL_DRAFT_JSON_INVALID"),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": "{}"}]}}]}, "MODEL_DRAFT_SCHEMA_INVALID"),
+])
+def test_gemini_failure_subtype_is_safe_and_single_call(reply, expected):
+    class Stub:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            return JSONReply(200, json.dumps(reply).encode())
+
+    transport = Stub()
+    with pytest.raises(LLMUnavailable, match=expected):
+        CopilotLLM(provider="gemini", api_key="fake", transport=transport).extract(
+            "Compare Brand A and Brand B for Example Artist"
+        )
+    assert transport.calls == 1
