@@ -42,14 +42,41 @@ SAVED = {
             },
         ],
     },
-    "off": {"ofc_enabled": False, "qloo": {"evidence_digest": "x"}},
-    "on": {
-        "ofc_enabled": True, "qloo": {"evidence_digest": "x"},
+    "baseline_digest": "a" * 64,
+    "reviewed_digest": "d" * 64,
+    "qloo_evidence_digest": "e" * 64,
+    "prompt_digest": "f" * 64,
+    "value_receipt": {
+        "schema_version": "ofc-value.v1",
+        "run_id": FAKE_RUN,
+        "shared_qloo_evidence_digest": "e" * 64,
+        "model_id": "mock-llm",
+        "decision_count": 2,
+        "changed_count": 1,
+        "receipt_digest": "c" * 64,
+        "business_evidence_satisfied": False,
+    },
+    "off": {
+        "ofc_enabled": False,
+        "plan_digest": "a" * 64,
+        "qloo": {"provider": "QLOO", "evidence_digest": "e" * 64, "observations": []},
         "decisions": [
-            {"decision_id": "brand", "changed": True, "candidate_id": "Brand B",
-             "ofc_verdict": "UNCERTAIN"},
-            {"decision_id": "afterparty", "changed": False,
-             "candidate_id": "Experience A", "ofc_verdict": "UNCERTAIN"},
+            {"decision_id": "brand", "domain": "brand", "candidate_id": "Brand A",
+             "cultural_rank_observed": True},
+            {"decision_id": "afterparty", "domain": "experience",
+             "candidate_id": "Experience A", "cultural_rank_observed": False},
+        ],
+    },
+    "on": {
+        "ofc_enabled": True, "plan_digest": "d" * 64, "changed_ids": ["brand"],
+        "qloo": {"provider": "QLOO", "evidence_digest": "e" * 64, "observations": []},
+        "decisions": [
+            {"decision_id": "brand", "domain": "brand", "changed": True,
+             "candidate_id": "Brand B", "ofc_verdict": "UNCERTAIN",
+             "ofc_reason": "RANK_CHANGED"},
+            {"decision_id": "afterparty", "domain": "experience", "changed": False,
+             "candidate_id": "Experience A", "ofc_verdict": "UNCERTAIN",
+             "ofc_reason": "NO_VERIFIED_RANK"},
         ],
     },
     "activity": {
@@ -175,6 +202,62 @@ def qualify(origin: str) -> dict:
                 )
                 assert calls["session"] == 1
                 assert calls["message"] == 1
+                page.locator("#proof-entry").wait_for(state="visible")
+                assert page.locator("#proof-entry").is_enabled()
+                page.get_by_role("button", name="Compare OFF vs ON").click()
+                page.locator("#comparison-dialog").wait_for(state="visible")
+                assert "Brand B" in page.locator("#comparison-rows").inner_text()
+                assert "Same Qloo evidence" in page.locator("#comparison-title").inner_text()
+                assert calls["message"] == 1 and calls["provider"] == 0
+                if width == 1440:
+                    page.screenshot(path=str(review / "copilot-comparison-desktop.png"),
+                                    full_page=True)
+                page.locator("#comparison-close").click()
+                page.locator("#proof-entry").click()
+                page.locator("#proof-dialog").wait_for(state="visible")
+                assert "Not independently signed" in page.locator("#proof-dialog").inner_text() or (
+                    "not independently signed" in page.locator("#proof-dialog").inner_text())
+                if width == 1440:
+                    page.screenshot(path=str(review / "copilot-proof-desktop.png"),
+                                    full_page=True)
+                with page.expect_download() as receipt_file:
+                    page.locator("#proof-json-download").click()
+                exported = json.loads(Path(receipt_file.value.path()).read_text())
+                assert exported["kind"] == "paired-saved-run-export"
+                assert exported["comparison_available"] is True
+                assert exported["qloo_evidence_digest"] == "e" * 64
+                assert exported["decisions"][0]["changed"] is True
+                assert "prompt" not in exported and "private" not in json.dumps(exported).lower()
+                with page.expect_download() as csv_file:
+                    page.locator("#proof-csv-download").click()
+                csv_bytes = Path(csv_file.value.path()).read_bytes()
+                assert b"Brand A" in csv_bytes and b"Brand B" in csv_bytes
+                assert calls["message"] == 1 and calls["provider"] == 0
+                if width == 1440:
+                    negative = page.evaluate("""saved => {
+                      const source = {...saved, _sessionReadConfirmed: true};
+                      const bad = {...source, on: {...source.on,
+                        qloo: {...source.on.qloo, evidence_digest: "0".repeat(64)}}};
+                      const partial = {...source, status: "BLOCKED", off: null, on: null};
+                      const injection = structuredClone(source);
+                      injection.off.decisions[0].candidate_id = "=HYPERLINK(1,2)";
+                      const blockedExport = window.OFCResults.buildProof(partial, "ON");
+                      const formulaCSV = window.OFCResults.csv(
+                        window.OFCResults.buildProof(injection, "ON"));
+                      return {
+                        mismatchRejected: window.OFCResults.pairing(bad) === null,
+                        blockedExport: blockedExport?.kind,
+                        blockedPaired: blockedExport?.comparison_available,
+                        formulaProtected: formulaCSV?.includes("\\\"'=HYPERLINK(1,2)\\\""),
+                        noPrompt: !Object.hasOwn(blockedExport, "prompt")
+                      };
+                    }""", SAVED)
+                    assert negative["mismatchRejected"]
+                    assert negative["blockedExport"] == "saved-status-export"
+                    assert negative["blockedPaired"] is False
+                    assert negative["formulaProtected"]
+                    assert negative["noPrompt"]
+                page.locator("#proof-close").click()
                 if width <= 1180:
                     page.locator("#activity-open").click()
                 page.locator("#activity-rail").wait_for(state="visible")

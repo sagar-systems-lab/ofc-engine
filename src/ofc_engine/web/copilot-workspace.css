@@ -276,3 +276,88 @@ a{text-decoration:none;color:inherit}
 .map-node-main .map-uncertain{color:#a56a19}
 @media(min-width:769px) and (max-width:1180px){.shell.activity-overlay-open .activity-rail{width:300px}}
 @media(max-width:768px){.shell.activity-overlay-open .activity-rail{top:59px;width:min(320px,95vw);max-height:calc(100dvh - 59px)}}
+
+
+.result-summary{margin-top:15px;border:1px solid #dce9fa;border-radius:17px;padding:15px;
+  box-shadow:0 8px 28px rgba(24,84,165,.06);background:linear-gradient(180deg,#f9fbff,#fff 38%)}
+.result-heading{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+.result-heading h2{margin:0;color:#122d55;font-size:14px;font-weight:750;letter-spacing:-.02em}
+.review-state{display:inline-block;border-radius:30px;padding:5px 9px;font-size:10px;
+  font-weight:720;letter-spacing:.015em;color:#926519;background:#fff4de}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,155px),1fr));gap:9px}
+.decision-card{min-width:0;min-height:133px;padding:12px;border:1px solid #e3edf9;border-radius:12px;
+  background:#fff;display:flex;flex-direction:column;gap:8px}
+.decision-domain{color:#6584af;font-size:10px;font-weight:720;text-transform:uppercase;letter-spacing:.05em}
+.decision-card h3{font-size:13px;line-height:1.33;color:#122d51;margin:0;overflow-wrap:anywhere}
+.decision-card small{font-size:10px;line-height:1.5;color:#6583a3}
+.decision-card small.decision-change{color:#007c6a;font-weight:650}
+.decision-card small.decision-preserved{color:#487799}
+.decision-card p{font-size:11px;color:#7186a3;line-height:1.48;margin:auto 0 0}
+.result-caveat{font-size:11px;color:#516b8f;line-height:1.55;margin:12px 0 0}
+.result-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}
+.result-action{min-height:36px;padding:7px 11px;border:1px solid #a9cef9;background:#fff;
+  color:#1770db;border-radius:10px;font-size:11px;font-weight:660;
+  transition:background .18s ease,transform .18s ease}
+.result-action:hover:not(:disabled){background:#eaf4ff;transform:translateY(-1px)}
+.result-action:disabled{color:#9ab0c7;background:#f8faff;border-color:#e4ebf4}
+.result-legal{font-size:10px;color:#8191a9;line-height:1.5;margin:10px 0 0}
+.evidence-dialog{position:fixed;margin:auto;max-width:calc(100vw - 24px);max-height:min(86dvh,800px);
+  overflow-y:auto;border:1px solid #dce9fa;background:#fff;color:#12264b;
+  border-radius:21px;padding:clamp(16px,2vw,25px);box-shadow:0 25px 85px rgba(17,53,108,.2);
+  scrollbar-width:thin}
+.evidence-dialog::backdrop{background:rgba(9,28,58,.35);backdrop-filter:blur(2px)}
+.comparison-dialog{width:min(1060px,calc(100vw - 22px))}
+.proof-dialog{width:min(500px,calc(100vw - 22px))}
+.evidence-dialog-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  border-bottom:1px solid #e5edf8;padding-bottom:17px;margin-bottom:16px}
+.evidence-dialog-header h2{font-size:clamp(18px,2vw,24px);font-weight:770;letter-spacing:-.03em;margin:4px 0 8px}
+.evidence-dialog-header p:not(.dialog-eyebrow){font-size:12px;line-height:1.55;color:#6a7f9d;max-width:640px;margin:0}
+.dialog-eyebrow{color:#2378f5;font-size:10px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;margin:0}
+.dialog-close{flex:none;border:1px solid #e0eafa}
+.comparison-identity{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:13px}
+.proof-field{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;
+  border-bottom:1px solid #e6eef9;padding:10px 2px;font-size:12px}
+.comparison-identity .proof-field{display:flex;flex-direction:column;gap:3px;
+  background:#f5faff;padding:10px 12px;border:1px solid #e2ecf9;border-radius:10px;min-width:min(160px,100%)}
+.proof-field dt{font-size:11px;color:#697f9f}
+.proof-field dd{margin:0;font-size:12px;font-weight:620;color:#1d3760;text-align:right;
+  overflow-wrap:anywhere;word-break:break-word}
+.comparison-identity .proof-field dd{text-align:left}
+.comparison-columns{display:grid;grid-template-columns:130px 1fr 1fr;gap:8px;color:#6582ac;
+  font-size:11px;font-weight:740;text-align:center;padding:7px 10px}
+.comparison-row{display:grid;grid-template-columns:130px minmax(0,1fr) minmax(0,1fr);
+  gap:9px;align-items:stretch;padding:9px 0;border-bottom:1px solid #e4ebf6}
+.comparison-row-title{display:flex;flex-direction:column;justify-content:center;gap:6px;
+  font-size:12px;color:#244369;min-width:0}
+.comparison-row-title strong,.comparison-row-title small{overflow-wrap:anywhere}
+.comparison-row-title small{color:#8da0ba;font-size:10px}
+.comparison-choice{display:flex;flex-direction:column;gap:7px;padding:12px;
+  border:1px solid #e0eafa;border-radius:13px;min-width:0;background:#f8fbff}
+.comparison-on{background:#f3fcf9;border-color:#d7efe4}
+.comparison-choice strong{color:#183a63;font-size:14px;overflow-wrap:anywhere}
+.comparison-choice small{font-size:11px;color:#7186a1;line-height:1.4;overflow-wrap:anywhere}
+.comparison-choice small.comparison-delta{color:#078463;font-weight:670}
+.comparison-choice small.comparison-preserved{color:#587691}
+.comparison-overline{color:#507eae;font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.015em}
+.comparison-footer{background:#f3f8ff;border-radius:12px;color:#325679;padding:14px;
+  font-size:12px;line-height:1.55;margin:18px 0 13px}
+.evidence-dialog-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;padding-top:12px}
+.proof-disclaimer{border-radius:11px;background:#eef5ff;border:1px solid #dceaff;
+  padding:12px;color:#385e8c;font-size:11px;line-height:1.55}
+.proof-fields{margin:12px 0 8px}
+.proof-footnote{margin:13px 0 2px;color:#7386a2;font-size:11px;line-height:1.5}
+@media(max-width:768px){
+  .result-summary{padding:12px}.result-grid{grid-template-columns:1fr}
+  .decision-card{min-height:unset}.result-action{flex:1;min-width:136px}
+  .evidence-dialog{max-width:calc(100vw - 12px);width:calc(100vw - 12px);
+    max-height:calc(100dvh - 18px);border-radius:18px;padding:17px}
+  .comparison-columns{display:none}
+  .comparison-row{grid-template-columns:1fr 1fr;gap:7px}
+  .comparison-row-title{grid-column:span 2;padding:5px 0}
+  .comparison-choice{padding:10px}
+  .comparison-identity .proof-field{min-width:0;flex:1}
+}
+@media(max-width:370px){.comparison-row{grid-template-columns:1fr}
+  .comparison-row-title{grid-column:span 1}
+  .evidence-dialog-actions button{flex:1}
+}
