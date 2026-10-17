@@ -238,3 +238,39 @@ def test_minimal_probe_never_accepts_provider_http_rejection():
     with pytest.raises(LLMUnavailable, match="PROVIDER_HTTP_403"):
         CopilotLLM(provider="gemini", api_key="hidden", transport=fake).probe_connectivity()
     assert fake.calls == 1
+
+
+@pytest.mark.parametrize("alias", [
+    "brand partner", "brand partnership", "brand_sponsorship",
+    "brand sponsor", "sponsorship-brand", "artist brand sponsorship",
+])
+def test_explicit_brand_aliases_preserve_candidate_scope(alias):
+    data = draft()
+    data["choices"][0]["domain"] = alias
+    normalized = CopilotDraft.model_validate(data)
+    assert normalized.choices[0].domain == "brand"
+    assert normalized.choices[0].candidate_names == ("Brand A", "Brand B")
+
+
+@pytest.mark.parametrize("domain", [
+    "contract", "venue", "payment", "sponsorship", "restaurant",
+])
+def test_unqualified_domains_are_not_generalized_to_brand(domain):
+    data = draft()
+    data["choices"][0]["domain"] = domain
+    assert CopilotDraft.model_validate(data).choices[0].domain == domain
+
+
+@pytest.mark.parametrize("category", ["musician", "singer", "musical_artist"])
+def test_explicit_named_artist_seed_can_normalize_music_labels(category):
+    data = draft()
+    data["taste_seed_category"] = category
+    data["taste_seed_name"] = data["artist_name"]
+    assert CopilotDraft.model_validate(data).taste_seed_category == "artist"
+
+
+def test_seed_different_from_artist_not_reinterpreted():
+    data = draft()
+    data["taste_seed_name"] = "Other Artist"
+    data["taste_seed_category"] = "singer"
+    assert CopilotDraft.model_validate(data).taste_seed_category == "singer"
