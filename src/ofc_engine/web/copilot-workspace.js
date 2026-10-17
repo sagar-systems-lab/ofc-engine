@@ -248,7 +248,21 @@
     const text = String(run.prompt || state.pendingPrompt || "");
     if (text) box.append(message("user", text));
     if (run.status === "PROCESSING") {
-      box.append(message("assistant", safeStatus("PROCESSING")));
+      const activity = run.activity;
+      let detail = "Request admitted. Checking saved provider attempt states; no automatic inference retry.";
+      if (activity?.source === "PERSISTED_ATTEMPTS") {
+        const evidence = activity.qloo_evidence;
+        if (evidence === "SEARCH_ONLY") detail = "Qloo entity search saved. Ranking evidence not yet observed.";
+        else if (evidence === "RANK_PENDING_OR_INTERRUPTED")
+          detail = "Qloo search completed; ranking request reserved, result not yet validated.";
+        else if (evidence === "RANK_OBSERVED")
+          detail = "Qloo rank saved. Preparing independent OFF and ON explanations.";
+        else if (evidence === "PARTIAL")
+          detail = "Some Qloo observations saved; unresolved provider attempts remain.";
+        else if (evidence === "SEARCH_PENDING_OR_INTERRUPTED")
+          detail = "Qloo entity search reserved; awaiting a verified response.";
+      }
+      box.append(message("assistant", detail));
     } else if (run.status === "REVIEW_REQUIRED") {
       const rendered = window.OFCResults?.renderRun(run, state.mode, message);
       if (rendered) box.append(rendered);
@@ -374,7 +388,9 @@
 
   const monitor = () => {
     stopPolling();
-    if (!state.selected || !state.sessionId || selectedRun()?.status !== "PROCESSING") return;
+    const requestPending = state.busy && Boolean(state.pendingPrompt);
+    if (!state.sessionId || (!requestPending &&
+        (!state.selected || selectedRun()?.status !== "PROCESSING"))) return;
     state.pollTimer = window.setTimeout(async () => {
       if (document.visibilityState !== "hidden") await restore();
       monitor();
@@ -405,6 +421,7 @@
     state.activeRequestId = requestId;
     try {
       const id = await ensureSession();
+      monitor(); // Read-only GETs while the admitted POST is in flight.
       const reply = await jsonRequest("/api/copilot/sessions/" + id + "/messages",
         {request_id: requestId, prompt});
       state.pendingPrompt = "";
@@ -429,6 +446,7 @@
       state.pendingPrompt = "";
       state.activeRequestId = null;
       setBusy(false);
+      monitor(); // Continue only if the saved run is still processing.
     }
   };
 

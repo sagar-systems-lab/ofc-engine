@@ -111,6 +111,7 @@ def qualify(origin: str) -> dict:
                          "demo": 0, "owner_read": 0, "owner_login": 0, "owner_test": 0}
                 owner_active = {"value": False}
                 submitted = []
+                pending_response = {"active": False}
                 page.on("pageerror", lambda error: errors.append(str(error)))
 
                 def mock_request(route):
@@ -173,6 +174,22 @@ def qualify(origin: str) -> dict:
                         )
                     if path == "copilot/sessions/" + FAKE_SESSION and req.method == "GET":
                         messages = [{**SAVED, "prompt": submitted[0]}] if submitted else []
+                        if pending_response["active"] and not submitted:
+                            messages = [{
+                                "run_id": FAKE_RUN, "status": "PROCESSING",
+                                "prompt": PROMPT,
+                                "activity": {
+                                    "source": "PERSISTED_ATTEMPTS",
+                                    "agent_plan": "ADMITTED",
+                                    "qloo_evidence": "SEARCH_ONLY",
+                                    "ofc_review": "NOT_OBSERVED",
+                                    "results": "PROCESSING",
+                                    "requests": {
+                                        "search_complete": 1, "search_reserved": 0,
+                                        "rank_complete": 0, "rank_reserved": 0,
+                                    },
+                                },
+                            }]
                         return route.fulfill(
                             status=200, content_type="application/json",
                             body=json.dumps({"session_id": FAKE_SESSION, "messages": messages}),
@@ -320,6 +337,7 @@ def qualify(origin: str) -> dict:
                   };
                 }""")
                 input_box.press("Enter")
+                pending_response["active"] = True
                 page.locator("#run-approve").click()
                 page.get_by_text("Waiting for a saved server result. No automatic retry will be made.").wait_for(
                     state="visible", timeout=8_000)
@@ -327,6 +345,12 @@ def qualify(origin: str) -> dict:
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert input_box.input_value() == ""
                 page.wait_for_function("typeof window.releaseSavedMessage === 'function'")
+                page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
+                    state="visible", timeout=9_000)
+                assert page.locator("#activity-steps").inner_text().count("Qloo evidence") == 1
+                assert "entity search" in page.locator("#activity-steps").inner_text()
+                assert calls["message"] == 0 and calls["provider"] == 0
+                pending_response["active"] = False
                 page.evaluate("window.releaseSavedMessage()")
                 try:
                     page.locator(".message.assistant").wait_for(state="visible", timeout=10_000)
