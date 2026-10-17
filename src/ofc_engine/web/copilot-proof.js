@@ -286,5 +286,5 @@
       dialog.addEventListener("close",()=>{if(dialog._invoker?.isConnected)dialog._invoker.focus();});
     }
   };
-  window.OFCResults=Object.freeze({mount,renderRun,syncProof,buildProof,pairing,csv});
+  window.OFCResults=Object.freeze({mount,renderRun,syncProof,buildProof,pairing,csv,downloadJSON,downloadCSV});
 })();
