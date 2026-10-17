@@ -9,6 +9,7 @@
     sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
     pendingPrompt: "", sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, activeRequestId: null, pollTimer: null,
+    attachment: null, attachmentVersion: 0,
   };
 
   const icon = (id, size = 17) => {
@@ -83,6 +84,8 @@
       COPILOT_NOT_CONFIGURED: "Copilot is not configured for live requests.",
       ACCESS_DENIED: "Your private session expired or is no longer accessible.",
       COPILOT_STORAGE_UNAVAILABLE: "Saved-result storage is currently unavailable.",
+      COPILOT_SESSION_MESSAGE_LIMIT: "This private session allows four submitted requests. Create a new visitor session after saving any proof you need.",
+      INVALID_COPILOT_MESSAGE: "The request is outside supported bounds. Please shorten your prompt or attached notes.",
     };
     return labels[code] || "This review is unavailable (" + String(code || "UNKNOWN").slice(0, 64) + ").";
   };
@@ -98,11 +101,64 @@
     if (!busy) resizeComposer();
   };
 
+  const composedPrompt = () => {
+    const message = el("chat-input").value.trim();
+    if (!message) return null;
+    if (!state.attachment) return message;
+    const attached = state.attachment;
+    return message + "\n\n--- USER-SUPPLIED TEXT NOTES (context, not Qloo evidence) ---\n" +
+      "Document: " + attached.name + "\n" + attached.text +
+      "\n--- END USER-SUPPLIED NOTES ---";
+  };
+
   const resizeComposer = () => {
     const input = el("chat-input");
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 138) + "px";
-    if (!state.busy) el("chat-send").disabled = !input.value.trim();
+    const prompt = composedPrompt();
+    if (!state.busy) el("chat-send").disabled = !prompt || prompt.length > 4000;
+    if (state.attachment && prompt && prompt.length > 4000)
+      statusText("Combined prompt exceeds 4,000 characters. Shorten your question or remove notes; no upload occurred.");
+  };
+
+  const clearAttachment = () => {
+    state.attachmentVersion++;
+    state.attachment = null;
+    el("attachment-file").value = "";
+    el("attachment-chip").hidden = true;
+    el("attachment-label").textContent = "";
+    resizeComposer();
+  };
+
+  const attachText = async file => {
+    const version = ++state.attachmentVersion;
+    if (!file) return;
+    const extension = file.name.split(".").pop().toLowerCase();
+    if (!["txt", "md", "csv", "json"].includes(extension)) {
+      statusText("PDF/DOCX are not supported. Please export a short text excerpt to .txt or .md.");
+      return;
+    }
+    if (!file.size || file.size > 16 * 1024) {
+      statusText("This file is empty or exceeds the 16 KiB local-reading cap. Use a shorter text excerpt.");
+      return;
+    }
+    try {
+      const content = (await file.text()).replace(/^\uFEFF/, "").trim();
+      if (version !== state.attachmentVersion) return;
+      if (!content || content.includes("\u0000") || content.length > 3000) {
+        statusText("Only nonempty UTF-8 text excerpts up to 3,000 characters are accepted. Nothing uploaded.");
+        return;
+      }
+      state.attachment = {name: file.name.slice(0, 80).replace(/[\r\n\t]/g, " "), text: content};
+      el("attachment-chip").hidden = false;
+      el("attachment-label").textContent = state.attachment.name + " · " + content.length + " characters · included on Send";
+      statusText("Local text notes ready. Sending requires confirmation and may use real provider quota.");
+      resizeComposer();
+    } catch {
+      statusText("Cannot read that text file. Nothing was uploaded.");
+    } finally {
+      el("attachment-file").value = "";
+    }
   };
 
   const updateShell = () => {
@@ -229,6 +285,12 @@
       ? {local_pending: true} : null));
   };
 
+  const updateModeExplanation = () => {
+    el("status-mode-explanation").textContent = state.mode === "OFF"
+      ? "Selected view: OFC OFF (LLM + Qloo baseline). Server availability is separate; new submissions still compute both views."
+      : "Selected view: OFC ON (reviewed result). Server availability is separate; switching views never makes a provider call.";
+  };
+
   const loadCapabilities = async () => {
     try {
       const caps = await jsonRequest("/api/capabilities");
@@ -242,7 +304,8 @@
         raw === "NOT_CONFIGURED" ? "Not configured" : "Status";
       const rows = el("status-rows");
       rows.replaceChildren();
-      for (const [label, key] of [["OFC", "ofc"],["Qloo", "qloo"],["Model", "llm"],["Storage", "storage"]]) {
+      updateModeExplanation();
+      for (const [label, key] of [["OFC engine available", "ofc"],["Qloo provider check", "qloo"],["Model provider check", "llm"],["Saved-run storage", "storage"]]) {
         const row = node("div", "status-row");
         row.append(node("strong", "", label), node("span", "", String(caps[key] || "UNKNOWN").replaceAll("_", " ")));
         rows.append(row);
@@ -329,6 +392,7 @@
         {request_id: requestId, prompt});
       state.pendingPrompt = "";
       el("chat-input").value = "";
+      clearAttachment();
       resizeComposer();
       await restore();
       if (reply.run_id && !state.runs.some(x => x.run_id === reply.run_id))
@@ -349,13 +413,26 @@
   };
 
   const requestSend = () => {
-    if (state.busy || !el("chat-input").value.trim()) return;
-    state.pendingPrompt = el("chat-input").value.trim();
+    if (state.busy) return;
+    const prompt = composedPrompt();
+    if (!prompt) return;
+    if (prompt.length > 4000) {
+      statusText("Maximum 4,000 characters including attached notes. No provider call made.");
+      return;
+    }
+    state.pendingPrompt = prompt;
     const modal = el("run-confirm");
     if (!modal.open) modal.showModal();
   };
 
   el("chat-input").addEventListener("input", resizeComposer);
+  el("attachment-add").addEventListener("click", () => {
+    if (!state.busy) el("attachment-file").click();
+  });
+  el("attachment-file").addEventListener("change", event => {
+    void attachText(event.target.files?.[0]);
+  });
+  el("attachment-remove").addEventListener("click", clearAttachment);
   el("chat-input").addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
@@ -380,6 +457,7 @@
     if (state.busy) return;
     state.selected = null;
     el("chat-input").value = "";
+    clearAttachment();
     render();
     resizeComposer();
     statusText("New conversation. No provider request made.");
@@ -405,6 +483,7 @@
     el("mode-toggle").setAttribute("aria-label",
       state.mode === "ON" ? "OFC ON — show reviewed result" : "OFC OFF — show Qloo baseline");
     el("mode-label").textContent = state.mode;
+    updateModeExplanation();
     render(); // Presentation projection only. No provider call or DB write.
   });
 
@@ -445,6 +524,7 @@
     },
   });
   state.sessionId = readId();
+  updateModeExplanation();
   updateShell();
   setActivity(window.innerWidth > 1180);
   resizeComposer();
