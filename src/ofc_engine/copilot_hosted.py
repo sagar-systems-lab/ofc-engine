@@ -969,6 +969,9 @@ class HostedCopilot:
                 "SEARCH_EXACT_NAME_NOT_FOUND", "QLOO_NOT_CONFIGURED",
                 "LLM_NOT_CONFIGURED", "MODEL_DRAFT_INVALID",
                 "MODEL_NARRATION_INVALID", "PROVIDER_HTTP_429",
+                "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
+                "MODEL_FINISH_REJECTED", "MODEL_DRAFT_JSON_INVALID",
+                "MODEL_DRAFT_SCHEMA_INVALID",
             }
             safe = code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
             result = {
