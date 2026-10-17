@@ -29,7 +29,25 @@ def run_browser(origin: str) -> dict:
                 page.on("request", lambda request: outside.append(request.url) if not request.url.startswith(origin + "/") else None)
                 try:
                     page.goto(origin + "/", wait_until="domcontentloaded", timeout=90_000)
+                    intro = page.locator("#ofc-intro")
+                    intro.wait_for(state="visible", timeout=40_000)
+                    if not page.locator("#ofc-intro-title").is_visible():
+                        raise BrowserFailure("intro must render before the workspace")
+                    if page.locator(".sidebar").is_visible() or page.locator("#home-title").is_visible():
+                        raise BrowserFailure("workspace flashed before Understand")
+                    if not page.locator("body > .shell").get_attribute("inert") == "":
+                        raise BrowserFailure("workspace must be inert before acceptance")
+                    if page.evaluate("document.documentElement.scrollWidth > innerWidth + 1"):
+                        raise BrowserFailure("intro overflows horizontally at " + str(width))
+                    if page.evaluate("document.documentElement.scrollHeight > innerHeight + 1"):
+                        raise BrowserFailure("intro must be viewport-fitted")
+                    if page.locator("#ofc-intro-understand").count() != 1:
+                        raise BrowserFailure("intro must have one Understand CTA")
+                    page.locator("#ofc-intro-understand").click()
+                    page.locator("#ofc-intro").wait_for(state="detached", timeout=10_000)
                     page.locator("#home-title").wait_for(state="visible", timeout=40_000)
+                    if page.locator("body > .shell").get_attribute("inert") is not None:
+                        raise BrowserFailure("Understand did not unlock the workspace")
                     if page.locator(".primary-nav > .side-link").count() != 4:
                         raise BrowserFailure("primary navigation is not judge-focused")
                     if width <= 375:
@@ -198,6 +216,11 @@ def run_browser(origin: str) -> dict:
                         raise BrowserFailure("custom review did not account for every decision")
                     page.locator("#save-draft").click()
                     page.reload(wait_until="domcontentloaded")
+                    page.locator("#ofc-intro").wait_for(state="visible", timeout=15_000)
+                    if page.locator("#home-title").is_visible():
+                        raise BrowserFailure("refresh bypassed the intro")
+                    page.locator("#ofc-intro-understand").click()
+                    page.locator("#ofc-intro").wait_for(state="detached", timeout=10_000)
                     page.locator("#more-tools summary").click()
                     page.locator('[data-view-link="history"]').click()
                     page.locator("#history-search").fill("Custom cultural")
