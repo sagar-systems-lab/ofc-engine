@@ -34,7 +34,7 @@
     budget_exhausted: ["Evidence budget", "Maximum recheck attempts constrain the result"],
   };
   const showFeedback = message => {$("settings-owner-feedback").textContent = message;};
-  const owner = {connected: false, tests: null, report: null};
+  const owner = {connected: false, tests: null, report: null, readVersion: 0};
   const callbacks = {clearSession: () => {}, sessionId: () => null};
 
   const runDemo = async scenario => {
@@ -150,8 +150,13 @@
     $("settings-owner-secret").value="";
   };
   const loadOwnerStatus=async()=>{
-    try {renderOwner(await api("/api/owner/credentials"));}
-    catch {lockOwner();}
+    const version=++owner.readVersion;
+    try {
+      const report=await api("/api/owner/credentials");
+      if(version===owner.readVersion)renderOwner(report);
+    } catch {
+      if(version===owner.readVersion)lockOwner();
+    }
   };
   const ownerAction=async(button)=>{
     const provider=button.dataset.provider,action=button.dataset.ownerAction;
@@ -228,9 +233,11 @@
       e.preventDefault();
       const input=$("settings-owner-secret"),secret=input.value;input.value="";
       try {
+        owner.readVersion++;
         await api("/api/owner/login",{owner_secret:secret});
         await loadOwnerStatus();
-        showFeedback("Owner connection controls unlocked.");
+        if(owner.connected)showFeedback("Owner connection controls unlocked.");
+        else showFeedback("Owner login response received, but connection status could not be verified.");
       } catch {showFeedback("Owner sign-in failed. Check your private owner secret.");}
     });
     $("settings-owner-providers").addEventListener("click",event=>{
