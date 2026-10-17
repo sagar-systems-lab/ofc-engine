@@ -12,6 +12,18 @@ from .durable import StorageIntegrityError
 from .postgres_store import PostgresRevisionStore
 
 PROVIDERS = frozenset({"qloo", "gemini", "groq"})
+_SAFE_TEST_REASONS = frozenset({
+    "API_KEY_MISSING", "TRANSPORT_ERROR", "NETWORK_ERROR",
+    "RESPONSE_TOO_LARGE", "INVALID_JSON", "UNEXPECTED_TOP_LEVEL_JSON",
+    "QLOO_SEARCH_RESPONSE_INVALID", "DISALLOWED_HOST", "QLOO_TEST_FAILED",
+    "MODEL_NETWORK_UNAVAILABLE", "MODEL_TRANSPORT_UNAVAILABLE",
+    "MODEL_RESPONSE_TOO_LARGE", "INVALID_MODEL_ENVELOPE",
+    "INVALID_MODEL_JSON", "MODEL_DRAFT_INVALID", "MODEL_NARRATION_INVALID",
+    "DISALLOWED_MODEL_ENDPOINT", "LLM_TEST_FAILED",
+    "PROVIDER_DAILY_QUOTA_EXHAUSTED", "PROVIDER_TEST_VALIDATION_FAILED",
+}) | frozenset(f"HTTP_{n}" for n in range(400, 600)) | frozenset(
+    f"PROVIDER_HTTP_{n}" for n in range(400, 600)
+)
 
 
 class OwnerUnauthorized(ValueError):
@@ -112,11 +124,11 @@ class CredentialVault:
         with self.store._connect() as db:
             db.execute(
                 "insert into ofc_private.copilot_credentials"
-                "(provider,ciphertext,masked_suffix,checked_at,check_status) "
-                "values(%s,%s,%s,null,'NOT_TESTED') "
+                "(provider,ciphertext,masked_suffix,checked_at,check_status,check_reason_code) "
+                "values(%s,%s,%s,null,'NOT_TESTED',null) "
                 "on conflict(provider) do update set ciphertext=excluded.ciphertext,"
                 "masked_suffix=excluded.masked_suffix,updated_at=now(),"
-                "checked_at=null,check_status='NOT_TESTED'",
+                "checked_at=null,check_status='NOT_TESTED',check_reason_code=null",
                 (provider, encrypted, key[-4:]),
             )
 
@@ -143,19 +155,25 @@ class CredentialVault:
         except (InvalidToken, UnicodeError, ValueError):
             raise StorageIntegrityError("encrypted provider credential is invalid") from None
 
-    def mark_test(self, provider: str, success: bool) -> None:
+    def mark_test(self, provider: str, success: bool, *, reason_code: str | None = None) -> None:
         self._provider(provider)
+        if reason_code is not None and (
+            success or not isinstance(reason_code, str)
+            or reason_code not in _SAFE_TEST_REASONS
+        ):
+            raise ValueError("invalid provider test reason")
         with self.store._connect() as db:
             db.execute(
                 "update ofc_private.copilot_credentials "
-                "set checked_at=now(),check_status=%s where provider=%s",
-                ("ACTIVE" if success else "UNAVAILABLE", provider),
+                "set checked_at=now(),check_status=%s,check_reason_code=%s "
+                "where provider=%s",
+                ("ACTIVE" if success else "UNAVAILABLE", reason_code, provider),
             )
 
     def status(self, *, private: bool = False) -> dict:
         with self.store._connect() as db:
             rows = db.execute(
-                "select provider,masked_suffix,checked_at,check_status "
+                "select provider,masked_suffix,checked_at,check_status,check_reason_code "
                 "from ofc_private.copilot_credentials"
             ).fetchall()
         found = {r[0]: r for r in rows}
@@ -175,6 +193,8 @@ class CredentialVault:
                 "status": status,
                 "configured": True,
                 **({"masked_suffix": row[1]} if private else {}),
+                **({"reason_code": row[4]} if private and status == "UNAVAILABLE"
+                    and row[4] in _SAFE_TEST_REASONS else {}),
             }
         return result
 
