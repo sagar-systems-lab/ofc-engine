@@ -283,6 +283,7 @@ class CopilotLLM:
                 "generationConfig": {
                     "responseMimeType": "application/json",
                     "responseJsonSchema": _SCHEMA,
+                    "thinkingConfig": {"thinkingLevel": "minimal"},
                     "temperature": 0,
                     "maxOutputTokens": 2048,
                 },
