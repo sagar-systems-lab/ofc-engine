@@ -1009,7 +1009,7 @@ class HostedCopilot:
         }
 
     def test_connection(self, ticket: str, provider: str) -> dict:
-        self.vault.reserve_test(ticket, daily_limit=3)
+        self.vault.reserve_test(ticket, daily_limit=6)
         credential = self.vault.read_for_server(provider)
         if credential is None:
             raise ValueError("PROVIDER_NOT_CONFIGURED")
