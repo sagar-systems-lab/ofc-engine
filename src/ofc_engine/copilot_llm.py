@@ -362,7 +362,7 @@ class CopilotLLM:
         except (KeyError, IndexError, TypeError, ValueError):
             raise LLMUnavailable("MODEL_RESPONSE_MISSING") from None
         try:
-            parsed = json.loads(raw)
+            json.loads(raw)
         except (ValueError, TypeError):
             raise LLMUnavailable("MODEL_DRAFT_JSON_INVALID") from None
         try:
