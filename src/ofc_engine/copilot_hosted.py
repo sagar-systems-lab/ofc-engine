@@ -1,14 +1,17 @@
 """Hosted Copilot: private Postgres sessions, bounded live providers and safe projections."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace as replace_dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from cryptography.fernet import InvalidToken
 import hmac
 import json
+import logging
 import re
 import secrets
+from time import monotonic
 
 from .copilot_activity import activity_projection
 from .business_assurance import assess_business_readiness
@@ -31,6 +34,9 @@ from .qloo_catalog import capability_registry, category_for
 from .copilot_resolver import normalize_qloo_search
 from .taste_intelligence import TasteContext, policy_for
 from .revisions import digest_obj
+
+
+_log = logging.getLogger(__name__)
 
 
 class SessionDenied(ValueError):
@@ -606,6 +612,24 @@ class HostedCopilot:
         self._complete(run_id, result)
         return result
 
+    def _narrate_arms(self, *, model: CopilotLLM, pair, prompt: str,
+                      run_id: str) -> tuple[str, str]:
+        # Reserve both calls before launching either independent model arm.
+        reserve_model_call(
+            self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+        )
+        reserve_model_call(
+            self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+        )
+        started = monotonic()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            off = pool.submit(model.narrate_arm, pair, prompt=prompt, mode="off")
+            on = pool.submit(model.narrate_arm, pair, prompt=prompt, mode="on")
+            off_answer, on_answer = off.result(), on.result()
+        _log.info("COPILOT_STAGE stage=two_narrations duration_ms=%d",
+                  round((monotonic() - started) * 1000))
+        return off_answer, on_answer
+
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
                parent_run_id: str | None = None,
@@ -634,6 +658,7 @@ class HostedCopilot:
         if cached is not None:
             return cached
         try:
+            started = monotonic()
             self._capacity(required_llm=3)
             reserve_model_call(
                 self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
@@ -641,6 +666,9 @@ class HostedCopilot:
             draft = self._explicit_brand_scope(
                 model.extract(prompt, prior_plan=prior_plan), prompt,
             )
+            _log.info("COPILOT_STAGE stage=plan_extraction duration_ms=%d",
+                      round((monotonic() - started) * 1000))
+            reviewed_at = monotonic()
             native_discovery = None
             discovered_ids = {}
             context = None
@@ -824,6 +852,8 @@ class HostedCopilot:
                 resolved_artist=artist, resolved_brands=brands,
             )
             evaluated = reviewer.evaluate(proposal)
+            _log.info("COPILOT_STAGE stage=qloo_resolution_review duration_ms=%d",
+                      round((monotonic() - reviewed_at) * 1000))
             baseline, _ = freeze_proposal(proposal)
             reviewed = self.store.get(run_id)
             requirements = {
@@ -926,14 +956,9 @@ class HostedCopilot:
                     on={**pair.on, "qloo": shared},
                     qloo_evidence_digest=shared["evidence_digest"],
                 )
-            reserve_model_call(
-                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+            off_answer, on_answer = self._narrate_arms(
+                model=model, pair=pair, prompt=prompt, run_id=run_id,
             )
-            off_answer = model.narrate_arm(pair, prompt=prompt, mode="off")
-            reserve_model_call(
-                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
-            )
-            on_answer = model.narrate_arm(pair, prompt=prompt, mode="on")
             projection = self._public_pair(pair, draft, brands, artist)
             receipt = decision_receipt(
                 projection, business_review=business_review,
@@ -970,6 +995,8 @@ class HostedCopilot:
                 "external_action_executed": False,
             }
             self._complete(run_id, result)
+            _log.info("COPILOT_STAGE stage=total_run duration_ms=%d",
+                      round((monotonic() - started) * 1000))
             return result
         except QlooSelectionRequired as exc:
             result = {
