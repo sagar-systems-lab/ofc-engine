@@ -1,6 +1,7 @@
 /* Intro-only presentation layer. The existing studio remains immutable behind the gate. */
 body.studio-page:not(.ofc-intro-opened) .shell,
 body.studio-page:not(.ofc-intro-opened) > .skip-link {
+  display: none !important;
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
