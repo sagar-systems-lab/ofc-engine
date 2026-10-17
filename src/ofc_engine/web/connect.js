@@ -35,6 +35,21 @@
         + (data.qualification === "CONNECTIVITY_ONLY" ? " (API only)" : "")
         + suffix;
       state.dataset.status = data.status;
+      const verification = node.querySelector(".verification");
+      const history = data.last_test;
+      if (!history || !history.checked_at) {
+        verification.textContent = data.configured ? "No successful test recorded." : "No key configured.";
+      } else {
+        const label = history.outcome === "ACTIVE" || history.outcome === "CONNECTED"
+          ? (history.outcome === "CONNECTED" ? "API connectivity verified" : "Last verification successful")
+          : history.outcome === "UNAVAILABLE" ? "Last verification failed" : "Last test: " + history.outcome;
+        const when = new Date(history.checked_at);
+        const timestamp = Number.isNaN(when.getTime()) ? "" : " · " + when.toLocaleString();
+        const freshness = history.freshness === "EXPIRED"
+          ? " · Older than 30 min; not evidence of disconnection"
+          : history.freshness === "RECENT" ? " · Recently checked" : "";
+        verification.textContent = label + timestamp + freshness;
+      }
       node.querySelector('button[data-action="test"]').disabled = exhausted;
     }
   }
@@ -52,12 +67,19 @@
         ? " Connection tests exhausted (" + connectionTests.used + "/" + connectionTests.limit
           + "); reset " + connectionTests.resets_at_utc + "." : "";
       const connectivity = report.providers?.gemini?.qualification === "CONNECTIVITY_ONLY"
-        ? " Gemini generateContent connection verified; full Copilot draft is NOT qualified."
+        ? " Gemini API was verified; full Copilot draft is NOT qualified."
         : "";
+      const stale = Object.entries(report.providers || {})
+        .filter(([, data]) => data.status === "CHECK_REQUIRED"
+          && ["ACTIVE", "CONNECTED"].includes(data.last_test?.outcome))
+        .map(([provider]) => provider);
+      const freshness = stale.length
+        ? " Previous successful checks now outside 30-minute freshness: "
+          + stale.join(", ") + ". No disconnection inferred." : "";
       tell((reasons.length
         ? "Last failed tests: " + reasons.join(" | ") + "."
         : "Credentials are stored on the OFC server. A configured key is not yet a live connection.")
-        + connectivity + quota + " Status refresh made no provider request.");
+        + connectivity + freshness + quota + " Status refresh made no provider request.");
     } catch {
       manager.hidden = true;
       login.hidden = false;

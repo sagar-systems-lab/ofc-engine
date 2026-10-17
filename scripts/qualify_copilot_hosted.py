@@ -105,6 +105,29 @@ def validate_saved_result(result: dict) -> None:
         raise QualificationFailure("CATALOG_EVIDENCE_MISREPRESENTED_AS_VERIFIED")
 
 
+
+def validate_execute_gate(caps: dict) -> None:
+    """Qualify a bounded live run without claiming product readiness."""
+    if caps.get("storage") != "ACTIVE" or caps.get("ofc") != "ACTIVE":
+        raise QualificationFailure("STORAGE_OR_DECISION_ENGINE_UNAVAILABLE")
+    if caps.get("product") not in ("ACTIVE", "CHECK_REQUIRED"):
+        raise QualificationFailure("PRODUCT_NOT_READY_FOR_QUALIFICATION")
+    if caps.get("qloo") not in ("ACTIVE", "CHECK_REQUIRED"):
+        raise QualificationFailure("QLOO_NEVER_QUALIFIED_OR_UNAVAILABLE")
+    if caps.get("llm") not in ("ACTIVE", "CONNECTED", "CHECK_REQUIRED"):
+        raise QualificationFailure("MODEL_NEVER_QUALIFIED_OR_UNAVAILABLE")
+    capacity = caps.get("capacity")
+    if not isinstance(capacity, dict):
+        raise QualificationFailure("PROVIDER_BUDGET_UNKNOWN")
+    qloo = capacity.get("qloo_requests_remaining")
+    model = capacity.get("llm_requests_remaining")
+    if (
+        type(qloo) is not int or type(model) is not int
+        or qloo < 6 or model < 3
+    ):
+        raise QualificationFailure("INSUFFICIENT_LIVE_E2E_PROVIDER_BUDGET")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Read-only by default; explicit operator gate for live provider spend."
@@ -152,8 +175,12 @@ def main() -> None:
         print("NO_PROVIDER_REQUESTS_OR_PUBLIC_SESSION_CREATED")
         return
 
-    if caps.get("product") != "ACTIVE":
-        raise QualificationFailure("PROVIDER_CONNECTIONS_NOT_ACTIVELY_TESTED")
+    validate_execute_gate(caps)
+    print("EXPLICIT_LIVE_QUALIFICATION; NOT_A_PRODUCT_ACTIVE_CLAIM")
+    print("REMAINING_PROVIDER_BUDGET:", json.dumps({
+        "qloo": caps["capacity"]["qloo_requests_remaining"],
+        "model": caps["capacity"]["llm_requests_remaining"],
+    }, sort_keys=True))
     status, session = _request(
         client, base, "/api/copilot/sessions",
         {"confirm": "CREATE_COPILOT_SESSION"},
