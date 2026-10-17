@@ -7,6 +7,7 @@
 <title>OFC Engine · Copilot</title>
 <link rel="stylesheet" href="/copilot-workspace.css">
 <script defer src="/copilot-activity.js"></script>
+<script defer src="/copilot-proof.js"></script>
 <script defer src="/copilot-workspace.js"></script>
 </head>
 <body class="studio-page copilot-page">
@@ -120,6 +121,34 @@
   </div>
   <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
 </div>
+<dialog class="evidence-dialog comparison-dialog" id="comparison-dialog" aria-labelledby="comparison-title">
+  <div class="evidence-dialog-header">
+    <div><p class="dialog-eyebrow">OFC Engine · recorded comparison</p><h2 id="comparison-title">Same AI. Same Qloo evidence. What changed?</h2>
+      <p>Original plan and OFC-reviewed selections from one saved request. Results may still require verification.</p></div>
+    <button type="button" class="icon-button dialog-close" id="comparison-close" aria-label="Close comparison"><svg class="ico"><use href="#ofc-icon-close"/></svg></button>
+  </div>
+  <div class="comparison-identity" id="comparison-identity"></div>
+  <div class="comparison-columns" aria-hidden="true"><span>Choice</span><span>OFC OFF</span><span>OFC ON</span></div>
+  <div class="comparison-rows" id="comparison-rows"></div>
+  <p class="comparison-footer" id="comparison-footer"></p>
+  <div class="evidence-dialog-actions">
+    <button type="button" id="comparison-open-proof" class="primary-button">View recorded proof</button>
+  </div>
+</dialog>
+<dialog class="evidence-dialog proof-dialog" id="proof-dialog" aria-labelledby="proof-title">
+  <div class="evidence-dialog-header">
+    <div><p class="dialog-eyebrow">OFC Engine · saved record</p><h2 id="proof-title">Proof File</h2>
+      <p>Session replay and evidence provenance. Browser exports are not digitally signed.</p></div>
+    <button type="button" class="icon-button dialog-close" id="proof-close" aria-label="Close proof"><svg class="ico"><use href="#ofc-icon-close"/></svg></button>
+  </div>
+  <p class="proof-disclaimer" id="proof-summary"></p>
+  <dl class="proof-fields" id="proof-fields"></dl>
+  <div class="evidence-dialog-actions">
+    <button type="button" id="proof-json-download" class="primary-button">Download JSON</button>
+    <button type="button" id="proof-csv-download" class="secondary-button">Download CSV</button>
+  </div>
+  <p class="proof-footnote">Qloo ranking does not certify business suitability. No external action is authorized.</p>
+</dialog>
 <dialog class="run-confirm" id="run-confirm" aria-labelledby="run-confirm-title">
   <h2 id="run-confirm-title">Run live cultural review?</h2>
   <p>This new prompt may spend multiple real Qloo and model requests. Outcomes can be blocked or inconclusive. Opening saved history and switching OFC OFF/ON never spend requests.</p>
