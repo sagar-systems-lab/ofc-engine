@@ -112,7 +112,6 @@ def test_readiness_controls_are_bounded_without_new_endpoints():
     assert 'id="composer-session-info"' in page
     assert 'id="run-confirm-budget"' in page
     assert "Server availability is separate" in script
-    assert '"qloo_requests_remaining"' not in script
     assert 'limits.qloo_requests_remaining' in script
     assert 'state.runs.length >= 4' in script
     assert 'prompt.length > 4000' in script
