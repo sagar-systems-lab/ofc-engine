@@ -110,10 +110,10 @@ def test_qloo_search_results_only_envelope_accepts_scoped_entities():
 
     spec = search_probe("Beyonce", entity_type="urn:entity:artist")
     source = observed(spec, {
-        "results": {"entities": [
+        "results": [
             {"name": "Beyoncé", "entity_id": ART,
-             "type": "urn:entity", "subtype": "urn:entity:artist"},
-        ]},
+             "types": ["urn:entity:artist"]},
+        ],
     })
     source = replace(source, top_level_fields=("results",))
     hints = qloo_suggestions("Beyonce", "artist", source)
