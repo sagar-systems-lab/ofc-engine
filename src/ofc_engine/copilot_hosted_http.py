@@ -151,7 +151,10 @@ class CopilotHTTPMixin:
                     else:
                         raise ValueError("INVALID_CREDENTIAL_ACTION")
                     self._copilot_reply(
-                        200, {"providers": runtime.vault.status(private=True)},
+                        200, {
+                            "providers": runtime.vault.status(private=True),
+                            "connection_tests": runtime.vault.connection_test_budget(owner),
+                        },
                     )
                     return True
                 if path == "/api/owner/business":
@@ -243,7 +246,12 @@ class CopilotHTTPMixin:
             self._copilot_reply(429, {"error": "COPILOT_CAPACITY_REACHED"})
         except CopilotNotReady:
             self._copilot_reply(503, {"error": "COPILOT_NOT_CONFIGURED"})
-        except (ValueError, TypeError, KeyError):
+        except ValueError as exc:
+            if str(exc) == "CONNECTION_TEST_BUDGET_EXHAUSTED":
+                self._copilot_reply(429, {"error": "CONNECTION_TEST_BUDGET_EXHAUSTED"})
+            else:
+                self._copilot_reply(422, {"error": "INVALID_REQUEST"})
+        except (TypeError, KeyError):
             self._copilot_reply(422, {"error": "INVALID_REQUEST"})
         except (psycopg.Error, StorageIntegrityError):
             self._copilot_reply(503, {"error": "COPILOT_STORAGE_UNAVAILABLE"})
@@ -290,7 +298,12 @@ class CopilotHTTPMixin:
             elif path == "/api/owner/credentials":
                 runtime.vault.authorize(self._copilot_cookie("ofc_owner"))
                 self._copilot_reply(
-                    200, {"providers": runtime.vault.status(private=True)},
+                    200, {
+                        "providers": runtime.vault.status(private=True),
+                        "connection_tests": runtime.vault.connection_test_budget(
+                            self._copilot_cookie("ofc_owner")
+                        ),
+                    },
                 )
             elif match and not match.group(2):
                 self._copilot_reply(
