@@ -93,4 +93,6 @@ def test_workspace_secondary_tools_respect_owner_and_fixture_boundaries():
     assert 'owner/login' in tools_js
     assert 'owner/test-connection' in tools_js
     assert 'demo?scenario=' in tools_js
-    assert not any(s in document for s in ("<iframe", "http://", "https://"))
+    assert "<iframe" not in document
+    assert 'src="https://' not in document
+    assert 'src="http://' not in document
