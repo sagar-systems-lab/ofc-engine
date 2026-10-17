@@ -185,3 +185,56 @@ def test_gemini_failure_subtype_is_safe_and_single_call(reply, expected):
             "Compare Brand A and Brand B for Example Artist"
         )
     assert transport.calls == 1
+
+
+@pytest.mark.parametrize(("body", "error"), [
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": '{"ready":true}'}]}}]}, None),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": '{"ready":false}'}]}}]}, "MODEL_PROBE_INVALID"),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": '{}'}]}}]}, "MODEL_PROBE_INVALID"),
+    ({"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": 'not-json'}]}}]}, "MODEL_DRAFT_JSON_INVALID"),
+    ({"candidates": [{"finishReason": "MAX_TOKENS"}]}, "MODEL_OUTPUT_TRUNCATED"),
+    ({"candidates": [{"finishReason": "SAFETY"}]}, "MODEL_FINISH_REJECTED"),
+    ({"candidates": []}, "MODEL_RESPONSE_MISSING"),
+])
+def test_gemini_minimal_json_connectivity_probe_one_call(body, error):
+    class Stub:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls.append((url, headers, json.loads(data)))
+            return JSONReply(200, json.dumps(body).encode())
+
+    fake = Stub()
+    model = CopilotLLM(provider="gemini", api_key="fake-key", transport=fake)
+    if error is None:
+        assert model.probe_connectivity() is None
+    else:
+        with pytest.raises(LLMUnavailable, match=error):
+            model.probe_connectivity()
+    assert len(fake.calls) == 1
+    url, headers, payload = fake.calls[0]
+    assert url.endswith("gemini-3.1-flash-lite:generateContent")
+    assert headers["x-goog-api-key"] == "fake-key"
+    assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
+    assert payload["generationConfig"]["maxOutputTokens"] == 128
+    assert payload["generationConfig"]["responseJsonSchema"]["required"] == ["ready"]
+    assert "choices" not in json.dumps(payload)
+
+
+def test_minimal_probe_never_accepts_provider_http_rejection():
+    class Reject:
+        calls = 0
+
+        def post(self, *args, **kwargs):
+            self.calls += 1
+            return JSONReply(403, b'{"private":"must not appear"}')
+
+    fake = Reject()
+    with pytest.raises(LLMUnavailable, match="PROVIDER_HTTP_403"):
+        CopilotLLM(provider="gemini", api_key="hidden", transport=fake).probe_connectivity()
+    assert fake.calls == 1
