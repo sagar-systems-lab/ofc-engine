@@ -32,7 +32,10 @@ def test_real_search_envelope_without_success_is_accepted():
     from dataclasses import replace
 
     spec, source = observation()
-    payload = {"results": source.payload["results"]}
+    payload = {"results": [{
+        "name": "Example Artist", "entity_id": _A,
+        "types": ["urn:entity:artist"],
+    }]}
     source = replace(source, payload=payload, top_level_fields=("results",))
     resolved = normalize_qloo_search(
         "Example Artist", entity_type="artist", spec=spec,
