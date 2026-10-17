@@ -86,7 +86,10 @@
     try {
       const result = await request(path, "POST", payload);
       if (action === "save") key.value = "";
-      if (action === "test") tell(provider + ": " + result.status + ". One connection test was attempted.");
+      if (action === "test") {
+        const detail = result.reason_code ? " — " + result.reason_code : "";
+        tell(provider + ": " + result.status + detail + ". One connection test was attempted.");
+      }
       else tell(provider + " credential " + (action === "revoke" ? "revoked." : "encrypted and saved."));
       const current = action === "test"
         ? await request("/api/owner/credentials") : result;

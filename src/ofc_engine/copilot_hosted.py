@@ -1055,7 +1055,35 @@ class HostedCopilot:
                     "with no real-world booking or action."
                 )
             ok = True
-        except (ValueError, QlooProbeError, LLMUnavailable, CopilotQuotaReached):
-            pass
+        except QlooProbeError as exc:
+            raw = exc.code
+            reason = raw if (
+                raw in (
+                    "API_KEY_MISSING", "TRANSPORT_ERROR", "NETWORK_ERROR",
+                    "RESPONSE_TOO_LARGE", "INVALID_JSON",
+                    "UNEXPECTED_TOP_LEVEL_JSON", "QLOO_SEARCH_RESPONSE_INVALID",
+                    "DISALLOWED_HOST",
+                )
+                or raw in {f"HTTP_{code}" for code in range(400, 600)}
+            ) else "QLOO_TEST_FAILED"
+        except LLMUnavailable as exc:
+            raw = str(exc)
+            reason = raw if (
+                raw in (
+                    "MODEL_NETWORK_UNAVAILABLE", "MODEL_TRANSPORT_UNAVAILABLE",
+                    "MODEL_RESPONSE_TOO_LARGE", "INVALID_MODEL_ENVELOPE",
+                    "INVALID_MODEL_JSON", "MODEL_DRAFT_INVALID",
+                    "MODEL_NARRATION_INVALID", "DISALLOWED_MODEL_ENDPOINT",
+                )
+                or raw in {f"PROVIDER_HTTP_{code}" for code in range(400, 600)}
+            ) else "LLM_TEST_FAILED"
+        except CopilotQuotaReached:
+            reason = "PROVIDER_DAILY_QUOTA_EXHAUSTED"
+        except ValueError:
+            reason = "PROVIDER_TEST_VALIDATION_FAILED"
         self.vault.mark_test(provider, ok)
-        return {"provider": provider, "status": "ACTIVE" if ok else "UNAVAILABLE"}
+        return {
+            "provider": provider,
+            "status": "ACTIVE" if ok else "UNAVAILABLE",
+            **({"reason_code": reason} if not ok else {}),
+        }
