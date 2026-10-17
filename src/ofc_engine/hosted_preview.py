@@ -72,19 +72,22 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
     server_version = "OFCPreview"
     sys_version = ""
 
-    def _studio_page(self, extra_script: str | None = None) -> None:
-        page = files("ofc_engine").joinpath("web", "studio.html").read_bytes()
+    def _studio_page(self, extra_script: str | None = None,
+                     *, workspace: bool = False) -> None:
+        filename = "copilot-workspace.html" if workspace else "studio.html"
+        page = files("ofc_engine").joinpath("web", filename).read_bytes()
         marker = b"</head>"
         if page.count(marker) != 1:
             self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
             return
-        names = ["/hosted-preflight.js"]
-        if self.server.tour_proposal is not None and self.server.run_registry is not None:
-            names.append("/hosted-tour.js")
-        if self.server.public_showcase is not None:
-            names.append("/hosted-showcase.js")
-        if extra_script:
-            names.append(extra_script)
+        names = [] if workspace else ["/hosted-preflight.js"]
+        if not workspace:
+            if self.server.tour_proposal is not None and self.server.run_registry is not None:
+                names.append("/hosted-tour.js")
+            if self.server.public_showcase is not None:
+                names.append("/hosted-showcase.js")
+            if extra_script:
+                names.append(extra_script)
         scripts = "".join(
             f'<script defer src="{name}"></script>\n' for name in names
         ).encode("utf-8")
@@ -122,6 +125,12 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
             self._send(414, b'{"error":"URI_TOO_LONG"}', "application/json")
             return
         parts = urlsplit(self.path)
+        if parts.path == "/workspace" and not parts.query:
+            self._studio_page(workspace=True)
+            return
+        if parts.path == "/" and not parts.query and self.server.copilot is not None:
+            self._studio_page(workspace=True)
+            return
         if parts.path == "/hosted-preflight.js" and not parts.query:
             script = files("ofc_engine").joinpath("web", "hosted-preflight.js").read_bytes()
             self._send(200, script, "text/javascript; charset=utf-8")
