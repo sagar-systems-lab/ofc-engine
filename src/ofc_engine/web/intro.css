@@ -135,7 +135,7 @@ body.studio-page.ofc-intro-opened .shell {
 .ofc-intro__arrow:nth-of-type(1) { animation-delay: .97s; }
 .ofc-intro__arrow:nth-of-type(2) { animation-delay: 1.17s; }
 .ofc-intro__arrow:nth-of-type(3) { animation-delay: 1.37s; }
-.ofc-intro__button { animation-delay: 1.58s; }
+.ofc-intro__button { animation: ofc-intro-button-reveal .78s cubic-bezier(.17,1,.31,1) 1.58s both; }
 .ofc-intro__particles { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
 .ofc-intro__particle {
   position: absolute; top: 49%; left: 50%; width: 5px; height: 10px;
@@ -171,8 +171,9 @@ body.ofc-intro-leaving .ofc-intro__step:nth-of-type(3) { --drift-x:22px; --drift
 body.ofc-intro-leaving .ofc-intro__step:nth-of-type(4) { --drift-x:45px; --drift-y:24px; animation-delay:.24s; }
 body.ofc-intro-leaving .ofc-intro__arrow { animation: ofc-intro-word-out .5s both; }
 body.ofc-intro-leaving .ofc-intro__button { animation: ofc-intro-button-out .44s ease both; }
-body.ofc-intro-leaving .ofc-intro__particle { animation: ofc-intro-particle-out .82s cubic-bezier(.15,.75,.2,1) both; animation-delay: calc((var(--distance) / 490px) * 65ms); }
+body.ofc-intro-leaving .ofc-intro__particle { animation: ofc-intro-particle-out .82s cubic-bezier(.15,.75,.2,1) both; animation-delay: 0ms; }
 body.ofc-intro-leaving .ofc-intro { animation: ofc-intro-surface-out .94s ease .25s both; }
+@keyframes ofc-intro-button-reveal { from {opacity:0;filter:blur(8px)} to {opacity:1;filter:blur(0)} }
 @keyframes ofc-intro-appear { from {opacity:0;transform:translateY(16px) scale(.975);filter:blur(9px)} to {opacity:1;transform:translateY(0) scale(1);filter:blur(0)} }
 @keyframes ofc-intro-rise { from {opacity:0;transform:translateY(29px);filter:blur(7px)} to {opacity:1;transform:translateY(0);filter:blur(0)} }
 @keyframes ofc-intro-word-out { from {opacity:1;transform:translateY(0);filter:blur(0)} to {opacity:0;transform:translateY(-42px);filter:blur(9px)} }
