@@ -1030,7 +1030,7 @@ class HostedCopilot:
                     body.get("results", {}).get("entities")
                     if isinstance(body, dict)
                     and isinstance(body.get("results"), dict)
-                    and body.get("success") is True
+                    and body.get("success", True) is True
                     else None
                 )
                 if (
