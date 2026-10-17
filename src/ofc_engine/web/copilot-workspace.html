@@ -108,6 +108,7 @@
               <button id="chat-send" class="send-button" type="button" aria-label="Send message" disabled><svg class="ico"><use href="#ofc-icon-arrow"/></svg></button></div>
           </div>
           <p class="composer-note">Short text notes only (.txt/.md/.csv/.json). PDF, DOCX and long documentary plans need a separate ingestion workflow. Nothing is uploaded until you approve Send.</p>
+          <p id="composer-session-info" class="composer-session-info">0 of 4 submitted requests in this visitor session.</p>
         </div>
       </main>
       <aside class="activity-rail" aria-label="Activity" id="activity-rail">
@@ -238,6 +239,7 @@
 <dialog class="run-confirm" id="run-confirm" aria-labelledby="run-confirm-title">
   <h2 id="run-confirm-title">Run live cultural review?</h2>
   <p>A new submission may spend multiple real Qloo and model calls, including with OFC OFF: both results are computed from one request and the switch only changes the saved view. This beta supports cultural decisions, particularly artist/brand partnerships—not general documentary planning. Text notes will be included in the submitted prompt and saved session. Outcomes may be blocked or inconclusive. Toggling or reading history spends no quota.</p>
+  <p id="run-confirm-budget" class="run-budget">Checking saved daily capacity. No calls until you approve.</p>
   <div class="dialog-actions"><button type="button" id="run-cancel" class="secondary-button">Cancel</button><button type="button" id="run-approve" class="primary-button">Run one request</button></div>
 </dialog>
 </body>
