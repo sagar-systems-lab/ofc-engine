@@ -198,7 +198,7 @@ class CredentialVault:
             }
         return result
 
-    def connection_test_budget(self, ticket: str, *, daily_limit: int = 3) -> dict:
+    def connection_test_budget(self, ticket: str, *, daily_limit: int = 6) -> dict:
         self.authorize(ticket)
         with self.store._connect() as db:
             row = db.execute(
@@ -215,7 +215,7 @@ class CredentialVault:
             "resets_at_utc": (today + timedelta(days=1)).isoformat() + "T00:00:00Z",
         }
 
-    def reserve_test(self, ticket: str, *, daily_limit: int = 3) -> None:
+    def reserve_test(self, ticket: str, *, daily_limit: int = 6) -> None:
         self.authorize(ticket)
         if type(daily_limit) is not int or not 1 <= daily_limit <= 8:
             raise ValueError("invalid connection test budget")
