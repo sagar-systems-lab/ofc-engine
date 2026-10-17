@@ -93,6 +93,10 @@ def qualify(origin: str) -> dict:
                                    status=200, content_type="application/json",
                                    body=json.dumps(proof())))
                     page.goto(origin + "/", wait_until="domcontentloaded", timeout=90000)
+                    page.locator("#ofc-intro").wait_for(state="visible")
+                    assert not page.locator("#home-create").is_visible()
+                    page.locator("#ofc-intro-understand").click()
+                    page.locator("#ofc-intro").wait_for(state="detached")
                     page.locator("#home-create").click()
                     page.locator("#objective").wait_for(state="visible")
                     page.evaluate("""() => {
@@ -142,6 +146,10 @@ def qualify(origin: str) -> dict:
                                status=200, content_type="application/json",
                                body=json.dumps(corrupt)))
                 page.goto(origin + "/", wait_until="domcontentloaded", timeout=90000)
+                page.locator("#ofc-intro").wait_for(state="visible")
+                assert not page.locator("#home-create").is_visible()
+                page.locator("#ofc-intro-understand").click()
+                page.locator("#ofc-intro").wait_for(state="detached")
                 page.locator("#home-create").click()
                 page.evaluate("""() => {
                     const script = document.createElement('script');
