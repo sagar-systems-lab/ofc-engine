@@ -39,7 +39,12 @@
       manager.hidden = false;
       login.hidden = true;
       present(report);
-      tell("Credentials are stored on the OFC server. A configured key is not yet a live connection.");
+      const reasons = Object.entries(report.providers || {})
+        .filter(([, data]) => data.reason_code)
+        .map(([provider, data]) => provider + ": " + data.reason_code);
+      tell(reasons.length
+        ? "Last failed tests: " + reasons.join(" | ") + ". No provider request made."
+        : "Credentials are stored on the OFC server. A configured key is not yet a live connection.");
     } catch {
       manager.hidden = true;
       login.hidden = false;

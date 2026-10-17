@@ -1486,6 +1486,8 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
     }
     assert bad.requests == 1
     assert runtime.capabilities()["qloo"] == "UNAVAILABLE"
+    assert vault.status(private=True)["qloo"]["reason_code"] == "QLOO_SEARCH_RESPONSE_INVALID"
+    assert "reason_code" not in vault.status()["qloo"]
 
     class ForbiddenQloo:
         def __init__(self):
@@ -1504,6 +1506,7 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
         "provider": "qloo", "status": "UNAVAILABLE", "reason_code": "HTTP_403",
     }
     assert forbidden.calls == 1 and "never-return-this" not in str(denied)
+    assert vault.status(private=True)["qloo"]["reason_code"] == "HTTP_403"
 
     from ofc_engine.copilot_llm import JSONReply
 
@@ -1525,6 +1528,11 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
         "reason_code": "PROVIDER_HTTP_404",
     }
     assert rejection.calls == 1 and "private-secret" not in str(last)
+    assert vault.status(private=True)["gemini"]["reason_code"] == "PROVIDER_HTTP_404"
+    assert "reason_code" not in vault.status()["gemini"]
+    vault.configure(owner, "gemini", "replacement-gemini-key-0001")
+    assert vault.status(private=True)["gemini"]["status"] == "NOT_TESTED"
+    assert "reason_code" not in vault.status(private=True)["gemini"]
     vault.revoke(owner, "gemini")
     vault.revoke(owner, "qloo")
 

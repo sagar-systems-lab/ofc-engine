@@ -1081,7 +1081,7 @@ class HostedCopilot:
             reason = "PROVIDER_DAILY_QUOTA_EXHAUSTED"
         except ValueError:
             reason = "PROVIDER_TEST_VALIDATION_FAILED"
-        self.vault.mark_test(provider, ok)
+        self.vault.mark_test(provider, ok, reason_code=reason if not ok else None)
         return {
             "provider": provider,
             "status": "ACTIVE" if ok else "UNAVAILABLE",

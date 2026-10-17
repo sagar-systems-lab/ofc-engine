@@ -98,8 +98,11 @@ create table if not exists ofc_private.copilot_credentials (
     masked_suffix text not null,
     updated_at timestamptz not null default now(),
     checked_at timestamptz,
-    check_status text not null default 'NOT_TESTED'
+    check_status text not null default 'NOT_TESTED',
+    check_reason_code text
 );
+alter table ofc_private.copilot_credentials
+    add column if not exists check_reason_code text;
 create table if not exists ofc_private.copilot_owner_sessions (
     token_digest text primary key,
     expires_at timestamptz not null
