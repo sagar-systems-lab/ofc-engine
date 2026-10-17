@@ -374,8 +374,8 @@
     el("run-confirm").close();
     void submit();
   });
-  el("run-confirm").addEventListener("close", () => {
-    if (!state.busy) state.pendingPrompt = "";
+  el("run-confirm").addEventListener("cancel", () => {
+    state.pendingPrompt = "";
   });
 
   el("new-chat").addEventListener("click", () => {
