@@ -189,11 +189,6 @@ a{text-decoration:none;color:inherit}
 @keyframes message-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes panel-rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 @media(max-width:1180px){.workspace-layout{grid-template-columns:minmax(0,1fr)}.activity-rail{display:none}.activity-reopen{display:flex!important}}
-@media(min-width:769px) and (max-width:1180px){.shell{grid-template-columns:64px minmax(0,1fr)}.copilot-sidebar{padding:17px 6px 12px;align-items:center}
-  .copilot-sidebar .brand-lockup,.copilot-sidebar .conversation-search,.copilot-sidebar .conversation-list,
-  .copilot-sidebar .sidebar-scope,.copilot-sidebar .sidebar-bottom-toggle span,.copilot-sidebar .new-chat-button span{display:none}
-  .copilot-sidebar .sidebar-collapse{transform:rotate(180deg)}.copilot-sidebar .new-chat-button{width:43px;min-width:43px}
-}
 @media(max-width:768px){
   .shell{display:block}.copilot-stage{height:100dvh}.copilot-sidebar{position:fixed;left:0;top:0;bottom:0;
     width:min(280px,86vw);box-shadow:16px 0 55px rgba(10,39,84,.13);transform:translateX(-110%);
@@ -226,3 +221,10 @@ a{text-decoration:none;color:inherit}
   .composer-state{font-size:10px}
 }
 @media(prefers-reduced-motion:reduce){.copilot-page *, .copilot-page *::before,.copilot-page *::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-delay:0ms!important}}
+
+#activity-open[hidden]{display:none!important}
+.shell.activity-overlay-open .activity-rail{
+  display:flex;position:absolute;z-index:22;right:0;top:64px;bottom:0;width:min(290px,92vw);
+  box-shadow:-13px 0 42px rgba(20,65,126,.13);border-left:1px solid var(--ofc-border);
+}
+@media(max-width:768px){.shell.activity-overlay-open .activity-rail{top:59px}}
