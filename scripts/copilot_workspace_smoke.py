@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
@@ -98,6 +99,9 @@ def qualify(origin: str) -> dict:
                 assert page.locator("#status-toggle").is_visible()
                 assert not page.locator("#proof-entry").is_enabled()
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+                review = Path("ui-review")
+                review.mkdir(exist_ok=True)
+                page.screenshot(path=str(review / f"copilot-empty-{width}.png"), full_page=True)
                 assert calls["session"] == 0 and calls["message"] == 0
                 page.locator("#mode-toggle").click()
                 assert page.locator("#mode-label").inner_text() == "OFF"
@@ -124,6 +128,9 @@ def qualify(origin: str) -> dict:
                 )
                 assert calls["session"] == 1
                 assert calls["message"] == 1
+                if width == 1440:
+                    page.screenshot(path=str(review / "copilot-saved-fixture-desktop.png"),
+                                    full_page=True)
                 page.locator("#mode-toggle").click()
                 page.get_by_text("LLM + Qloo: the baseline cultural ranking is recorded.").wait_for(
                     state="visible",
