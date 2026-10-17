@@ -28,7 +28,7 @@ jobs:
           name: offline-release-rehearsal
           path: release-rehearsal.json
           retention-days: 7
-      - run: node --check src/ofc_engine/web/app.js && node --check src/ofc_engine/web/experience.js && node --check src/ofc_engine/web/studio.js && node --check src/ofc_engine/web/product.js && node --check src/ofc_engine/web/recorded.js && node --check src/ofc_engine/web/local-run.js && node --check src/ofc_engine/web/hosted-live.js && node --check src/ofc_engine/web/hosted-preflight.js && node --check src/ofc_engine/web/hosted-tour.js && node --check src/ofc_engine/web/hosted-showcase.js && node --check src/ofc_engine/web/connect.js
+      - run: node --check src/ofc_engine/web/intro.js && node --check src/ofc_engine/web/app.js && node --check src/ofc_engine/web/experience.js && node --check src/ofc_engine/web/studio.js && node --check src/ofc_engine/web/product.js && node --check src/ofc_engine/web/recorded.js && node --check src/ofc_engine/web/local-run.js && node --check src/ofc_engine/web/hosted-live.js && node --check src/ofc_engine/web/hosted-preflight.js && node --check src/ofc_engine/web/hosted-tour.js && node --check src/ofc_engine/web/hosted-showcase.js && node --check src/ofc_engine/web/connect.js
   fixture_container:
     runs-on: ubuntu-latest
     timeout-minutes: 8

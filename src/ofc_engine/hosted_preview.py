@@ -88,7 +88,19 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
         scripts = "".join(
             f'<script defer src="{name}"></script>\n' for name in names
         ).encode("utf-8")
-        self._send(200, page.replace(marker, scripts + marker, 1),
+        head = (
+            b'<link rel="stylesheet" href="/intro.css">\n'
+            b'<script defer src="/intro.js"></script>\n'
+        )
+        intro = files("ofc_engine").joinpath("web", "intro.html").read_bytes()
+        shell = b'<div class="shell">'
+        if page.count(shell) != 1:
+            self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
+            return
+        gated = page.replace(
+            shell, intro + b'\n<div class="shell" inert aria-hidden="true">', 1,
+        )
+        self._send(200, gated.replace(marker, head + scripts + marker, 1),
                    "text/html; charset=utf-8")
 
     def _durable_ready(self) -> bool:
@@ -102,6 +114,9 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
 
     def do_GET(self) -> None:
         if self._copilot_get():
+            return
+        if urlsplit(self.path).path == "/studio.html" and not urlsplit(self.path).query:
+            self._studio_page()
             return
         if len(self.path) > _MAX_TARGET_LENGTH:
             self._send(414, b'{"error":"URI_TOO_LONG"}', "application/json")
