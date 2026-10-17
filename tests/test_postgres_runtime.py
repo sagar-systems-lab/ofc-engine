@@ -1607,6 +1607,44 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
     vault.configure(owner, "gemini", "replacement-gemini-key-0001")
     assert vault.status(private=True)["gemini"]["status"] == "NOT_TESTED"
     assert "reason_code" not in vault.status(private=True)["gemini"]
+    with store._connect() as db:
+        before = db.execute(
+            "select utc_day,reserved from ofc_private.copilot_connection_attempts "
+            "where id=1"
+        ).fetchone()
+        db.execute(
+            "update ofc_private.copilot_credentials "
+            "set checked_at=now()-interval '35 minutes' "
+            "where provider='qloo'"
+        )
+    private = vault.status(private=True)["qloo"]
+    public = vault.status()["qloo"]
+    assert private["status"] == "CHECK_REQUIRED"
+    assert private["last_test"]["outcome"] == "ACTIVE"
+    assert private["last_test"]["freshness"] == "EXPIRED"
+    assert private["last_test"]["checked_at"]
+    assert public["status"] == "CHECK_REQUIRED"
+    assert "last_test" not in public
+    with store._connect() as db:
+        after = db.execute(
+            "select utc_day,reserved from ofc_private.copilot_connection_attempts "
+            "where id=1"
+        ).fetchone()
+    assert after == before
+
+    vault.mark_test("gemini", True, connection_only=True)
+    with store._connect() as db:
+        db.execute(
+            "update ofc_private.copilot_credentials "
+            "set checked_at=now()-interval '35 minutes' "
+            "where provider='gemini'"
+        )
+    gemini = vault.status(private=True)["gemini"]
+    assert gemini["status"] == "CHECK_REQUIRED"
+    assert gemini["last_test"]["outcome"] == "CONNECTED"
+    assert gemini["last_test"]["freshness"] == "EXPIRED"
+    assert gemini["qualification"] == "CONNECTIVITY_ONLY"
+    assert "last_test" not in vault.status()["gemini"]
     vault.revoke(owner, "gemini")
     vault.revoke(owner, "qloo")
 
