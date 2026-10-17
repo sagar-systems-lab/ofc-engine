@@ -105,6 +105,21 @@ def test_taste_search_returns_fuzzy_choice_hints_but_never_auto_verifies():
     assert all("entity_id" not in item.safe_label() for item in matches)
 
 
+def test_qloo_search_results_only_envelope_accepts_scoped_entities():
+    from dataclasses import replace
+
+    spec = search_probe("Beyonce", entity_type="urn:entity:artist")
+    source = observed(spec, {
+        "results": {"entities": [
+            {"name": "Beyoncé", "entity_id": ART,
+             "type": "urn:entity", "subtype": "urn:entity:artist"},
+        ]},
+    })
+    source = replace(source, top_level_fields=("results",))
+    hints = qloo_suggestions("Beyonce", "artist", source)
+    assert len(hints) == 1 and hints[0].entity_id == ART
+
+
 def test_mismatched_fingerprint_never_produces_suggestions():
     spec = search_probe("Beyonce", entity_type="urn:entity:brand")
     with pytest.raises(CatalogEvidenceError, match="FINGERPRINT"):
