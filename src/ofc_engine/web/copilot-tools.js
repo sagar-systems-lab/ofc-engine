@@ -229,9 +229,13 @@
       b.addEventListener("click",()=>void runDemo(b.dataset.demo));
     for(const b of document.querySelectorAll("[data-settings-tab]"))
       b.addEventListener("click",()=>showSection(b.dataset.settingsTab));
-    $("settings-owner-form").addEventListener("submit",async e=>{
-      e.preventDefault();
-      const input=$("settings-owner-secret"),secret=input.value;input.value="";
+    const signIn=async()=>{
+      const input=$("settings-owner-secret"),secret=input.value;
+      input.value="";
+      if(secret.length<40){
+        showFeedback("Owner secret must contain at least 40 characters.");
+        return;
+      }
       try {
         owner.readVersion++;
         await api("/api/owner/login",{owner_secret:secret});
@@ -239,7 +243,12 @@
         if(owner.connected)showFeedback("Owner connection controls unlocked.");
         else showFeedback("Owner login response received, but connection status could not be verified.");
       } catch {showFeedback("Owner sign-in failed. Check your private owner secret.");}
+    };
+    $("settings-owner-form").addEventListener("submit",e=>{
+      e.preventDefault();
+      void signIn();
     });
+    $("settings-owner-unlock").addEventListener("click",()=>void signIn());
     $("settings-owner-providers").addEventListener("click",event=>{
       const b=event.target.closest("[data-owner-action]");
       if(b && !b.disabled)void ownerAction(b);
