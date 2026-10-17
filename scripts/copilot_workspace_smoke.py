@@ -144,6 +144,9 @@ def qualify(origin: str) -> dict:
                     state="visible",
                 )
                 assert calls["message"] == 1 and calls["provider"] == 0
+                if width <= 768:
+                    page.locator("#sidebar-toggle").click()
+                    page.locator("#sidebar-backdrop").wait_for(state="visible")
                 page.locator("#new-chat").click()
                 page.locator("#empty-title").wait_for(state="visible")
                 assert calls["session"] == 1 and calls["message"] == 1
