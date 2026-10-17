@@ -97,6 +97,8 @@
   const setBusy = busy => {
     state.busy = busy;
     el("chat-input").readOnly = busy;
+    el("attachment-add").disabled = busy;
+    el("attachment-remove").disabled = busy;
     el("chat-send").disabled = busy || !el("chat-input").value.trim();
     if (!busy) resizeComposer();
   };
@@ -131,8 +133,12 @@
   };
 
   const attachText = async file => {
-    const version = ++state.attachmentVersion;
     if (!file) return;
+    const version = ++state.attachmentVersion;
+    state.attachment = null;
+    el("attachment-chip").hidden = true;
+    el("attachment-label").textContent = "";
+    resizeComposer();
     const extension = file.name.split(".").pop().toLowerCase();
     if (!["txt", "md", "csv", "json"].includes(extension)) {
       statusText("PDF/DOCX are not supported. Please export a short text excerpt to .txt or .md.");
@@ -145,7 +151,7 @@
     try {
       const content = (await file.text()).replace(/^\uFEFF/, "").trim();
       if (version !== state.attachmentVersion) return;
-      if (!content || content.includes("\u0000") || content.length > 3000) {
+      if (!content || content.includes("\u0000") || content.includes("\uFFFD") || content.length > 3000) {
         statusText("Only nonempty UTF-8 text excerpts up to 3,000 characters are accepted. Nothing uploaded.");
         return;
       }
@@ -158,6 +164,7 @@
       statusText("Cannot read that text file. Nothing was uploaded.");
     } finally {
       el("attachment-file").value = "";
+      resizeComposer();
     }
   };
 
