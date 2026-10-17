@@ -366,7 +366,7 @@ class CopilotLLM:
         except (ValueError, TypeError):
             raise LLMUnavailable("MODEL_DRAFT_JSON_INVALID") from None
         try:
-            return CopilotDraft.model_validate(parsed)
+            return CopilotDraft.model_validate_json(raw)
         except (ValueError, TypeError):
             raise LLMUnavailable("MODEL_DRAFT_SCHEMA_INVALID") from None
 
