@@ -99,7 +99,8 @@
     el("chat-input").readOnly = busy;
     el("attachment-add").disabled = busy;
     el("attachment-remove").disabled = busy;
-    el("chat-send").disabled = busy || !el("chat-input").value.trim();
+    el("chat-send").disabled = busy || state.runs.length >= 4 ||
+      !composedPrompt() || composedPrompt().length > 4000;
     if (!busy) resizeComposer();
   };
 
@@ -118,7 +119,8 @@
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 138) + "px";
     const prompt = composedPrompt();
-    if (!state.busy) el("chat-send").disabled = !prompt || prompt.length > 4000;
+    if (!state.busy) el("chat-send").disabled = state.runs.length >= 4 ||
+      !prompt || prompt.length > 4000;
     if (state.attachment && prompt && prompt.length > 4000)
       statusText("Combined prompt exceeds 4,000 characters. Shorten your question or remove notes; no upload occurred.");
   };
@@ -274,6 +276,10 @@
 
   const render = () => {
     renderHistory();
+    el("composer-session-info").textContent = state.runs.length +
+      " of 4 submitted requests in this private visitor session." +
+      (state.runs.length >= 4 ? " Limit reached; no new provider requests will be started." : "");
+    resizeComposer();
     const run = selectedRun();
     const visible = run || (state.busy && state.pendingPrompt);
     el("chat-empty").hidden = Boolean(visible);
@@ -421,6 +427,10 @@
 
   const requestSend = () => {
     if (state.busy) return;
+    if (state.runs.length >= 4) {
+      statusText("This private visitor session has reached its four-request limit. No provider call made.");
+      return;
+    }
     const prompt = composedPrompt();
     if (!prompt) return;
     if (prompt.length > 4000) {
@@ -428,6 +438,14 @@
       return;
     }
     state.pendingPrompt = prompt;
+    const limits = state.capability?.capacity;
+    el("run-confirm-budget").textContent = limits &&
+      Number.isInteger(limits.qloo_requests_remaining) &&
+      Number.isInteger(limits.llm_requests_remaining)
+      ? "Last known daily allowance: Qloo " + limits.qloo_requests_remaining +
+        ", model " + limits.llm_requests_remaining +
+        ". A qualifying run may require several calls; this does not reserve quota."
+      : "Live daily provider allowance could not be confirmed. Submitting may spend quota.";
     const modal = el("run-confirm");
     if (!modal.open) modal.showModal();
   };
@@ -467,7 +485,9 @@
     clearAttachment();
     render();
     resizeComposer();
-    statusText("New conversation. No provider request made.");
+    statusText(state.runs.length >= 4
+      ? "Four-request visitor-session limit reached. New chat only resets the draft; it does not reset quota."
+      : "New draft. No provider request made; the private session retains its remaining allowance.");
     el("chat-input").focus();
     if (window.innerWidth <= 768) setSidebar(false);
   });
