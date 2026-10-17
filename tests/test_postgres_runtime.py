@@ -1318,6 +1318,39 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
             }, cookie=owner_cookie,
         )
         assert status == 200
+        quota = call("/api/owner/credentials", cookie=owner_cookie)[1]["connection_tests"]
+        assert quota["limit"] == 3 and quota["remaining"] >= 0
+        with store._connect() as db:
+            before_qloo = db.execute(
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget where id=1"
+            ).fetchone()
+            before_model = db.execute(
+                "select utc_day,reserved from ofc_private.copilot_llm_budget where id=1"
+            ).fetchone()
+            db.execute(
+                "update ofc_private.copilot_connection_attempts "
+                "set utc_day=(now() at time zone 'UTC')::date,reserved=3 where id=1"
+            )
+        budget = call("/api/owner/credentials", cookie=owner_cookie)[1]["connection_tests"]
+        assert budget["used"] == 3 and budget["remaining"] == 0
+        status, error, _ = call(
+            "/api/owner/test-connection",
+            {"provider": "qloo", "confirm": "SPEND_ONE_PROVIDER_REQUEST"},
+            cookie=owner_cookie,
+        )
+        assert status == 429 and error == {"error": "CONNECTION_TEST_BUDGET_EXHAUSTED"}
+        assert call("/api/owner/credentials", cookie=owner_cookie)[1]["connection_tests"]["used"] == 3
+        with store._connect() as db:
+            assert db.execute(
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget where id=1"
+            ).fetchone() == before_qloo
+            assert db.execute(
+                "select utc_day,reserved from ofc_private.copilot_llm_budget where id=1"
+            ).fetchone() == before_model
+            db.execute(
+                "update ofc_private.copilot_connection_attempts "
+                "set reserved=0 where id=1"
+            )
         assert call("/api/capabilities")[1]["product"] == "CHECK_REQUIRED"
         status, visitors, visitor_cookie = call(
             "/api/copilot/sessions", {"confirm": "CREATE_COPILOT_SESSION"}
