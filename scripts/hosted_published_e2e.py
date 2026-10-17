@@ -174,6 +174,10 @@ def browser_test(origin, brand):
                     not request.url.startswith(origin + "/") else None)
                 try:
                     page.goto(origin + "/#plan", wait_until="domcontentloaded")
+                    page.locator("#ofc-intro").wait_for(state="visible")
+                    assert page.locator("#start-qloo-journey").is_hidden()
+                    page.locator("#ofc-intro-understand").click()
+                    page.locator("#ofc-intro").wait_for(state="detached")
                     launch = page.locator("#start-qloo-journey")
                     launch.wait_for(state="visible", timeout=10000)
                     assert page.locator("#start-hosted-tour").is_hidden()
@@ -257,6 +261,10 @@ def browser_test(origin, brand):
                         "window.matchMedia('(prefers-reduced-motion: reduce)').matches"
                     )
                     page.reload(wait_until="domcontentloaded")
+                    page.locator("#ofc-intro").wait_for(state="visible")
+                    assert page.locator("#start-qloo-journey").is_hidden()
+                    page.locator("#ofc-intro-understand").click()
+                    page.locator("#ofc-intro").wait_for(state="detached")
                     page.locator("#start-qloo-journey").wait_for(state="visible")
                     assert page.locator("#published-qloo-review").is_hidden()
 
