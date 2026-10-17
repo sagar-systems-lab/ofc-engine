@@ -178,6 +178,18 @@ class ProbeObservation:
         }
 
 
+def qloo_search_entities(payload: object) -> list | None:
+    if not isinstance(payload, dict) or (
+        "success" in payload and payload["success"] is not True
+    ):
+        return None
+    results = payload.get("results")
+    if isinstance(results, list):
+        return results if len(results) <= 20 else None
+    entities = results.get("entities") if isinstance(results, dict) else None
+    return entities if isinstance(entities, list) and len(entities) <= 20 else None
+
+
 class QlooProbeClient:
     """Explicitly initiated exploratory reads; never feeds policy or external actions."""
 
