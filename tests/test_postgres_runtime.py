@@ -1555,11 +1555,10 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
         def get(self, url, headers, *, timeout, max_bytes):
             self.calls += 1
             return TransportReply(200, json.dumps({
-                "results": {"entities": [
+                "results": [
                     {"entity_id": "c70ce2b8-0ad1-4150-bf18-5a6347f2e860",
-                     "name": "Taylor Swift", "type": "urn:entity",
-                     "subtype": "urn:entity:artist"},
-                ]},
+                     "name": "Nike", "types": ["urn:entity:brand"]},
+                ],
             }).encode())
 
     live_shape = RealSearchEnvelope()
