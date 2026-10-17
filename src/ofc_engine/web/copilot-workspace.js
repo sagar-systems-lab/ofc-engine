@@ -431,6 +431,19 @@
 
   window.OFCActivity?.mount();
   window.OFCResults?.mount({getRun: selectedRun, getMode: () => state.mode});
+  window.OFCTools?.mount({
+    sessionId: () => state.sessionId,
+    clearSession: () => {
+      state.sessionId = null;
+      state.runs = [];
+      state.selected = null;
+      state.pendingPrompt = "";
+      stopPolling();
+      saveId(null);
+      render();
+      statusText("Private visitor session deleted. New reviews require a new session.");
+    },
+  });
   state.sessionId = readId();
   updateShell();
   setActivity(window.innerWidth > 1180);

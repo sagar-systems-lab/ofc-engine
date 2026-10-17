@@ -68,3 +68,31 @@ def test_workspace_sends_no_provider_requests_before_explicit_send():
     assert 'aria-label="Conversation history"' in template
     assert ':focus-visible' in css
     assert '@media(prefers-reduced-motion:reduce)' in css
+
+
+def test_workspace_secondary_tools_respect_owner_and_fixture_boundaries():
+    from importlib.resources import files
+
+    base = files("ofc_engine").joinpath("web")
+    document = base.joinpath("copilot-workspace.html").read_text()
+    tools_js = base.joinpath("copilot-tools.js").read_text()
+    assert 'id="demo-dialog"' in document and 'id="settings-dialog"' in document
+    assert 'data-demo="repair"' in document and 'data-demo="outage"' in document
+    assert 'data-demo="dependent_missing"' in document
+    assert 'data-demo="budget_exhausted"' in document
+    assert 'id="settings-owner-form"' in document
+    assert 'autocomplete="off"' in document
+    assert 'id="settings-delete-session"' in document
+    assert 'type="password"' in document
+    assert 'SPEND_ONE_PROVIDER_REQUEST' in tools_js
+    assert 'DELETE_MY_SESSION' in tools_js
+    assert 'CREATE_COPILOT_SESSION' not in tools_js
+    assert 'generativelanguage.googleapis.com' not in tools_js
+    assert 'window.OFCTools' in tools_js
+    assert 'owner/credentials' in tools_js
+    assert 'owner/login' in tools_js
+    assert 'owner/test-connection' in tools_js
+    assert 'demo?scenario=' in tools_js
+    assert "<iframe" not in document
+    assert 'src="https://' not in document
+    assert 'src="http://' not in document

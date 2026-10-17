@@ -218,6 +218,7 @@ _ASSETS = {
     "/copilot-workspace.js": ("copilot-workspace.js", "text/javascript; charset=utf-8"),
     "/copilot-activity.js": ("copilot-activity.js", "text/javascript; charset=utf-8"),
     "/copilot-proof.js": ("copilot-proof.js", "text/javascript; charset=utf-8"),
+    "/copilot-tools.js": ("copilot-tools.js", "text/javascript; charset=utf-8"),
     "/intro.css": ("intro.css", "text/css; charset=utf-8"),
     "/intro.js": ("intro.js", "text/javascript; charset=utf-8"),
     "/studio.js": ("studio.js", "text/javascript; charset=utf-8"),
