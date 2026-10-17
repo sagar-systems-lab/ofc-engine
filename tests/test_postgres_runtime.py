@@ -1321,6 +1321,12 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         quota = call("/api/owner/credentials", cookie=owner_cookie)[1]["connection_tests"]
         assert quota["limit"] == 3 and quota["remaining"] >= 0
         with store._connect() as db:
+            before_qloo = db.execute(
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget where id=1"
+            ).fetchone()
+            before_model = db.execute(
+                "select utc_day,reserved from ofc_private.copilot_llm_budget where id=1"
+            ).fetchone()
             db.execute(
                 "update ofc_private.copilot_connection_attempts "
                 "set utc_day=(now() at time zone 'UTC')::date,reserved=3 where id=1"
@@ -1336,8 +1342,11 @@ def test_hosted_copilot_credential_routes_and_csrf(pg_url):
         assert call("/api/owner/credentials", cookie=owner_cookie)[1]["connection_tests"]["used"] == 3
         with store._connect() as db:
             assert db.execute(
-                "select count(*) from ofc_private.dynamic_qloo_attempts"
-            ).fetchone()[0] >= 0
+                "select utc_day,reserved from ofc_private.dynamic_qloo_budget where id=1"
+            ).fetchone() == before_qloo
+            assert db.execute(
+                "select utc_day,reserved from ofc_private.copilot_llm_budget where id=1"
+            ).fetchone() == before_model
             db.execute(
                 "update ofc_private.copilot_connection_attempts "
                 "set reserved=0 where id=1"
