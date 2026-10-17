@@ -1061,7 +1061,16 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     assert qloo.ranks == 2 and model.calls == 3 and len(qloo.searches) == 3
     stored = copy.messages(session["session_id"], session["ticket"])["messages"]
     assert len(stored) == 1 and stored[0]["prompt"] == "Find a great sponsor"
-    assert {key: value for key, value in stored[0].items() if key != "prompt"} == report
+    activity = stored[0]["activity"]
+    assert activity["source"] == "PERSISTED_ATTEMPTS"
+    assert activity["agent_plan"] == "OBSERVED"
+    assert activity["qloo_evidence"] == "RANK_OBSERVED"
+    assert activity["ofc_review"] == "OBSERVED"
+    assert activity["requests"]["search_complete"] == 3
+    assert activity["requests"]["rank_complete"] == 2
+    assert activity["requests"]["rank_reserved"] == 0
+    assert {key: value for key, value in stored[0].items()
+            if key not in ("prompt", "activity")} == report
     with psycopg.connect(pg_url, sslmode="disable") as db:
         encrypted = bytes(db.execute(
             "select prompt_ciphertext from ofc_private.copilot_messages "

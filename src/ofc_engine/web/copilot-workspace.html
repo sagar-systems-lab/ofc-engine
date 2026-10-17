@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#f4f8ff">
 <title>OFC Engine · Copilot</title>
 <link rel="stylesheet" href="/copilot-workspace.css">
+<script defer src="/copilot-activity.js"></script>
 <script defer src="/copilot-workspace.js"></script>
 </head>
 <body class="studio-page copilot-page">
@@ -98,13 +99,21 @@
       </main>
       <aside class="activity-rail" aria-label="Activity" id="activity-rail">
         <div class="activity-header"><strong>Activity</strong><button id="activity-hide" type="button">Hide</button></div>
-        <ol class="activity-steps">
-          <li><span class="step-marker">1</span><div><strong>Agent plan</strong><small>Understanding your request</small></div></li>
-          <li><span class="step-marker">2</span><div><strong>Qloo evidence</strong><small>Observed cultural signals</small></div></li>
-          <li><span class="step-marker">3</span><div><strong>OFC review</strong><small>Selective decision checks</small></div></li>
-          <li><span class="step-marker">4</span><div><strong>Results</strong><small>Saved response</small></div></li>
+        <ol class="activity-steps" id="activity-steps">
+          <li><span class="step-marker">1</span><div><strong>Agent plan</strong><small>Not started</small></div></li>
+          <li><span class="step-marker">2</span><div><strong>Qloo evidence</strong><small>Not observed</small></div></li>
+          <li><span class="step-marker">3</span><div><strong>OFC review</strong><small>Not observed</small></div></li>
+          <li><span class="step-marker">4</span><div><strong>Results</strong><small>Not started</small></div></li>
         </ol>
-        <p id="activity-honesty" class="activity-note">No run started. Stages are not live until the server reports them.</p>
+        <p id="activity-honesty" class="activity-note">Select a saved run to inspect its observed stages.</p>
+        <section class="activity-detail" id="activity-detail" aria-label="Structured plan" hidden>
+          <div class="activity-detail-heading"><strong>Agent plan</strong><button id="plan-expand" type="button" aria-expanded="false">Show</button></div>
+          <div id="plan-content" hidden></div>
+        </section>
+        <section class="activity-detail" id="map-detail" aria-label="Decision dependencies" hidden>
+          <div class="activity-detail-heading"><strong>Decision map</strong><button id="map-expand" type="button" aria-expanded="false">Show</button></div>
+          <div id="map-content" hidden></div>
+        </section>
       </aside>
     </div>
     <button id="activity-open" class="activity-reopen" type="button" hidden><svg class="ico"><use href="#ofc-icon-activity"/></svg> Activity</button>

@@ -9,6 +9,7 @@ import hmac
 import json
 import secrets
 
+from .copilot_activity import activity_projection
 from .business_assurance import assess_business_readiness
 from .copilot_receipt import decision_receipt, grounded_explanations
 from .copilot_compare import build_copilot_pair
@@ -262,15 +263,14 @@ class HostedCopilot:
             except (InvalidToken, ValueError, UnicodeError):
                 raise StorageIntegrityError("invalid saved user prompt") from None
             if status == "RESERVED":
-                outputs.append({
-                    "prompt": prompt,
-                    **self._pending_status(run_id, created_at),
-                })
-                continue
-            result = self._decode_result(raw, encrypted_result, digest)
-            if result.get("run_id") != run_id:
-                raise StorageIntegrityError("saved Copilot projection corrupted")
-            outputs.append({"prompt": prompt, **result})
+                result = self._pending_status(run_id, created_at)
+            else:
+                result = self._decode_result(raw, encrypted_result, digest)
+                if result.get("run_id") != run_id:
+                    raise StorageIntegrityError("saved Copilot projection corrupted")
+            with self.store._connect() as db:
+                activity = activity_projection(db, run_id, result)
+            outputs.append({"prompt": prompt, **result, "activity": activity})
         return {"session_id": session_id, "messages": outputs}
 
     def _validate_entity_selection(

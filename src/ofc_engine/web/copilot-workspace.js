@@ -204,10 +204,6 @@
       box.append(assistant);
     }
     box.scrollTop = box.scrollHeight;
-    el("activity-honesty").textContent = run.status === "PROCESSING"
-      ? "Processing was admitted. Detailed provider stages have not yet been independently observed."
-      : "Saved " + String(run.status || "result").replaceAll("_", " ").toLowerCase()
-        + ". This activity view is a historical summary, not a live event stream.";
   };
 
   const render = () => {
@@ -223,13 +219,14 @@
         message("assistant", "Waiting for a saved server result. No automatic retry will be made."));
     } else {
       el("chat-transcript").replaceChildren();
-      el("activity-honesty").textContent = "No run started. Stages are not live until the server reports them.";
     }
     const proof = el("proof-entry");
     proof.disabled = true;
-    proof.title = run ? "Proof inspector arrives in Phase 3. Saved result is retained."
+    proof.title = run ? "Saved run available. Proof export is not available in this view."
       : "Proof available after a saved response";
     proof.setAttribute("aria-label", proof.title);
+    window.OFCActivity?.render(run || (state.busy && state.pendingPrompt
+      ? {local_pending: true} : null));
   };
 
   const loadCapabilities = async () => {
@@ -431,6 +428,7 @@
     }
   });
 
+  window.OFCActivity?.mount();
   state.sessionId = readId();
   updateShell();
   setActivity(window.innerWidth > 1180);
