@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 
 FAKE_SESSION = "cp-" + "a" * 32
@@ -122,7 +122,15 @@ def qualify(origin: str) -> dict:
                 assert calls["session"] == 0
                 input_box.press("Enter")
                 page.locator("#run-approve").click()
-                page.locator(".message.assistant").wait_for(state="visible")
+                try:
+                    page.locator(".message.assistant").wait_for(state="visible", timeout=10_000)
+                except PlaywrightTimeout as exc:
+                    raise AssertionError(
+                        f"chat result not visible: calls={calls}, "
+                        f"status={page.locator('#composer-status').inner_text()}, "
+                        f"dialog_open={page.locator('#run-confirm').evaluate('x=>x.open')}, "
+                        f"errors={errors}"
+                    ) from exc
                 page.get_by_text("LLM + Qloo + OFC: a decision still requires review.").wait_for(
                     state="visible",
                 )
