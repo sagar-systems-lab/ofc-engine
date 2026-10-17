@@ -1039,16 +1039,20 @@ class HostedCopilot:
                     raise QlooProbeError("QLOO_SEARCH_RESPONSE_INVALID") from None
             else:
                 reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
-                CopilotLLM(
+                client = CopilotLLM(
                     provider=provider, api_key=credential,
                     transport=self.model_transport,
-                ).extract(
-                    "Extract this hypothetical proposal only: For the fictional "
-                    "artist Example Artist, compare the fictional brand candidates "
-                    "Brand A and Brand B as sponsors. The original selection is "
-                    "Brand A. The budget is 60000 USD, the city is Chicago, and "
-                    "no booking or real-world action is authorized."
                 )
+                if provider == "gemini":
+                    client.probe_connectivity()
+                else:
+                    client.extract(
+                        "Extract this hypothetical proposal only: For the fictional "
+                        "artist Example Artist, compare the fictional brand candidates "
+                        "Brand A and Brand B as sponsors. The original selection is "
+                        "Brand A. The budget is 60000 USD, the city is Chicago, and "
+                        "no booking or real-world action is authorized."
+                    )
             ok = True
         except QlooProbeError as exc:
             raw = exc.code
@@ -1071,7 +1075,7 @@ class HostedCopilot:
                     "MODEL_NARRATION_INVALID", "DISALLOWED_MODEL_ENDPOINT",
                     "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
                     "MODEL_FINISH_REJECTED", "MODEL_DRAFT_JSON_INVALID",
-                    "MODEL_DRAFT_SCHEMA_INVALID",
+                    "MODEL_DRAFT_SCHEMA_INVALID", "MODEL_PROBE_INVALID",
                 )
                 or raw in {f"PROVIDER_HTTP_{code}" for code in range(400, 600)}
             ) else "LLM_TEST_FAILED"
@@ -1079,9 +1083,14 @@ class HostedCopilot:
             reason = "PROVIDER_DAILY_QUOTA_EXHAUSTED"
         except ValueError:
             reason = "PROVIDER_TEST_VALIDATION_FAILED"
-        self.vault.mark_test(provider, ok, reason_code=reason if not ok else None)
+        limited = provider == "gemini" and ok
+        self.vault.mark_test(
+            provider, ok, reason_code=reason if not ok else None,
+            connection_only=limited,
+        )
         return {
             "provider": provider,
-            "status": "ACTIVE" if ok else "UNAVAILABLE",
+            "status": "CONNECTED" if limited else "ACTIVE" if ok else "UNAVAILABLE",
+            **({"qualification": "CONNECTIVITY_ONLY"} if limited else {}),
             **({"reason_code": reason} if not ok else {}),
         }

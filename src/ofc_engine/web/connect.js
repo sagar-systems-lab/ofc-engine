@@ -31,7 +31,9 @@
       const data = statuses[provider] || { status: "NOT_CONFIGURED" };
       const state = node.querySelector(".state");
       const suffix = data.masked_suffix ? " ••••" + data.masked_suffix : "";
-      state.textContent = data.status + suffix;
+      state.textContent = data.status
+        + (data.qualification === "CONNECTIVITY_ONLY" ? " (API only)" : "")
+        + suffix;
       state.dataset.status = data.status;
       node.querySelector('button[data-action="test"]').disabled = exhausted;
     }
@@ -49,10 +51,13 @@
       const quota = connectionTests?.remaining === 0
         ? " Connection tests exhausted (" + connectionTests.used + "/" + connectionTests.limit
           + "); reset " + connectionTests.resets_at_utc + "." : "";
+      const connectivity = report.providers?.gemini?.qualification === "CONNECTIVITY_ONLY"
+        ? " Gemini generateContent connection verified; full Copilot draft is NOT qualified."
+        : "";
       tell((reasons.length
         ? "Last failed tests: " + reasons.join(" | ") + "."
         : "Credentials are stored on the OFC server. A configured key is not yet a live connection.")
-        + quota + " Status refresh made no provider request.");
+        + connectivity + quota + " Status refresh made no provider request.");
     } catch {
       manager.hidden = true;
       login.hidden = false;
@@ -106,7 +111,9 @@
       if (action === "save") key.value = "";
       if (action === "test") {
         const detail = result.reason_code ? " — " + result.reason_code : "";
-        tell(provider + ": " + result.status + detail + ". One connection test was attempted.");
+        const scope = result.qualification === "CONNECTIVITY_ONLY"
+          ? " Gemini API verified; full Copilot proposal remains unqualified." : "";
+        tell(provider + ": " + result.status + detail + ". One connection test was attempted." + scope);
       }
       else tell(provider + " credential " + (action === "revoke" ? "revoked." : "encrypted and saved."));
       const current = action === "test"

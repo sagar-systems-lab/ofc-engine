@@ -23,7 +23,7 @@ _SAFE_TEST_REASONS = frozenset({
     "PROVIDER_DAILY_QUOTA_EXHAUSTED", "PROVIDER_TEST_VALIDATION_FAILED",
     "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
     "MODEL_FINISH_REJECTED", "MODEL_DRAFT_JSON_INVALID",
-    "MODEL_DRAFT_SCHEMA_INVALID",
+    "MODEL_DRAFT_SCHEMA_INVALID", "MODEL_PROBE_INVALID",
 }) | frozenset(f"HTTP_{n}" for n in range(400, 600)) | frozenset(
     f"PROVIDER_HTTP_{n}" for n in range(400, 600)
 )
@@ -158,8 +158,13 @@ class CredentialVault:
         except (InvalidToken, UnicodeError, ValueError):
             raise StorageIntegrityError("encrypted provider credential is invalid") from None
 
-    def mark_test(self, provider: str, success: bool, *, reason_code: str | None = None) -> None:
+    def mark_test(self, provider: str, success: bool, *, reason_code: str | None = None,
+                  connection_only: bool = False) -> None:
         self._provider(provider)
+        if type(connection_only) is not bool or (
+            connection_only and (provider != "gemini" or not success)
+        ):
+            raise ValueError("invalid connectivity qualification")
         if reason_code is not None and (
             success or not isinstance(reason_code, str)
             or reason_code not in _SAFE_TEST_REASONS
@@ -170,7 +175,8 @@ class CredentialVault:
                 "update ofc_private.copilot_credentials "
                 "set checked_at=now(),check_status=%s,check_reason_code=%s "
                 "where provider=%s",
-                ("ACTIVE" if success else "UNAVAILABLE", reason_code, provider),
+                ("CONNECTED" if connection_only else
+                 "ACTIVE" if success else "UNAVAILABLE", reason_code, provider),
             )
 
     def status(self, *, private: bool = False) -> dict:
@@ -188,7 +194,7 @@ class CredentialVault:
                 result[provider] = {"status": "NOT_CONFIGURED", "configured": False}
                 continue
             status = row[3]
-            if status == "ACTIVE" and (
+            if status in ("ACTIVE", "CONNECTED") and (
                 row[2] is None or now - row[2] > timedelta(minutes=30)
             ):
                 status = "CHECK_REQUIRED"
@@ -196,6 +202,8 @@ class CredentialVault:
                 "status": status,
                 "configured": True,
                 **({"masked_suffix": row[1]} if private else {}),
+                **({"qualification": "CONNECTIVITY_ONLY"} if row[3] == "CONNECTED"
+                    and provider == "gemini" else {}),
                 **({"reason_code": row[4]} if private and status == "UNAVAILABLE"
                     and row[4] in _SAFE_TEST_REASONS else {}),
             }

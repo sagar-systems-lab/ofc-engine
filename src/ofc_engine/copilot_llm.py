@@ -252,6 +252,75 @@ class CopilotLLM:
             raise LLMUnavailable("INVALID_MODEL_ENVELOPE")
         return payload
 
+    def probe_connectivity(self) -> None:
+        """Verify the model's JSON generation endpoint, not Copilot draft quality."""
+        if self.provider != "gemini":
+            raise ValueError("Gemini-only connectivity probe")
+        payload = {
+            "contents": [{"role": "user", "parts": [
+                {"text": "Connectivity check. Return the JSON object with ready set to true."}
+            ]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseJsonSchema": {
+                    "type": "object",
+                    "properties": {"ready": {"type": "boolean"}},
+                    "required": ["ready"],
+                    "additionalProperties": False,
+                },
+                "thinkingConfig": {"thinkingLevel": "minimal"},
+                "temperature": 0,
+                "maxOutputTokens": 128,
+            },
+        }
+        data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        try:
+            reply = self._transport.post(
+                _GEMINI_URL,
+                {"x-goog-api-key": self._key, "Content-Type": "application/json"},
+                data, timeout=self.timeout, max_bytes=_MAX_RESPONSE_BYTES,
+            )
+        except LLMUnavailable:
+            raise
+        except Exception:
+            raise LLMUnavailable("MODEL_TRANSPORT_UNAVAILABLE") from None
+        if reply.status != 200:
+            raise LLMUnavailable("PROVIDER_HTTP_" + str(reply.status))
+        envelope = self._json_reply(reply.body)
+        try:
+            candidates = envelope["candidates"]
+            if not isinstance(candidates, list) or len(candidates) != 1:
+                raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+            candidate = candidates[0]
+            finish = candidate.get("finishReason")
+            if finish == "MAX_TOKENS":
+                raise LLMUnavailable("MODEL_OUTPUT_TRUNCATED")
+            if finish != "STOP":
+                raise LLMUnavailable("MODEL_FINISH_REJECTED")
+            parts = candidate["content"]["parts"]
+            if not isinstance(parts, list):
+                raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+            raw = "".join(
+                part["text"] for part in parts if isinstance(part, dict)
+                and part.get("thought") is not True
+                and isinstance(part.get("text"), str)
+            )
+            if not raw or len(raw) > 1024:
+                raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+        except LLMUnavailable:
+            raise
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise LLMUnavailable("MODEL_RESPONSE_MISSING") from None
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            raise LLMUnavailable("MODEL_DRAFT_JSON_INVALID") from None
+        if (
+            not isinstance(value, dict) or set(value) != {"ready"}
+            or value["ready"] is not True
+        ):
+            raise LLMUnavailable("MODEL_PROBE_INVALID")
+
     def extract(self, prompt: str, *, prior_plan: dict | None = None) -> CopilotDraft:
         if (
             not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= _MAX_PROMPT
