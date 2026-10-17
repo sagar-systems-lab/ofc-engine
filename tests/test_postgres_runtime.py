@@ -883,6 +883,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     known = {
         "Artist Example": artist, "Brand A": brand_a, "Brand B": brand_b,
         "Taylor Swift": "c70ce2b8-0ad1-4150-bf18-5a6347f2e860",
+        "Nike": "b8540be1-11a5-4920-ac15-bcdf7b06ce3d",
     }
 
     class FakeQloo:
