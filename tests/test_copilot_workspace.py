@@ -96,3 +96,30 @@ def test_workspace_secondary_tools_respect_owner_and_fixture_boundaries():
     assert "<iframe" not in document
     assert 'src="https://' not in document
     assert 'src="http://' not in document
+
+
+def test_readiness_controls_are_bounded_without_new_endpoints():
+    from importlib.resources import files
+
+    web = files("ofc_engine").joinpath("web")
+    page = web.joinpath("copilot-workspace.html").read_text()
+    script = web.joinpath("copilot-workspace.js").read_text()
+    assert 'id="status-mode-explanation"' in page
+    assert 'id="attachment-file"' in page
+    assert 'type="file"' in page
+    assert 'accept=".txt,.md,.csv,.json' in page
+    assert 'id="attachment-remove"' in page
+    assert 'id="composer-session-info"' in page
+    assert 'id="run-confirm-budget"' in page
+    assert "Server availability is separate" in script
+    assert '"qloo_requests_remaining"' not in script
+    assert 'limits.qloo_requests_remaining' in script
+    assert 'state.runs.length >= 4' in script
+    assert 'prompt.length > 4000' in script
+    assert 'file.size > 16 * 1024' in script
+    assert 'content.length > 3000' in script
+    assert 'file.text()' in script
+    assert 'window.OFCResults' in script
+    assert 'FileReader' not in script
+    assert 'FormData(' not in script
+    assert '/api/attachments' not in script
