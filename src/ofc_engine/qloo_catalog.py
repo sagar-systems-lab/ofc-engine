@@ -9,7 +9,7 @@ import re
 import unicodedata
 from uuid import UUID
 
-from .qloo import ProbeObservation, ProbeSpec
+from .qloo import ProbeObservation, ProbeSpec, qloo_search_entities
 
 CATEGORIES = (
     "artist", "book", "brand", "destination", "movie", "person",
@@ -89,8 +89,7 @@ def qloo_suggestions(
         not isinstance(observation, ProbeObservation)
         or observation.path != "/search" or observation.http_status != 200
         or not isinstance(observation.payload, dict)
-        or ("success" in observation.payload
-            and observation.payload["success"] is not True)
+        or qloo_search_entities(observation.payload) is None
     ):
         raise CatalogEvidenceError("SEARCH_OBSERVATION_INVALID")
     spec = ProbeSpec(
@@ -98,9 +97,8 @@ def qloo_suggestions(
     )
     if observation.query_fingerprint != spec.fingerprint:
         raise CatalogEvidenceError("SEARCH_FINGERPRINT_MISMATCH")
-    results = observation.payload.get("results")
-    entities = results.get("entities") if isinstance(results, dict) else None
-    if not isinstance(entities, list) or len(entities) > 20:
+    entities = qloo_search_entities(observation.payload)
+    if not isinstance(entities, list):
         raise CatalogEvidenceError("SEARCH_RESULTS_INVALID")
     looked_up = _fold(query.strip())
     matches = []
@@ -111,11 +109,16 @@ def qloo_suggestions(
         if not isinstance(name, str) or not name.strip() or len(name) > 160:
             raise CatalogEvidenceError("SEARCH_NAME_INVALID")
         expected_type = "urn:entity:" + canonical
-        if not (
+        types = entity.get("types")
+        category_matches = (
+            isinstance(types, list) and expected_type in types
+            and all(isinstance(item, str) for item in types)
+        ) or (
             entity.get("type") == expected_type
             or entity.get("type") == "urn:entity"
             and entity.get("subtype") == expected_type
-        ):
+        )
+        if not category_matches:
             continue
         entity_id = _uuid(entity.get("entity_id"))
         exact = _fold(name) == looked_up
