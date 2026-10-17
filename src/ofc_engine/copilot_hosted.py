@@ -95,11 +95,11 @@ class HostedCopilot:
             or (draft.taste_seed_name is not None
                 and draft.taste_seed_name != draft.artist_name)
             or not re.search(
-                r"\\bartist\\s*:\\s*" + re.escape(draft.artist_name) + r"\\b",
+                r"\bartist\s*:\s*" + re.escape(draft.artist_name) + r"\b",
                 prompt, flags=re.IGNORECASE,
             )
-            or not re.search(r"\\bcandidate\\s+brands?\\s*:", prompt, re.IGNORECASE)
-            or not re.search(r"\\boriginal\\s+brand\\s+choice\\s*:", prompt, re.IGNORECASE)
+            or not re.search(r"\bcandidate\s+brands?\s*:", prompt, re.IGNORECASE)
+            or not re.search(r"\boriginal\s+brand\s+choice\s*:", prompt, re.IGNORECASE)
         ):
             return draft
         choice = draft.choices[0]
