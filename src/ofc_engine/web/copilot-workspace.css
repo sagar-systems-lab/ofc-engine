@@ -455,3 +455,10 @@ body.workspace-reduced-motion .workspace-dialog *{transition-duration:.01ms!impo
   .demo-scenario-grid button{padding:11px}
 }
 @media(max-width:370px){.demo-scenario-grid{grid-template-columns:1fr}}
+
+@keyframes workspace-dialog-enter{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+.workspace-dialog[open]{animation:workspace-dialog-enter .28s cubic-bezier(.2,.8,.2,1) both}
+.workspace-dialog button:focus-visible,.workspace-dialog a:focus-visible,
+.workspace-dialog input:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.workspace-dialog[open]{animation:none}}
+body.workspace-reduced-motion .workspace-dialog[open]{animation:none}
