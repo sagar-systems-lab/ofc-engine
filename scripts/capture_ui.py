@@ -11,6 +11,8 @@ from smoke_hosted import normalize_url
 
 
 SHOTS = (
+    ("intro-desktop", "/", 1440, 900, "#ofc-intro-title", None),
+    ("intro-mobile", "/", 390, 844, "#ofc-intro-title", None),
     ("home-desktop", "/", 1440, 900, "#home-title", None),
     ("home-mobile", "/", 390, 844, "#home-title", None),
     ("plan-desktop", "/", 1440, 900, "#headline", "[data-view-link='plan']"),
@@ -42,6 +44,11 @@ def capture(origin: str, directory: Path) -> None:
                 try:
                     print(f"CAPTURE_FRAME: {name}", flush=True)
                     page.goto(origin + path, wait_until="domcontentloaded", timeout=30000)
+                    if path == "/" and marker != "#ofc-intro-title":
+                        page.locator("#ofc-intro-understand").click()
+                        page.locator("#ofc-intro").wait_for(state="detached")
+                    if marker == "#ofc-intro-title" and page.locator("#home-title").is_visible():
+                        raise RuntimeError("workspace visible before Understand")
                     if click:
                         page.locator(click).click()
                     page.locator(marker).wait_for(state="visible", timeout=12000)
