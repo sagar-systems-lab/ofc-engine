@@ -142,12 +142,12 @@
       place.append(card);
     }
   };
-  const lockOwner = () => {
+  const lockOwner = (clearInput = true) => {
     owner.connected=false;owner.report=null;owner.tests=null;
     $("settings-owner-manager").hidden=true;
     $("settings-owner-gate").hidden=false;
     $("settings-owner-providers").replaceChildren();
-    $("settings-owner-secret").value="";
+    if(clearInput)$("settings-owner-secret").value="";
   };
   const loadOwnerStatus=async()=>{
     const version=++owner.readVersion;
@@ -155,7 +155,7 @@
       const report=await api("/api/owner/credentials");
       if(version===owner.readVersion)renderOwner(report);
     } catch {
-      if(version===owner.readVersion)lockOwner();
+      if(version===owner.readVersion)lockOwner(false);
     }
   };
   const ownerAction=async(button)=>{
