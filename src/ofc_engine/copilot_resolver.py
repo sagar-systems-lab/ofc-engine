@@ -30,7 +30,9 @@ def normalize_qloo_search(
     ):
         raise EntityResolutionRequired("SEARCH_PROVENANCE_MISMATCH")
     payload = observation.payload
-    if not isinstance(payload, dict) or payload.get("success") is not True:
+    if not isinstance(payload, dict) or (
+        "success" in payload and payload["success"] is not True
+    ):
         raise EntityResolutionRequired("SEARCH_RESPONSE_INVALID")
     results = payload.get("results")
     if not isinstance(results, dict):
