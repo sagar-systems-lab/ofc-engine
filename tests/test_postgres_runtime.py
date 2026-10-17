@@ -1475,9 +1475,52 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
         browser_daily_limit=40, qloo_transport=bad,
     )
     observed = runtime.test_connection(owner, "qloo")
-    assert observed == {"provider": "qloo", "status": "UNAVAILABLE"}
+    assert observed == {
+        "provider": "qloo", "status": "UNAVAILABLE",
+        "reason_code": "QLOO_SEARCH_RESPONSE_INVALID",
+    }
     assert bad.requests == 1
     assert runtime.capabilities()["qloo"] == "UNAVAILABLE"
+
+    class ForbiddenQloo:
+        def __init__(self):
+            self.calls = 0
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.calls += 1
+            return TransportReply(403, b'{"secret":"never-return-this"}')
+
+    forbidden = ForbiddenQloo()
+    second = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=40, qloo_transport=forbidden,
+    )
+    denied = second.test_connection(owner, "qloo")
+    assert denied == {
+        "provider": "qloo", "status": "UNAVAILABLE", "reason_code": "HTTP_403",
+    }
+    assert forbidden.calls == 1 and "never-return-this" not in str(denied)
+
+    from ofc_engine.copilot_llm import JSONReply
+
+    class RejectedModel:
+        def __init__(self):
+            self.calls = 0
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            return JSONReply(404, b'{"key":"private-secret"}')
+
+    vault.configure(owner, "gemini", "fake-gemini-key-for-connection-tests")
+    rejection = RejectedModel()
+    last = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=40, model_transport=rejection,
+    ).test_connection(owner, "gemini")
+    assert last == {
+        "provider": "gemini", "status": "UNAVAILABLE",
+        "reason_code": "PROVIDER_HTTP_404",
+    }
+    assert rejection.calls == 1 and "private-secret" not in str(last)
+    vault.revoke(owner, "gemini")
     vault.revoke(owner, "qloo")
 
 
