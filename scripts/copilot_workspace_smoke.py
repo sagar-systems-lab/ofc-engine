@@ -107,12 +107,51 @@ def qualify(origin: str) -> dict:
                 )
                 page = context.new_page()
                 errors = []
-                calls = {"session": 0, "message": 0, "provider": 0}
+                calls = {"session": 0, "message": 0, "provider": 0,
+                         "demo": 0, "owner_read": 0, "owner_login": 0, "owner_test": 0}
+                owner_active = {"value": False}
                 page.on("pageerror", lambda error: errors.append(str(error)))
 
                 def mock_request(route):
                     req = route.request
                     path = req.url.split("/api/", 1)[-1]
+                    if path.startswith("demo?scenario="):
+                        calls["demo"] += 1
+                        scenario = path.split("=", 1)[1]
+                        assert scenario in {"repair", "outage", "dependent_missing", "budget_exhausted"}
+                        return route.fulfill(status=200, content_type="application/json",
+                            body=json.dumps({
+                                "scenario": scenario, "demo_mode": "SYNTHETIC",
+                                "source_mode": "SYNTHETIC", "run_status": "REVIEW_REQUIRED",
+                                "provider_authenticated": False, "real_qloo_requests": 0,
+                                "decisions": [{"id": "brand", "changed": True}],
+                                "pending_rechecks": [],
+                            }))
+                    if path == "owner/credentials" and req.method == "GET":
+                        calls["owner_read"] += 1
+                        if not owner_active["value"]:
+                            return route.fulfill(status=403, content_type="application/json",
+                                body='{"error":"ACCESS_DENIED"}')
+                        return route.fulfill(status=200, content_type="application/json",
+                            body=json.dumps({"providers": {
+                                "qloo": {"status": "CHECK_REQUIRED", "configured": True,
+                                         "masked_suffix": "8354", "last_test": {
+                                          "outcome": "ACTIVE", "freshness": "EXPIRED",
+                                          "checked_at": "2026-10-17T10:00:00Z"}},
+                                "gemini": {"status": "CONNECTED", "configured": True,
+                                           "qualification": "CONNECTIVITY_ONLY"},
+                                "groq": {"status": "NOT_CONFIGURED", "configured": False}
+                            }, "connection_tests": {"limit": 6, "used": 5, "remaining": 1,
+                                                     "resets_at_utc": "2026-10-18T00:00:00Z"}}))
+                    if path == "owner/login" and req.method == "POST":
+                        calls["owner_login"] += 1
+                        assert len(req.post_data_json["owner_secret"]) >= 40
+                        owner_active["value"] = True
+                        return route.fulfill(status=200, content_type="application/json",
+                            body='{"authenticated":true,"expires_in_minutes":30}')
+                    if path == "owner/test-connection":
+                        calls["owner_test"] += 1
+                        return route.fulfill(status=500, body='{"error":"UNEXPECTED_TEST"}')
                     if path == "capabilities":
                         return route.fulfill(
                             status=200, content_type="application/json",
@@ -155,7 +194,8 @@ def qualify(origin: str) -> dict:
                 page.locator("#ofc-intro").wait_for(state="visible")
                 assert not page.locator("#empty-title").is_visible()
                 assert page.locator("body > .shell").get_attribute("inert") == ""
-                assert calls == {"session": 0, "message": 0, "provider": 0}
+                assert calls["session"] == 0 and calls["message"] == 0
+                assert calls["provider"] == 0 and calls["owner_test"] == 0
                 page.locator("#ofc-intro-understand").click()
                 page.locator("#ofc-intro").wait_for(state="detached")
                 page.locator("#empty-title").wait_for(state="visible")
@@ -178,6 +218,47 @@ def qualify(origin: str) -> dict:
                 assert "Qloo" in page.locator("#status-rows").inner_text()
                 page.locator("#status-close").click()
                 assert calls["provider"] == 0
+                page.locator("#demo-entry").click()
+                page.locator("#demo-dialog").wait_for(state="visible")
+                page.locator("[data-demo=repair]").click()
+                page.get_by_text("SYNTHETIC · NO PROVIDER CALLS").wait_for(state="visible")
+                assert "Selective repair" in page.locator("#demo-result").inner_text()
+                assert calls["demo"] == 1 and calls["owner_test"] == 0
+                if width == 1440:
+                    page.screenshot(path=str(review / "copilot-demo-desktop.png"),
+                                    full_page=True)
+                page.locator("#demo-close").click()
+                page.locator("#settings-entry").click()
+                page.locator("#settings-dialog").wait_for(state="visible")
+                page.locator("#settings-public-status .settings-public-row").first.wait_for(
+                    state="visible")
+                page.locator("#settings-owner-form").wait_for(state="visible")
+                assert page.locator("#settings-owner-manager").is_hidden()
+                assert calls["owner_test"] == 0
+                page.locator("[data-settings-tab=preferences]").click()
+                page.locator("#settings-reduce-motion").check()
+                assert page.locator("body").evaluate(
+                    "el=>el.classList.contains('workspace-reduced-motion')")
+                page.locator("#settings-reduce-motion").uncheck()
+                page.locator("[data-settings-tab=privacy]").click()
+                assert "24-hour" in page.locator("#settings-privacy").inner_text()
+                page.locator("[data-settings-tab=about]").click()
+                assert "Qloo Taste AI" in page.locator("#settings-about").inner_text()
+                page.locator("[data-settings-tab=connections]").click()
+                page.locator("#settings-owner-secret").fill("x" * 48)
+                page.locator("#settings-owner-form button").click()
+                page.locator("#settings-owner-manager").wait_for(state="visible")
+                assert page.locator("#settings-owner-secret").input_value() == ""
+                assert "API only" in page.locator("#settings-owner-providers").inner_text()
+                assert "1 / 6" in page.locator("#settings-test-quota").inner_text()
+                assert calls["owner_login"] == 1 and calls["owner_test"] == 0
+                if width == 1440:
+                    page.screenshot(path=str(review / "copilot-settings-desktop.png"),
+                                    full_page=True)
+                page.locator("#settings-close").click()
+                assert calls["message"] == 0 and calls["provider"] == 0
+                assert calls["owner_test"] == 0
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
 
                 input_box = page.locator("#chat-input")
                 input_box.fill(PROMPT)
