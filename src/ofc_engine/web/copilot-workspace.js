@@ -185,15 +185,9 @@
     if (run.status === "PROCESSING") {
       box.append(message("assistant", safeStatus("PROCESSING")));
     } else if (run.status === "REVIEW_REQUIRED") {
-      const answer = state.mode === "ON" ? run.ofc_answer : run.original_answer;
-      const assistant = message("assistant",
-        typeof answer === "string" && answer.trim() ? answer : safeStatus("REVIEW_REQUIRED"));
-      const card = node("section", "message-card");
-      card.append(node("h2", "", state.mode === "ON" ? "OFC review · saved" : "Qloo baseline · saved"));
-      card.append(node("p", "",
-        "Review required. Qloo cultural evidence is not a guarantee of commercial suitability. External actions are withheld."));
-      assistant.append(card);
-      box.append(assistant);
+      const rendered = window.OFCResults?.renderRun(run, state.mode, message);
+      if (rendered) box.append(rendered);
+      else box.append(message("assistant", safeStatus("REVIEW_REQUIRED")));
     } else {
       const info = run.question && typeof run.question === "string"
         ? run.question + "\n\n" + safeReason(run) : safeReason(run);
@@ -201,6 +195,15 @@
       const tag = node("span", "message-state" + (run.status === "BLOCKED" ? " blocked" : ""),
         String(run.status || "UNKNOWN").replaceAll("_", " "));
       assistant.append(tag);
+      if (run._sessionReadConfirmed && run.run_id &&
+          run.status !== "PROCESSING") {
+        const actions = node("div", "result-actions");
+        const proof = node("button", "result-action", "Download saved status (.json)");
+        proof.type = "button";
+        proof.addEventListener("click", () => window.OFCResults?.downloadJSON?.());
+        actions.append(proof);
+        assistant.append(actions);
+      }
       box.append(assistant);
     }
     box.scrollTop = box.scrollHeight;
@@ -221,10 +224,7 @@
       el("chat-transcript").replaceChildren();
     }
     const proof = el("proof-entry");
-    proof.disabled = true;
-    proof.title = run ? "Saved run available. Proof export is not available in this view."
-      : "Proof available after a saved response";
-    proof.setAttribute("aria-label", proof.title);
+    window.OFCResults?.syncProof(run);
     window.OFCActivity?.render(run || (state.busy && state.pendingPrompt
       ? {local_pending: true} : null));
   };
@@ -273,7 +273,8 @@
     if (!state.sessionId) return;
     try {
       const saved = await jsonRequest("/api/copilot/sessions/" + state.sessionId);
-      state.runs = Array.isArray(saved.messages) ? saved.messages : [];
+      state.runs = Array.isArray(saved.messages)
+        ? saved.messages.map(item => ({...item, _sessionReadConfirmed: true})) : [];
       if (!state.selected && state.runs.length) state.selected = state.runs.at(-1).run_id;
       if (state.selected && !state.runs.some(x => x.run_id === state.selected))
         state.selected = state.runs.at(-1)?.run_id || null;
@@ -429,6 +430,7 @@
   });
 
   window.OFCActivity?.mount();
+  window.OFCResults?.mount({getRun: selectedRun, getMode: () => state.mode});
   state.sessionId = readId();
   updateShell();
   setActivity(window.innerWidth > 1180);
