@@ -462,3 +462,29 @@ body.workspace-reduced-motion .workspace-dialog *{transition-duration:.01ms!impo
 .workspace-dialog input:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.workspace-dialog[open]{animation:none}}
 body.workspace-reduced-motion .workspace-dialog[open]{animation:none}
+
+
+.composer-tools{display:flex;gap:9px;align-items:center;min-width:0;flex:1}
+.composer-tools .composer-state{min-width:0;overflow-wrap:anywhere}
+.attach-button{width:34px;height:34px;min-width:34px;border-radius:10px;border:1px solid #d9e6f8;
+  background:#f8fbff;color:#386ca8;display:grid;place-items:center;transition:background .18s ease}
+.attach-button:hover{background:#eaf3ff}
+.attach-button:disabled{opacity:.45}
+.attach-button .ico{width:17px;height:17px}
+.attachment-chip{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border:1px solid #d5e6f7;background:#f1f8ff;padding:8px 10px;border-radius:10px;
+  font-size:11px;color:#265c9a;margin:7px 0}
+.attachment-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attachment-chip button{border:0;background:transparent;color:#1c6dda;text-decoration:underline;font-size:11px}
+.status-mode-explanation{margin:9px 0 3px;padding:10px;border-radius:10px;background:#f2f7ff;
+  color:#375f8c;font-size:11px;line-height:1.5}
+.status-popover{width:330px}
+@media(max-width:768px){
+  .status-popover{width:min(330px,calc(100vw - 24px))}
+  .composer-tools{gap:5px}
+  .composer-tools .composer-state{font-size:10px}
+}
+
+.composer-session-info{text-align:center;color:#7890af;font-size:10px;line-height:1.4;margin:4px 0 0}
+.run-budget{background:#f2f7ff;color:#3f638e;border:1px solid #dbe9fa;border-radius:11px;
+  font-size:12px;line-height:1.55;padding:10px 13px;margin:14px 0}

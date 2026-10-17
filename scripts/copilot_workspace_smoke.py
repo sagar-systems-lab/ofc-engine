@@ -110,6 +110,7 @@ def qualify(origin: str) -> dict:
                 calls = {"session": 0, "message": 0, "provider": 0,
                          "demo": 0, "owner_read": 0, "owner_login": 0, "owner_test": 0}
                 owner_active = {"value": False}
+                submitted = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
 
                 def mock_request(route):
@@ -171,7 +172,7 @@ def qualify(origin: str) -> dict:
                             body=json.dumps({"session_id": FAKE_SESSION, "expires_in_hours": 24}),
                         )
                     if path == "copilot/sessions/" + FAKE_SESSION and req.method == "GET":
-                        messages = [SAVED] if calls["message"] else []
+                        messages = [{**SAVED, "prompt": submitted[0]}] if submitted else []
                         return route.fulfill(
                             status=200, content_type="application/json",
                             body=json.dumps({"session_id": FAKE_SESSION, "messages": messages}),
@@ -179,12 +180,17 @@ def qualify(origin: str) -> dict:
                     if path == "copilot/sessions/" + FAKE_SESSION + "/messages" and req.method == "POST":
                         calls["message"] += 1
                         body = req.post_data_json
-                        assert body["prompt"] == PROMPT
+                        assert body["prompt"].startswith(PROMPT)
+                        assert "USER-SUPPLIED TEXT NOTES" in body["prompt"]
+                        assert "production-notes.md" in body["prompt"]
+                        assert "confidential planning context" in body["prompt"]
+                        assert len(body["prompt"]) <= 4000
+                        submitted.append(body["prompt"])
                         assert body["request_id"].startswith("ui-")
                         assert len(body["request_id"]) >= 8
                         return route.fulfill(
                             status=200, content_type="application/json",
-                            body=json.dumps(SAVED),
+                            body=json.dumps({**SAVED, "prompt": body["prompt"]}),
                         )
                     calls["provider"] += 1
                     return route.fulfill(status=404, body="{}")
@@ -211,6 +217,12 @@ def qualify(origin: str) -> dict:
                 assert calls["session"] == 0 and calls["message"] == 0
                 page.locator("#mode-toggle").click()
                 assert page.locator("#mode-label").inner_text() == "OFF"
+                page.locator("#status-toggle").click()
+                page.locator("#status-mode-explanation").wait_for(state="visible")
+                assert "Selected view: OFC OFF" in page.locator("#status-mode-explanation").inner_text()
+                assert "OFC engine available" in page.locator("#status-rows").inner_text()
+                assert "ACTIVE" in page.locator("#status-rows").inner_text()
+                page.locator("#status-close").click()
                 page.locator("#mode-toggle").click()
                 assert calls["message"] == 0
                 page.locator("#status-toggle").click()
@@ -271,6 +283,24 @@ def qualify(origin: str) -> dict:
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
 
                 input_box = page.locator("#chat-input")
+                assert page.locator("#attachment-add").is_visible()
+                page.locator("#attachment-file").set_input_files({
+                    "name": "production-notes.pdf", "mimeType": "application/pdf",
+                    "buffer": b"%PDF-1.4",})
+                assert page.locator("#attachment-chip").is_hidden()
+                assert "PDF/DOCX" in page.locator("#composer-status").inner_text()
+                page.locator("#attachment-file").set_input_files({
+                    "name": "huge-notes.txt", "mimeType": "text/plain",
+                    "buffer": b"A" * (16 * 1024 + 1),})
+                assert page.locator("#attachment-chip").is_hidden()
+                page.locator("#attachment-file").set_input_files({
+                    "name": "production-notes.md", "mimeType": "text/markdown",
+                    "buffer": b"confidential planning context; artist, brand, venue",})
+                page.locator("#attachment-chip").wait_for(state="visible")
+                assert calls["message"] == 0 and calls["provider"] == 0
+                input_box.fill("x" * 3999)
+                assert not page.locator("#chat-send").is_enabled()
+                assert "4,000 characters" in page.locator("#composer-status").inner_text()
                 input_box.fill(PROMPT)
                 input_box.press("Enter")
                 page.locator("#run-confirm").wait_for(state="visible")
@@ -293,6 +323,8 @@ def qualify(origin: str) -> dict:
                 )
                 assert calls["session"] == 1
                 assert calls["message"] == 1
+                assert len(submitted) == 1
+                assert page.locator("#attachment-chip").is_hidden()
                 page.locator("#proof-entry").wait_for(state="visible")
                 assert page.locator("#proof-entry").is_enabled()
                 page.get_by_role("button", name="Compare OFF vs ON").click()
