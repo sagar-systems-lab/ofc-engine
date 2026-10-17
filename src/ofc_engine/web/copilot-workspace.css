@@ -484,3 +484,7 @@ body.workspace-reduced-motion .workspace-dialog[open]{animation:none}
   .composer-tools{gap:5px}
   .composer-tools .composer-state{font-size:10px}
 }
+
+.composer-session-info{text-align:center;color:#7890af;font-size:10px;line-height:1.4;margin:4px 0 0}
+.run-budget{background:#f2f7ff;color:#3f638e;border:1px solid #dbe9fa;border-radius:11px;
+  font-size:12px;line-height:1.55;padding:10px 13px;margin:14px 0}
