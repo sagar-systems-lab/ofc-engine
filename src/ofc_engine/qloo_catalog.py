@@ -89,7 +89,8 @@ def qloo_suggestions(
         not isinstance(observation, ProbeObservation)
         or observation.path != "/search" or observation.http_status != 200
         or not isinstance(observation.payload, dict)
-        or observation.payload.get("success") is not True
+        or ("success" in observation.payload
+            and observation.payload["success"] is not True)
     ):
         raise CatalogEvidenceError("SEARCH_OBSERVATION_INVALID")
     spec = ProbeSpec(
