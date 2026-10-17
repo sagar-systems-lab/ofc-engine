@@ -9,7 +9,7 @@ from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from .contracts import StrictModel
 
@@ -28,6 +28,12 @@ _INSTRUCTIONS = (
     "If a required detail is missing, leave it null/empty and ask one "
     "clarifying question. Preserve user-offered choices faithfully. "
     "candidate_names are unverified plain-text labels, never provider IDs. "
+    "For an artist choosing a brand sponsor or brand partnership, set the "
+    "choice domain to exactly 'brand' (not 'sponsorship' or 'partnership'). "
+    "Set artist_name to the named artist and taste_seed_category to exactly "
+    "'artist'; taste_seed_name should be that same named artist or null. "
+    "Do not reinterpret contracts, venues, payments or non-brand decisions "
+    "as brand choices. "
     "When users request recommendations without naming candidates, set "
     "discovery_category to exactly one target entity category and choices to empty. "
     "For that use case, supply an existing named taste_seed_name and "
@@ -92,6 +98,20 @@ class LLMUnavailable(RuntimeError):
 class DraftChoice(StrictModel):
     decision_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,47}$")
     domain: str = Field(min_length=1, max_length=48)
+
+    @field_validator("domain", mode="before")
+    @classmethod
+    def normalize_brand_label(cls, value):
+        if not isinstance(value, str):
+            return value
+        label = " ".join(value.strip().lower().replace("_", " ").replace("-", " ").split())
+        if label in {
+            "brand partner", "brand partnership", "brand sponsorship",
+            "brand sponsor", "sponsorship brand", "artist brand sponsorship",
+            "artist brand partnership",
+        }:
+            return "brand"
+        return value
     selected_name: str = Field(min_length=1, max_length=160)
     candidate_names: tuple[str, ...] = Field(min_length=2, max_length=5)
     mutable: bool
@@ -121,6 +141,20 @@ class CopilotDraft(StrictModel):
     choices: tuple[DraftChoice, ...] = Field(max_length=6)
     baseline_answer: str = Field(min_length=1, max_length=4096)
     clarification_question: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("taste_seed_category", mode="before")
+    @classmethod
+    def normalize_artist_label(cls, value, info):
+        if not isinstance(value, str):
+            return value
+        label = " ".join(value.strip().lower().replace("_", " ").replace("-", " ").split())
+        artist = info.data.get("artist_name")
+        seed = info.data.get("taste_seed_name")
+        if artist and (seed is None or seed == artist) and label in {
+            "musician", "singer", "musical artist", "recording artist",
+        }:
+            return "artist"
+        return value
 
     @model_validator(mode="after")
     def validate_scope(self):
