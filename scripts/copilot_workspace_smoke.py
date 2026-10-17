@@ -307,8 +307,27 @@ def qualify(origin: str) -> dict:
                 assert calls["message"] == 0
                 page.locator("#run-cancel").click()
                 assert calls["session"] == 0
+                page.evaluate("""() => {
+                  const underlying = window.fetch.bind(window);
+                  window.fetch = (resource, options) => {
+                    const url = typeof resource === "string" ? resource : resource.url;
+                    if (url.includes("/messages") && options?.method === "POST") {
+                      return new Promise(resolve => {
+                        window.releaseSavedMessage = () => resolve(underlying(resource, options));
+                      });
+                    }
+                    return underlying(resource, options);
+                  };
+                }""")
                 input_box.press("Enter")
                 page.locator("#run-approve").click()
+                page.get_by_text("Waiting for a saved server result. No automatic retry will be made.").wait_for(
+                    state="visible", timeout=8_000)
+                assert page.locator(".message.user").count() == 1
+                assert "confidential planning context" in page.locator(".message.user").inner_text()
+                assert input_box.input_value() == ""
+                page.wait_for_function("typeof window.releaseSavedMessage === 'function'")
+                page.evaluate("window.releaseSavedMessage()")
                 try:
                     page.locator(".message.assistant").wait_for(state="visible", timeout=10_000)
                 except PlaywrightTimeout as exc:
