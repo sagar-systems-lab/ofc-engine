@@ -7,7 +7,7 @@
   const storageKey = "ofc.copilot.visitor.session.v1";
   const state = {
     sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
-    pendingPrompt: "", sidebarOpen: window.innerWidth > 768, search: "",
+    pendingPrompt: "", sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, activeRequestId: null, pollTimer: null,
   };
 
@@ -123,7 +123,8 @@
 
   const setActivity = show => {
     shell.classList.toggle("activity-collapsed", !show);
-    el("activity-open").hidden = show || window.innerWidth <= 1180;
+    shell.classList.toggle("activity-overlay-open", show && window.innerWidth <= 1180);
+    el("activity-open").hidden = show;
     el("activity-hide").setAttribute("aria-expanded", String(show));
   };
 
