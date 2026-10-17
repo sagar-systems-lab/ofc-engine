@@ -1040,8 +1040,11 @@ class HostedCopilot:
                     provider=provider, api_key=credential,
                     transport=self.model_transport,
                 ).extract(
-                    "Propose two fictional brands for an imaginary artist, "
-                    "with no real-world booking or action."
+                    "Extract this hypothetical proposal only: For the fictional "
+                    "artist Example Artist, compare the fictional brand candidates "
+                    "Brand A and Brand B as sponsors. The original selection is "
+                    "Brand A. The budget is 60000 USD, the city is Chicago, and "
+                    "no booking or real-world action is authorized."
                 )
             ok = True
         except QlooProbeError as exc:
@@ -1063,6 +1066,9 @@ class HostedCopilot:
                     "MODEL_RESPONSE_TOO_LARGE", "INVALID_MODEL_ENVELOPE",
                     "INVALID_MODEL_JSON", "MODEL_DRAFT_INVALID",
                     "MODEL_NARRATION_INVALID", "DISALLOWED_MODEL_ENDPOINT",
+                    "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
+                    "MODEL_FINISH_REJECTED", "MODEL_DRAFT_JSON_INVALID",
+                    "MODEL_DRAFT_SCHEMA_INVALID",
                 )
                 or raw in {f"PROVIDER_HTTP_{code}" for code in range(400, 600)}
             ) else "LLM_TEST_FAILED"
