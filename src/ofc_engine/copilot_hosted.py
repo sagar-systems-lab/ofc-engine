@@ -26,6 +26,7 @@ from .intake import freeze_proposal
 from .postgres_store import PostgresRevisionStore
 from .qloo import QlooProbeClient, QlooProbeError, search_probe
 from .qloo_catalog import capability_registry, category_for
+from .copilot_resolver import normalize_qloo_search
 from .taste_intelligence import TasteContext, policy_for
 from .revisions import digest_obj
 
@@ -1020,31 +1021,19 @@ class HostedCopilot:
                     self.store, daily_limit=self.qloo_daily_limit
                 ):
                     raise CopilotQuotaReached("QLOO_DAILY_QUOTA_EXHAUSTED")
+                spec = search_probe(
+                    "Nike", entity_type="urn:entity:brand", take=8,
+                )
                 observation = QlooProbeClient(
                     api_key=credential, transport=self.qloo_transport,
-                ).probe(search_probe(
-                    "Taylor Swift", entity_type="urn:entity:artist", take=2,
-                ))
-                body = observation.payload
-                entities = (
-                    body.get("results", {}).get("entities")
-                    if isinstance(body, dict)
-                    and isinstance(body.get("results"), dict)
-                    and body.get("success", True) is True
-                    else None
-                )
-                if (
-                    not isinstance(entities, list) or not entities
-                    or not any(
-                        isinstance(entity, dict)
-                        and isinstance(entity.get("entity_id"), str)
-                        and isinstance(entity.get("name"), str)
-                        and entity.get("entity_id")
-                        and entity.get("name")
-                        for entity in entities
+                ).probe(spec)
+                try:
+                    normalize_qloo_search(
+                        "Nike", entity_type="brand",
+                        spec=spec, observation=observation,
                     )
-                ):
-                    raise QlooProbeError("QLOO_SEARCH_RESPONSE_INVALID")
+                except (EntityResolutionRequired, QlooSelectionRequired):
+                    raise QlooProbeError("QLOO_SEARCH_RESPONSE_INVALID") from None
             else:
                 reserve_model_call(self.store, daily_limit=self.llm_daily_limit)
                 CopilotLLM(
