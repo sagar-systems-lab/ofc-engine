@@ -11,6 +11,10 @@ def draft():
     return {
         "objective": "Select a brand partner",
         "artist_name": "Example Artist",
+        "taste_seed_name": None,
+        "taste_seed_category": None,
+        "discovery_category": None,
+        "taste_location": None,
         "budget_usd": 60000,
         "cities": ["Chicago", "Austin", "Seattle"],
         "choices": [{
@@ -79,6 +83,7 @@ def test_real_provider_request_shape_but_fake_transport(provider):
         assert "generativelanguage.googleapis.com" in url
         assert client.model == "gemini-3.1-flash-lite"
         assert body["generationConfig"]["responseMimeType"] == "application/json"
+        assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "minimal"}
         assert headers["x-goog-api-key"] == "test-key-not-public"
     else:
         assert url == "https://api.groq.com/openai/v1/chat/completions"
@@ -96,7 +101,11 @@ def test_provider_failure_never_invents_plan_or_exposes_raw_data(provider, failu
     )
     with pytest.raises(LLMUnavailable) as exc:
         client.extract("Pick a brand partner")
-    assert str(exc.value) in ("INVALID_MODEL_JSON", "MODEL_DRAFT_INVALID")
+    assert str(exc.value) == {
+        "bad-json": "INVALID_MODEL_JSON",
+        "malformed-draft": "MODEL_DRAFT_SCHEMA_INVALID",
+        "truncated": "MODEL_OUTPUT_TRUNCATED",
+    }[failure]
     assert "private-token-here" not in str(exc.value)
 
 
