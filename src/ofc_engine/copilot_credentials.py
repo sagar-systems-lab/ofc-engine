@@ -193,15 +193,23 @@ class CredentialVault:
             if row is None:
                 result[provider] = {"status": "NOT_CONFIGURED", "configured": False}
                 continue
+            tested_at = row[2]
+            expired = tested_at is None or now - tested_at > timedelta(minutes=30)
             status = row[3]
-            if status in ("ACTIVE", "CONNECTED") and (
-                row[2] is None or now - row[2] > timedelta(minutes=30)
-            ):
+            if status in ("ACTIVE", "CONNECTED") and expired:
                 status = "CHECK_REQUIRED"
             result[provider] = {
                 "status": status,
                 "configured": True,
                 **({"masked_suffix": row[1]} if private else {}),
+                **({"last_test": {
+                    "outcome": row[3],
+                    "checked_at": tested_at.isoformat() if tested_at else None,
+                    "freshness": (
+                        "NOT_TESTED" if tested_at is None
+                        else "EXPIRED" if expired else "RECENT"
+                    ),
+                }} if private else {}),
                 **({"qualification": "CONNECTIVITY_ONLY"} if row[3] == "CONNECTED"
                     and provider == "gemini" else {}),
                 **({"reason_code": row[4]} if private and status == "UNAVAILABLE"
