@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/copilot-workspace.css">
 <script defer src="/copilot-activity.js"></script>
 <script defer src="/copilot-proof.js"></script>
+<script defer src="/copilot-tools.js"></script>
 <script defer src="/copilot-workspace.js"></script>
 </head>
 <body class="studio-page copilot-page">
@@ -75,9 +76,9 @@
             <p class="hint-copy">Reading status never tests an API key or spends provider quota.</p>
           </section>
         </div>
-        <a class="icon-button header-tool" href="/proof" id="demo-entry" aria-label="Try synthetic demo" title="Demo · synthetic, no provider calls"><svg class="ico"><use href="#ofc-icon-flask"/></svg></a>
+        <button class="icon-button header-tool" type="button" id="demo-entry" aria-label="Try synthetic demo" title="Demo · synthetic, no provider calls"><svg class="ico"><use href="#ofc-icon-flask"/></svg></button>
         <button class="icon-button header-tool" id="proof-entry" type="button" disabled aria-label="Proof available after a saved response" title="Proof available after a saved response"><svg class="ico"><use href="#ofc-icon-proof"/></svg></button>
-        <a class="icon-button header-tool" href="/connect" id="settings-entry" aria-label="API connectivity settings" title="Owner API connectivity settings"><svg class="ico"><use href="#ofc-icon-settings"/></svg></a>
+        <button class="icon-button header-tool" type="button" id="settings-entry" aria-label="Open settings" title="Settings"><svg class="ico"><use href="#ofc-icon-settings"/></svg></button>
       </div>
     </header>
     <div class="workspace-layout" id="workspace-layout">
@@ -148,6 +149,80 @@
     <button type="button" id="proof-csv-download" class="secondary-button">Download CSV</button>
   </div>
   <p class="proof-footnote">Qloo ranking does not certify business suitability. No external action is authorized.</p>
+</dialog>
+<dialog class="workspace-dialog demo-dialog" id="demo-dialog" aria-labelledby="demo-title">
+  <div class="evidence-dialog-header">
+    <div><p class="dialog-eyebrow">Illustrative examples · no paid calls</p>
+      <h2 id="demo-title">Explore OFC with synthetic evidence</h2>
+      <p>These four deterministic examples are not live Qloo observations or commercial recommendations.</p></div>
+    <button class="icon-button dialog-close" type="button" id="demo-close" aria-label="Close demo"><svg class="ico"><use href="#ofc-icon-close"/></svg></button>
+  </div>
+  <div class="demo-scenario-grid" role="group" aria-label="Synthetic scenarios">
+    <button type="button" data-demo="repair"><strong>Selective repair</strong><span>Review a mutable choice</span></button>
+    <button type="button" data-demo="outage"><strong>Provider outage</strong><span>Withhold unsupported decisions</span></button>
+    <button type="button" data-demo="dependent_missing"><strong>Missing dependency</strong><span>Investigate pending evidence</span></button>
+    <button type="button" data-demo="budget_exhausted"><strong>Evidence budget</strong><span>Preserve unresolved states</span></button>
+  </div>
+  <div id="demo-result" class="demo-result" role="status" aria-live="polite">
+    Choose a scenario to inspect its synthetic recorded outcome. Nothing is submitted to a model.
+  </div>
+  <div class="dialog-subfooter"><a href="/proof" target="_blank" rel="noopener">Open original fixture lab ↗</a></div>
+</dialog>
+<dialog class="workspace-dialog settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
+  <div class="evidence-dialog-header">
+    <div><p class="dialog-eyebrow">OFC Engine</p><h2 id="settings-title">Settings</h2>
+      <p>Connections, preferences and privacy controls.</p></div>
+    <button class="icon-button dialog-close" type="button" id="settings-close" aria-label="Close settings"><svg class="ico"><use href="#ofc-icon-close"/></svg></button>
+  </div>
+  <div class="settings-layout">
+    <nav class="settings-sections" aria-label="Settings sections">
+      <button type="button" data-settings-tab="connections" aria-current="page">API Connections</button>
+      <button type="button" data-settings-tab="preferences">Preferences</button>
+      <button type="button" data-settings-tab="privacy">Data &amp; Privacy</button>
+      <button type="button" data-settings-tab="about">About</button>
+    </nav>
+    <div class="settings-panels">
+      <section id="settings-connections" class="settings-panel" aria-labelledby="settings-connections-title">
+        <h3 id="settings-connections-title">API Connections</h3>
+        <p>Provider health is read-only for visitors. Credential management requires the server's owner authorization.</p>
+        <div id="settings-public-status" class="settings-status-list">Checking published capability…</div>
+        <div id="settings-owner-gate">
+          <form id="settings-owner-form" class="owner-login">
+            <label for="settings-owner-secret">Owner access secret</label>
+            <input id="settings-owner-secret" type="password" autocomplete="off" spellcheck="false" minlength="40" required>
+            <button class="primary-button" type="submit">Unlock connections</button>
+          </form>
+        </div>
+        <div id="settings-owner-manager" hidden>
+          <div class="settings-owner-heading"><strong>Owner connections</strong><button id="settings-owner-logout" type="button" class="secondary-button">Lock</button></div>
+          <div id="settings-test-quota" class="settings-quota"></div>
+          <div id="settings-owner-providers"></div>
+          <p class="settings-caution">Saving or revoking a key makes no provider call. Testing makes exactly one quota-consuming provider request after explicit confirmation.</p>
+        </div>
+        <p role="status" aria-live="polite" id="settings-owner-feedback" class="settings-feedback"></p>
+        <p class="settings-fallback">Operational fallback: <a href="/connect" target="_blank" rel="noopener">existing connectivity portal ↗</a></p>
+      </section>
+      <section id="settings-preferences" class="settings-panel" aria-labelledby="settings-preferences-title" hidden>
+        <h3 id="settings-preferences-title">Preferences</h3>
+        <label class="settings-choice" for="settings-reduce-motion">
+          <span><strong>Reduce interface motion</strong><small>Disable supplementary panel transitions and decorative movement. System reduced-motion is always respected.</small></span>
+          <input type="checkbox" id="settings-reduce-motion">
+        </label>
+        <p class="settings-muted">Saved only in this browser. The original welcome animation remains controlled by the accessibility setting of your device.</p>
+      </section>
+      <section id="settings-privacy" class="settings-panel" aria-labelledby="settings-privacy-title" hidden>
+        <h3 id="settings-privacy-title">Data &amp; Privacy</h3>
+        <p>Saved runs belong to a cookie-authenticated private visitor session with a 24-hour limit. Downloads remain on your device; no cross-device history is promised.</p>
+        <button type="button" class="secondary-button settings-danger" id="settings-delete-session">Delete current visitor session</button>
+        <p class="settings-muted">Deletion is permanent for the active session. No provider request is made by deletion.</p>
+      </section>
+      <section id="settings-about" class="settings-panel" aria-labelledby="settings-about-title" hidden>
+        <h3 id="settings-about-title">OFC Engine</h3>
+        <p>OFC Engine reviews autonomous-agent cultural decisions against Qloo Taste AI evidence, selectively revises qualified choices and records the difference between OFF and ON.</p>
+        <p>Cultural affinity does not verify contracts, geographical feasibility or commercial outcomes. OFC never authorizes booking, payment or endorsement.</p>
+      </section>
+    </div>
+  </div>
 </dialog>
 <dialog class="run-confirm" id="run-confirm" aria-labelledby="run-confirm-title">
   <h2 id="run-confirm-title">Run live cultural review?</h2>
