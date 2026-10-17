@@ -4,7 +4,7 @@ from __future__ import annotations
 from .copilot_intake import (
     EntityResolutionRequired, QlooSelectionRequired, ResolvedEntity,
 )
-from .qloo import ProbeObservation, ProbeSpec, search_probe
+from .qloo import ProbeObservation, ProbeSpec, qloo_search_entities, search_probe
 from .qloo_catalog import (
     CatalogEvidenceError, category_for, qloo_suggestions,
 )
@@ -34,13 +34,9 @@ def normalize_qloo_search(
         "success" in payload and payload["success"] is not True
     ):
         raise EntityResolutionRequired("SEARCH_RESPONSE_INVALID")
-    results = payload.get("results")
-    if not isinstance(results, dict):
+    entities = qloo_search_entities(payload)
+    if entities is None:
         raise EntityResolutionRequired("SEARCH_RESULTS_MISSING")
-    if not isinstance(results.get("entities"), list) or len(
-        results["entities"]
-    ) > 20:
-        raise EntityResolutionRequired("SEARCH_ENTITIES_UNQUALIFIED")
     try:
         matches = qloo_suggestions(requested_name, category, observation, limit=8)
     except CatalogEvidenceError as exc:
