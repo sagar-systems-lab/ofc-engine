@@ -6,6 +6,7 @@
   const feedback = document.getElementById("feedback");
   const ownerSecret = document.getElementById("owner-secret");
   const providers = [...document.querySelectorAll(".provider")];
+  let connectionTests = null;
 
   const tell = (message) => { feedback.textContent = message; };
 
@@ -23,6 +24,8 @@
 
   function present(report) {
     const statuses = report.providers || {};
+    if (report.connection_tests) connectionTests = report.connection_tests;
+    const exhausted = connectionTests?.remaining === 0;
     for (const node of providers) {
       const provider = node.dataset.provider;
       const data = statuses[provider] || { status: "NOT_CONFIGURED" };
@@ -30,6 +33,7 @@
       const suffix = data.masked_suffix ? " ••••" + data.masked_suffix : "";
       state.textContent = data.status + suffix;
       state.dataset.status = data.status;
+      node.querySelector('button[data-action="test"]').disabled = exhausted;
     }
   }
 
@@ -42,9 +46,13 @@
       const reasons = Object.entries(report.providers || {})
         .filter(([, data]) => data.reason_code)
         .map(([provider, data]) => provider + ": " + data.reason_code);
-      tell(reasons.length
-        ? "Last failed tests: " + reasons.join(" | ") + ". No provider request made."
-        : "Credentials are stored on the OFC server. A configured key is not yet a live connection.");
+      const quota = connectionTests?.remaining === 0
+        ? " Connection tests exhausted (" + connectionTests.used + "/" + connectionTests.limit
+          + "); reset " + connectionTests.resets_at_utc + "." : "";
+      tell((reasons.length
+        ? "Last failed tests: " + reasons.join(" | ") + "."
+        : "Credentials are stored on the OFC server. A configured key is not yet a live connection.")
+        + quota + " Status refresh made no provider request.");
     } catch {
       manager.hidden = true;
       login.hidden = false;
@@ -82,6 +90,11 @@
       path = "/api/owner/credentials";
       payload = { action: "revoke", provider };
     } else if (action === "test") {
+      if (connectionTests?.remaining === 0) {
+        tell("Connection test allowance exhausted. Reset at "
+          + connectionTests.resets_at_utc + ". No provider request made.");
+        return;
+      }
       if (!window.confirm("Make one real provider request? This consumes API quota.")) return;
       path = "/api/owner/test-connection";
       payload = { provider, confirm: "SPEND_ONE_PROVIDER_REQUEST" };
@@ -100,9 +113,17 @@
         ? await request("/api/owner/credentials") : result;
       present(current);
     } catch (error) {
-      tell("Request failed: " + error.message);
+      if (error.message === "CONNECTION_TEST_BUDGET_EXHAUSTED") {
+        connectionTests = { ...connectionTests, remaining: 0 };
+        for (const item of providers) {
+          item.querySelector('button[data-action="test"]').disabled = true;
+        }
+        tell("Connection test quota exhausted. No provider request made.");
+      } else {
+        tell("Request failed: " + error.message);
+      }
     } finally {
-      button.disabled = false;
+      button.disabled = action === "test" && connectionTests?.remaining === 0;
     }
   });
 
