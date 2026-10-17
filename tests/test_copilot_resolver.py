@@ -28,6 +28,31 @@ def observation(name="Example Artist", *, records=None, success=True):
     )
 
 
+def test_real_search_envelope_without_success_is_accepted():
+    from dataclasses import replace
+
+    spec, source = observation()
+    payload = {"results": [{
+        "name": "Example Artist", "entity_id": _A,
+        "types": ["urn:entity:artist"],
+    }]}
+    source = replace(source, payload=payload, top_level_fields=("results",))
+    resolved = normalize_qloo_search(
+        "Example Artist", entity_type="artist", spec=spec,
+        observation=source,
+    )
+    assert resolved.entity_id == _A
+
+
+def test_explicit_qloo_search_failure_still_fails_closed():
+    spec, source = observation(success=False)
+    with pytest.raises(EntityResolutionRequired, match="SEARCH_RESPONSE_INVALID"):
+        normalize_qloo_search(
+            "Example Artist", entity_type="artist", spec=spec,
+            observation=source,
+        )
+
+
 def test_exact_normalized_name_has_scoped_qloo_identity():
     spec, source = observation()
     resolved = normalize_qloo_search(

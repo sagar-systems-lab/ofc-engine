@@ -883,6 +883,7 @@ def test_hosted_copilot_owner_vault_sessions_and_live_shape_with_fake_providers(
     known = {
         "Artist Example": artist, "Brand A": brand_a, "Brand B": brand_b,
         "Taylor Swift": "c70ce2b8-0ad1-4150-bf18-5a6347f2e860",
+        "Nike": "b8540be1-11a5-4920-ac15-bcdf7b06ce3d",
     }
 
     class FakeQloo:
@@ -1547,6 +1548,29 @@ def test_invalid_qloo_success_payload_never_turns_status_green(pg_url):
     }
     assert forbidden.calls == 1 and "never-return-this" not in str(denied)
     assert vault.status(private=True)["qloo"]["reason_code"] == "HTTP_403"
+
+    class RealSearchEnvelope:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            self.calls += 1
+            return TransportReply(200, json.dumps({
+                "results": [
+                    {"entity_id": "c70ce2b8-0ad1-4150-bf18-5a6347f2e860",
+                     "name": "Nike", "types": ["urn:entity:brand"]},
+                ],
+            }).encode())
+
+    live_shape = RealSearchEnvelope()
+    active = HostedCopilot(
+        store, vault, qloo_daily_limit=64, llm_daily_limit=64,
+        browser_daily_limit=40, qloo_transport=live_shape,
+    ).test_connection(owner, "qloo")
+    assert active == {"provider": "qloo", "status": "ACTIVE"}
+    assert live_shape.calls == 1
+    assert vault.status(private=True)["qloo"]["status"] == "ACTIVE"
+    assert "reason_code" not in vault.status(private=True)["qloo"]
 
     from ofc_engine.copilot_llm import JSONReply
 
