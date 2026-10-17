@@ -247,7 +247,17 @@ def qualify(origin: str) -> dict:
                 page.locator("[data-settings-tab=connections]").click()
                 page.locator("#settings-owner-secret").fill("x" * 48)
                 page.locator("#settings-owner-form button").click()
-                page.locator("#settings-owner-manager").wait_for(state="visible")
+                try:
+                    page.locator("#settings-owner-manager").wait_for(
+                        state="visible", timeout=12_000)
+                except PlaywrightTimeout as exc:
+                    raise AssertionError(
+                        f"owner drawer did not unlock: owner_login={calls['owner_login']}, "
+                        f"owner_read={calls['owner_read']}, "
+                        f"status={page.locator('#settings-owner-feedback').inner_text()}, "
+                        f"panel_hidden={page.locator('#settings-connections').is_hidden()}, "
+                        f"js_errors={errors}"
+                    ) from exc
                 assert page.locator("#settings-owner-secret").input_value() == ""
                 assert "API only" in page.locator("#settings-owner-providers").inner_text()
                 assert "1 / 6" in page.locator("#settings-test-quota").inner_text()
