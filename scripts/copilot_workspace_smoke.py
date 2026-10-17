@@ -20,8 +20,47 @@ SAVED = {
     "original_answer": "LLM + Qloo: the baseline cultural ranking is recorded.",
     "ofc_answer": "LLM + Qloo + OFC: a decision still requires review.",
     "model_id": "mock-llm",
+    "plan": {
+        "objective": "Review an artist's brand partnership.",
+        "artist_name": "Example Artist",
+        "budget_usd": 60000,
+        "cities": ["Chicago"],
+        "choices": [
+            {
+                "decision_id": "brand",
+                "domain": "brand",
+                "selected_name": "Brand A",
+                "candidate_names": ["Brand A", "Brand B"],
+                "depends_on": [],
+            },
+            {
+                "decision_id": "afterparty",
+                "domain": "experience",
+                "selected_name": "Experience A",
+                "candidate_names": ["Experience A"],
+                "depends_on": ["brand"],
+            },
+        ],
+    },
     "off": {"ofc_enabled": False, "qloo": {"evidence_digest": "x"}},
-    "on": {"ofc_enabled": True, "qloo": {"evidence_digest": "x"}},
+    "on": {
+        "ofc_enabled": True, "qloo": {"evidence_digest": "x"},
+        "decisions": [
+            {"decision_id": "brand", "changed": True, "candidate_id": "Brand B",
+             "ofc_verdict": "UNCERTAIN"},
+            {"decision_id": "afterparty", "changed": False,
+             "candidate_id": "Experience A", "ofc_verdict": "UNCERTAIN"},
+        ],
+    },
+    "activity": {
+        "source": "PERSISTED_ATTEMPTS", "agent_plan": "OBSERVED",
+        "qloo_evidence": "RANK_OBSERVED", "ofc_review": "OBSERVED",
+        "results": "REVIEW_REQUIRED",
+        "requests": {
+            "search_complete": 3, "search_reserved": 0,
+            "rank_complete": 1, "rank_reserved": 0,
+        },
+    },
     "release_authorized": False,
     "external_action_executed": False,
 }
@@ -136,6 +175,20 @@ def qualify(origin: str) -> dict:
                 )
                 assert calls["session"] == 1
                 assert calls["message"] == 1
+                if width <= 1180:
+                    page.locator("#activity-open").click()
+                page.locator("#activity-rail").wait_for(state="visible")
+                assert "Saved rank observations present" in page.locator("#activity-steps").inner_text()
+                page.locator("#plan-expand").click()
+                assert "Example Artist" in page.locator("#plan-content").inner_text()
+                assert "Agent proposal" in page.locator("#plan-content").inner_text()
+                page.locator("#map-expand").click()
+                graph = page.locator("#map-content").inner_text()
+                assert "Brand A" in graph and "Depends on" in graph
+                assert "Revised by OFC" in graph
+                assert calls["message"] == 1 and calls["provider"] == 0
+                if width <= 1180:
+                    page.locator("#activity-hide").click()
                 if width == 1440:
                     page.screenshot(path=str(review / "copilot-saved-fixture-desktop.png"),
                                     full_page=True)
