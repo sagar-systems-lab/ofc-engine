@@ -1,33 +1,37 @@
-# 90-second judge walkthrough
+# OFC Engine — self-service evaluation
 
-**Open:** https://ofc-fixture-preview.onrender.com/#plan
+**Live application:** https://ofc-fixture-preview.onrender.com/
 
-**0:00–0:15 · PROPOSE.** Click **Review the Qloo-backed tour**. An autonomous agent proposes a fictional $60,000 three-city emerging-artist tour, with a fixed shortlist and six decisions. Five choices are operator-constructed, unverified hypotheses.
+OFC Engine is a pre-execution **cultural decision reviewer**, not a replacement for a general-purpose conversational model. It grounds one bounded proposed action in Qloo observations, selectively revises the supported mutable choice and records what remained unverified.
 
-**0:15–0:30 · QLOO CHECK.** Without evidence the brand is UNCERTAIN. A previously acquired **genuine Qloo brand-affinity ranking** changes the decision to REPAIR. The public visitor does not call Qloo again.
+## Test with your own request
 
-**0:30–0:45 · REPAIR.** Only the allowed brand candidate changes. Independent opener and venues stay as proposed. The brand and dependent afterparty require rechecking. The repair is committed to revision 1.
+After completing the introductory scope notice, write your own prompt. The presently qualified real-data decision is **a named artist selecting between two to five named brand candidates**. Supply the original candidate selection so the system has a fair baseline. Names and wording are up to the evaluator; results are not limited to a particular artist or pair of brands.
 
-**0:45–1:05 · VERIFY.** Inspect the six verdicts, pending rechecks, observation time, original/current plan digests and hash-linked journal. The observed rank does not verify venues, contracts, attendance or budget.
+The app extracts a structured proposal and may ask for clarification or explicit Qloo entity selection. Every live request requires approval and uses shared model/Qloo quota. For free, repeatable error demonstrations, open the clearly labeled synthetic-scenario menu instead.
 
-**1:05–1:25 · HANDOFF.** OFC refuses execution: REVIEW_REQUIRED / WITHHELD. No booking, payment or transfer occurs. Safe decision infrastructure must reject unsupported authority.
+Once a live review is saved, verify these invariants:
 
-**1:25–1:30 · Boundary.** The blank editor below is a different plan and cannot inherit Qloo evidence. Synthetic examples are separate.
+- **Shared evidence:** OFF and ON refer to the same Qloo observations and model identity. OFF retains the original proposal; ON may revise only a qualified mutable decision.
+- **Recheck:** A brand revision requires two ordered, matching and recent rank observations bound to the same candidate scope.
+- **Proof:** Comparison, decision map and saved JSON/CSV export show the actual selected choices, revision, source/provenance and remaining uncertainties. Reloading does not rerun Qloo.
+- **Fail-closed boundaries:** Unresolvable names, unavailable Qloo, disagreements, expired session, exhausted budget and tampered evidence cannot become a fabricated PASS.
+- **No external actions:** Cultural affinity alone never approves contracts, bookings, budgets, endorsements or payments.
 
-## English project description for Devpost
+## Multi-city and unsupported decisions
 
-**OFC Engine — Pre-execution decision control for AI agents**
+Structured proposals can include cities, dependent decisions and unverified place choices. **Venue/locality policy evaluation is not live-qualified**; it can be observed without implying business suitability, or explicitly marked NOT_EVALUATED to preserve bounded provider quota. The system must not present these decisions as fully approved. A demonstrated brand repair is not evidence that an entire tour is ready to execute.
 
-AI agents can assemble plans rapidly, but a plausible recommendation is not automatically evidence-backed. OFC Engine freezes a proposed plan's choices and constraints, reviews narrowly scoped cultural-affinity evidence, repairs only the choice that evidence supports, and requires revision-bound verification before any high-impact action.
+OFC is not intended to answer general knowledge, coding, open-ended web research or document-understanding questions. The app's scope guide describes those exclusions.
 
-Our working demonstration is a fictional $60,000 emerging-artist tour across Chicago, Austin and Seattle. Six choices are fixed in advance. One previously acquired real Qloo brand-affinity response supports changing a single brand partner within its original candidate pool. OFC commits that bounded repair in PostgreSQL, preserves independent choices, invalidates dependent checks and maintains a hash-linked audit journal.
+## Separate historical walkthrough
 
-Judges can inspect the same frozen plan with Qloo evidence OFF and ON, follow the brand change, and review the post-repair blockers through a five-step hosted walkthrough. Public visitors require no credentials and never generate additional Qloo API requests.
+The recorded tour at https://ofc-fixture-preview.onrender.com/studio.html#plan retains a fixed $60,000 three-city plan with historical Qloo evidence. It is a **read-only** historical example with one observed rank, not a fresh call and not a claim of independently repeated live evidence. The live Copilot above is the interactive experience.
 
-OFC deliberately **withholds action** because five supporting choices and independent rechecks remain unverified. A brand-affinity ranking does not certify full-tour cultural fit, business results or provider authenticity. No real bookings, payments or other external actions are executed.
+## Deployment and reproducibility
 
-**Demo:** https://ofc-fixture-preview.onrender.com/#plan
+The root app is hosted externally. The source ships with an MIT license, setup instructions, isolated PostgreSQL integration tests, browser qualification and synthetic replay/negative fixtures. A fresh local install runs without private credentials in synthetic-only mode; the live hosted backend requires owner-managed keys and private Postgres configuration.
 
-**Open-source code (public release pending):** https://github.com/sagar-systems-lab/ofc-engine
+**Access:** The production website currently limits per-session submissions and provider calls. If capacity is unavailable during a test, the user-facing status must identify quota/availability rather than fabricate evidence; increase capacity only after provider/billing review.
 
-**Stack:** Python, PostgreSQL, Qloo /v2/insights, static web Studio, deterministic tests and Chromium qualification.
+Source and architecture: [README](../README.md), [Try it](TRY_IT.md), [Product contract](PROJECT.md).

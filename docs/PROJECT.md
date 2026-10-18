@@ -2,6 +2,12 @@
 
 OFC Engine sits between an autonomous agent's proposal and external action: **PROPOSE → CHECK → REPAIR → VERIFY → HANDOFF**.
 
+## Two distinct public evidence experiences
+
+**Live Copilot (root website):** A private-session visitor provides a natural-language artist/brand proposal with a selected brand and two to five candidates. The server extracts typed decisions with a bounded LLM request, performs exact Qloo entity resolution, uses independently repeated ranking evidence for eligible brand decisions, and returns immutable OFF/ON comparisons. Optional multi-city/dependent or non-brand plan choices remain unqualified unless supported by separate evidence. Strict provider quotas, signed owner-managed credential access and no external-action policy apply.
+
+**Historical recorded Studio (`/studio.html#plan`):** A frozen read-only six-choice tour with one earlier Qloo brand rank. This legacy sample is neither a fresh provider result nor an independent rank recheck.
+
 ## Hosted, bounded tour
 
 The published tour is a fictional $60,000 Chicago–Austin–Seattle emerging-artist scenario. Six decisions are frozen: one brand, opener, three venues and a brand-dependent afterparty. The five non-brand choices are **operator-constructed, unverified hypotheses**.
@@ -12,7 +18,7 @@ The PostgreSQL audit journal, baseline/current digests, Qloo request fingerprint
 
 ## Verification is deliberately narrow
 
-RANK PASS means only that the revised brand is top ranked inside the frozen shortlist; it does not certify the opener, venues, artist identity, ticket demand, contracts, budget or cultural suitability. The provider response is **not cryptographically attested or independently rechecked**. The other five decisions remain UNCERTAIN. The revision-bound handoff is REVIEW_REQUIRED / WITHHELD. No real action occurs.
+RANK PASS means only that the revised brand is top ranked inside the frozen shortlist; it does not certify the opener, venues, artist identity, ticket demand, contracts, budget or cultural suitability. The historical Studio's single provider response is **not cryptographically attested or independently rechecked**. The separately deployed live Copilot performs two rank observations before a brand revision; provider-authenticated business suitability remains outside that qualification. The other five decisions remain UNCERTAIN. The revision-bound handoff is REVIEW_REQUIRED / WITHHELD. No real action occurs.
 
 Qloo OFF/ON is a same-baseline evidence-conditioned decision comparison, not business-outcome causal proof.
 
