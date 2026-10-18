@@ -113,7 +113,10 @@ def test_readiness_controls_are_bounded_without_new_endpoints():
     assert 'id="run-confirm-budget"' in page
     assert "Server availability is separate" in script
     assert 'limits.qloo_requests_remaining' in script
-    assert 'state.runs.length >= 4' in script
+    assert 'state.runs.length >= state.sessionMessageLimit' in script
+    assert 'caps.session_message_limit' in script
+    assert 'saved.session_message_limit' in script
+    assert 'session_message_limit' in web.joinpath("copilot-workspace.js").read_text()
     assert 'prompt.length > 4000' in script
     assert 'file.size > 16 * 1024' in script
     assert 'content.length > 3000' in script
