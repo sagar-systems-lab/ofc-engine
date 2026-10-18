@@ -534,6 +534,21 @@ class HostedCopilot:
         full_required = 1 + len(combined_names) + len(catalog_domains) + brand_rechecks
         return core_required, full_required
 
+    @classmethod
+    def _catalog_budget_scope(cls, draft: CopilotDraft, catalog_domains: dict,
+                              seed_category: str, qloo_remaining: int
+                              ) -> tuple[dict, dict, int]:
+        core, full = cls._qloo_budget_projection(
+            draft, catalog_domains, seed_category,
+        )
+        supports_brand = seed_category == "artist" and any(
+            choice.domain.lower() in ("brand", "partner", "brand_partner")
+            for choice in draft.choices
+        )
+        if supports_brand and catalog_domains and core <= qloo_remaining < full:
+            return {}, dict(catalog_domains), core
+        return dict(catalog_domains), {}, full
+
     @staticmethod
     def _public_pair(pair, draft, brands: dict, artist) -> dict:
         """Expose human names, not private Qloo entity IDs or raw provider captures."""
@@ -799,17 +814,11 @@ class HostedCopilot:
                 )
 
             if native_discovery is None:
-                core_required, full_required = self._qloo_budget_projection(
+                catalog_domains, catalog_skipped, required = self._catalog_budget_scope(
                     draft, catalog_domains, seed_category,
+                    self._capacity()["qloo_requests_remaining"],
                 )
-                remaining = self._capacity()["qloo_requests_remaining"]
-                if supported and catalog_domains and core_required <= remaining < full_required:
-                    # Preserve the qualified brand path; optional observations
-                    # never receive a policy PASS and may be explicitly withheld.
-                    catalog_skipped = dict(catalog_domains)
-                    catalog_domains = {}
-                    full_required = core_required
-                self._capacity(required_qloo=full_required)
+                self._capacity(required_qloo=required)
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
             artist = (
