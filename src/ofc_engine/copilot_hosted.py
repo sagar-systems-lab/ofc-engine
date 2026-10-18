@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import secrets
+import psycopg
 from time import monotonic
 
 from .copilot_activity import activity_projection
@@ -96,6 +97,8 @@ class HostedCopilot:
         self.session_message_limit = session_message_limit
         self.model_transport = model_transport
         self.qloo_transport = qloo_transport
+        self.control_runtime = None
+        self.graph_intake = False
         with store._connect() as db:
             for table in (
                 "copilot_sessions", "copilot_messages", "copilot_search",
@@ -508,6 +511,7 @@ class HostedCopilot:
             raise ValueError("LLM_NOT_CONFIGURED")
         return CopilotLLM(
             provider=selected, api_key=key, transport=self.model_transport,
+            intake_profile="graph" if self.graph_intake else "standard",
         )
 
     def _reviewer(self):
@@ -1108,6 +1112,17 @@ class HostedCopilot:
                 "release_authorized": False,
                 "external_action_executed": False,
             }
+            if self.control_runtime is not None:
+                try:
+                    aliases = {item.entity_id: name for name, item in brands.items()}
+                    result["control_review"] = self.control_runtime.import_proposal(
+                        proposal, self.store, actor_id=session_id, labels=aliases,
+                    )
+                except (ValueError, psycopg.Error):
+                    result["control_review"] = {
+                        "status": "UNAVAILABLE", "additional_provider_calls": 0,
+                        "external_action_executed": False,
+                    }
             self._complete(run_id, result)
             _log.info("COPILOT_STAGE stage=total_run duration_ms=%d",
                       round((monotonic() - started) * 1000))
@@ -1181,6 +1196,7 @@ class HostedCopilot:
             "selected_llm_provider": chosen,
             "capacity": self._capacity(),
             "session_message_limit": self.session_message_limit,
+            "max_extracted_decisions": 64 if self.graph_intake else 6,
             "qloo_catalog": capability_registry(),
             "release_authorized": False,
         }
