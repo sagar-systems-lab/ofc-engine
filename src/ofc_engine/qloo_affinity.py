@@ -8,6 +8,7 @@ from math import isfinite
 from pathlib import Path
 import re
 from typing import Any
+from uuid import UUID
 
 from .qloo import ProbeSpec, brand_affinity_probe
 
@@ -16,6 +17,16 @@ _HEX64 = re.compile(r"^[a-f0-9]{64}$")
 
 class AffinityCaptureError(ValueError):
     pass
+
+
+def _canonical_uuid(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 36:
+        return None
+    try:
+        canonical = str(UUID(value))
+    except (ValueError, AttributeError):
+        return None
+    return canonical if canonical == value.lower() else None
 
 
 def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
@@ -30,10 +41,12 @@ def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
     raw_pool = params.get("filter.results.entities", "")
     candidates = tuple(raw_pool.split(","))
     artist_id = params.get("signal.interests.entities")
+    canonical_pool = [_canonical_uuid(candidate) for candidate in candidates]
     if (not 2 <= len(candidates) <= 5 or not artist_id
-            or any(not candidate for candidate in candidates)
-            or len(set(candidates)) != len(candidates)):
+            or any(candidate is None for candidate in canonical_pool)
+            or len(set(canonical_pool)) != len(candidates)):
         raise AffinityCaptureError("INVALID_QUERY_POOL")
+    requested = dict(zip(canonical_pool, candidates))
 
     if not isinstance(capture, dict):
         raise AffinityCaptureError("INVALID_CAPTURE")
@@ -70,8 +83,8 @@ def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
     for entity in entities:
         if not isinstance(entity, dict):
             raise AffinityCaptureError("INVALID_RESULT_ENTITY")
-        entity_id = entity.get("entity_id")
-        if not isinstance(entity_id, str) or entity_id not in candidates:
+        entity_id = requested.get(_canonical_uuid(entity.get("entity_id")))
+        if entity_id is None:
             raise AffinityCaptureError("UNEXPECTED_RESULT_ENTITY")
         # Insights returns the generic taxonomy; brand scope is query-bound.
         if entity.get("type") != "urn:entity":
