@@ -2190,6 +2190,8 @@ def test_native_qloo_discovery_from_candidate_free_taste_prompt(pg_url):
 
 def test_multicity_judge_request_retains_qualified_brand_review(pg_url):
     from cryptography.fernet import Fernet
+    from threading import Lock
+    from time import sleep
     from urllib.parse import parse_qs, urlsplit
     from ofc_engine.copilot_credentials import CredentialVault
     from ofc_engine.copilot_hosted import HostedCopilot
@@ -2212,13 +2214,23 @@ def test_multicity_judge_request_retains_qualified_brand_review(pg_url):
         def __init__(self):
             self.searches = []
             self.ranks = 0
+            self.lock = Lock()
+            self.active_searches = 0
+            self.max_concurrent_searches = 0
 
         def get(self, url, headers, *, timeout, max_bytes):
             route = urlsplit(url)
             if route.path == "/search":
                 query = parse_qs(route.query)
                 name = query["query"][0]
-                self.searches.append(name)
+                with self.lock:
+                    self.active_searches += 1
+                    self.max_concurrent_searches = max(
+                        self.max_concurrent_searches, self.active_searches)
+                sleep(0.05)
+                with self.lock:
+                    self.searches.append(name)
+                    self.active_searches -= 1
                 assert name in names, "unqualified place search cannot spend a call"
                 body = {"success": True, "results": {"entities": [{
                     "name": name, "entity_id": names[name], "type": "urn:entity",
@@ -2303,6 +2315,7 @@ def test_multicity_judge_request_retains_qualified_brand_review(pg_url):
     assert result["qloo_search_requests"] == 3
     assert result["qloo_rank_requests"] == 2
     assert fake_qloo.ranks == 2 and len(fake_qloo.searches) == 3
+    assert fake_qloo.max_concurrent_searches >= 2
     assert fake_model.calls == 3
     observations = result["on"]["qloo"]["catalog_observations"]
     assert len(observations) == 3
