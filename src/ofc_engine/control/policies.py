@@ -16,6 +16,10 @@ from .models import CAUSAL_EDGES, Evidence, Node, Plan, instant
 
 POLICY_VERSION = "control-policy/1"
 DOMAIN_REQUIREMENTS = {
+    "audience": ("audience_suitability", "contract_rights"),
+    "channel": ("channel_suitability", "contract_rights"),
+    "media": ("media_suitability", "contract_rights"),
+    "collaborator": ("collaborator_suitability", "contract_rights"),
     "brand": ("cultural_brand_rank", "contract_rights"),
     "venue": ("venue_capacity", "contract_rights", "schedule_window"),
     "place": ("place_cultural_observation", "contract_rights"),
@@ -86,6 +90,7 @@ MANIFEST.update(
                 ("channel_suitability", "channel"),
                 ("media_suitability", "media"),
                 ("collaborator_suitability", "collaborator"),
+                ("audience_suitability", "audience"),
             )
         },
     }
@@ -100,6 +105,9 @@ POLICY_SOURCE_DIGESTS = {
         "engine.py",
         "verifier.py",
         "ownership.py",
+        "collection_contracts.py",
+        "feeds.py",
+        "collection.py",
     )
 }
 POLICY_DIGEST = digest({"manifest": MANIFEST, "implementation": POLICY_SOURCE_DIGESTS})
@@ -115,6 +123,8 @@ def required_claims(plan: Plan, node: Node) -> tuple[str, ...]:
             continue
         if claim not in claims:
             claims.append(claim)
+    if node.start_at is not None and "schedule_window" not in claims:
+        claims.append("schedule_window")
     if plan.budgets and "budget_quote" not in claims:
         claims.append("budget_quote")
     return tuple(claims)
@@ -302,6 +312,7 @@ def _facts_valid(node: Node, claim: str, item: Evidence) -> bool:
         "channel_suitability",
         "media_suitability",
         "collaborator_suitability",
+        "audience_suitability",
     ):
         return (
             facts.get("candidate_id") == node.candidate_id
@@ -332,7 +343,14 @@ def evaluate_claim(
         for item in all_supplied
         if item.input_digest == claim_fingerprint(plan, node.id, claim)
     ]
-    supplied = scoped or all_supplied
+    fresh = [
+        item
+        for item in scoped
+        if instant(item.observed_at) <= at < instant(item.expires_at)
+        and (at - instant(item.observed_at)).total_seconds()
+        <= MANIFEST[claim]["max_age_seconds"]
+    ]
+    supplied = fresh or scoped or all_supplied
     result = {
         "claim": claim,
         "status": "UNCERTAIN",
@@ -422,9 +440,9 @@ def evaluate(
             parent = evidence_by_id.get(parent_id)
             if parent is None:
                 return False
-            return (
-                resolve(parent.node_id, parent.claim, active | {key})["status"]
-                == "QUALIFIED"
+            value = resolve(parent.node_id, parent.claim, active | {key})
+            return value["status"] == "QUALIFIED" and parent_id in value.get(
+                "evidence_ids", []
             )
 
         value = evaluate_claim(

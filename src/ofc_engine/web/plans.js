@@ -220,11 +220,11 @@ async function show(proof, elapsed) {
   $("node-count").textContent = proof.current.nodes.length;
   $("request-count").textContent = proof.provider_calls;
   $("revision-label").textContent = "REVISION 0 → " + proof.revision;
-  $("source-badge").textContent = proof.mode === "SYNTHETIC" ? "Synthetic sandbox" : "Private capture replay";
+  $("source-badge").textContent = proof.mode === "SYNTHETIC" ? "Synthetic sandbox" : proof.provider_calls ? "Private source review" : "Private capture replay";
   $("headline").textContent = changed ? `${changed === 1 ? "One change." : changed + " changes."} Every consequence.` : proof.optimization.status === "PRESERVED" ? "A correction must earn its place." : "Uncertain evidence. A clear boundary.";
   $("subtitle").textContent = changed ? `${changed} evidence-supported change${changed === 1 ? "" : "s"}. ${proof.impact.invalidated.length} dependent checks reopened. ${proof.impact.preserved.length} candidate choices untouched. External actions withheld.` : "The original choices remain unchanged. Missing or conflicting evidence cannot become permission to act.";
-  $("duration").textContent = `${Math.round(elapsed)} ms local round trip · 0 provider calls`;
-  $("footer-source").textContent = `${proof.mode === "SYNTHETIC" ? "Synthetic policy test" : "Saved capture replay"} · no provider requests`;
+  $("duration").textContent = `${Math.round(elapsed)} ms round trip · ${proof.provider_calls} provider call${proof.provider_calls === 1 ? "" : "s"}`;
+  $("footer-source").textContent = `${proof.mode === "SYNTHETIC" ? "Synthetic policy test" : proof.provider_calls ? "Scoped source review" : "Saved capture replay"} · ${proof.provider_calls} provider requests`;
   $("download-proof").disabled = false;
   renderGraph(); renderCompare(); renderEvidence(); renderTrace();
   select(proof.impact.changed[0] || proof.current.nodes[0].id);

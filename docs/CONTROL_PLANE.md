@@ -26,11 +26,12 @@ The optimizer compares hard-constraint feasibility, unmet qualified rank obligat
 | Claim | Accepted input | Scope of a successful policy check |
 |---|---|---|
 | Brand cultural rank | Two distinct compatible scoped observations | Repeatable rank within the frozen pool; one upstream source |
-| Place cultural observation | Locality-bound source observation | Observation only; no venue or booking qualification |
+| Place cultural observation / relevance | Locality-bound observations; two consistent ranks for relevance | Observation or scoped cultural relevance; no venue or booking qualification |
 | Budget quote | Pinned operator signature, cost, currency, fees, expiry | Quoted input matches the selected candidate |
 | Venue capacity | Pinned operator signature, venue, required capacity, exact window | Signed capacity and availability assertion covers the declared request |
 | Contract rights | Pinned operator signature and scoped contract reference | Required attestation is present; not legal certification |
 | Schedule window | Pinned operator signature and exact UTC interval | Declared interval is attested; not traffic prediction |
+| Audience, channel, media, collaborator suitability | Pinned signed suitability and scope assertions | Local policy qualification only; no action authority |
 
 Private evidence requires a trusted issuer key, exact tenant/subject/pool/locality, policy version, input fingerprint, origin, and freshness. Derived claims also require qualified provenance parents. Fixture evidence cannot qualify private reviews. An LLM or caller-provided signature does not establish trust.
 
@@ -64,7 +65,7 @@ Use a dedicated staging database first. `ofc_control` is an additive private sch
 5. Configure `OFC_CONTROL_AUTHORITIES` as pinned public-key records containing `issuer`, `tenant_id`, base64 `public_key`, allowed `claims`, `source`, `expires_at`, and `revoked`. A revoked or expired key cannot qualify evidence. Apply key revocation/rotation by changing this configuration and restarting the service.
 6. Set `OFC_CONTROL_MODE=PRIVATE`. Do not enable a production rollout solely because the sandbox passes.
 
-The database stores encrypted private request/result payloads. It never stores provider credentials. Review/event writes and revision CAS are transactional. Workers use bounded leases; PostgreSQL claims use `FOR UPDATE SKIP LOCKED`. An expired lease becomes `RECOVERY_REQUIRED`, not an automatic upstream retry. The default runtime performs local evaluation and capture replay. A provider-independent planner can be injected with an explicitly offline transport; no live transport is installed. No new live collector is enabled.
+The database stores encrypted private request/result payloads. It never stores provider credentials. Review/event writes and revision CAS are transactional. Workers use bounded leases; PostgreSQL claims use `FOR UPDATE SKIP LOCKED`. An expired lease becomes `RECOVERY_REQUIRED`, not an automatic upstream retry. The default runtime performs local evaluation and capture replay. The optional graph collector has an HTTPS transport, with durable per-call reservations, account/grant quotas, encrypted response capture, and explicit unknown-outcome reconciliation. It remains disabled until the separately configured collection gate and zero-price capability grants are supplied. Worker leases renew during bounded source waits.
 
 To attach graph reviews to new Copilot results, configure `OFC_CONTROL_CAPTURE_ISSUER` and a base64 raw Ed25519 `OFC_CONTROL_CAPTURE_SIGNER`. The corresponding pinned authority must be a Qloo-adapter issuer for the `copilot` tenant. It attests to validated saved captures, not a Qloo-issued signature. Existing completed observations are checked against their original query/baseline hashes and replayed without another Qloo request. Missing or expired captures remain unqualified.
 
@@ -77,6 +78,10 @@ python -m ofc_engine.control.verifier saved-proof.json --expected-digest TRUSTED
 python -m ofc_engine.control.verifier private-proof.json --authorities trusted-authorities.json
 python -m ofc_engine.control.benchmark --output evaluation.json
 python scripts/control_browser_smoke.py
+python -m ofc_engine.control.acceptance \
+  --manifest tests/fixtures/control_acceptance_manifest.json \
+  --expected-digest "$(cat tests/fixtures/control_acceptance_lock.txt)"
+python scripts/control_load.py --sources --count 8
 ```
 
 Private proofs contain normalized restricted evidence. Deliver them only to authorized reviewers; they are not public Qloo datasets. The browser checks hash/journal consistency. The Python verifier also reconstructs policies, patches, impacted nodes, obligations, comparisons, and journal semantics. Its authority keys must be independently pinned, not trusted merely because they appear in an exported record.
@@ -102,16 +107,63 @@ Foreign-owner nodes are read-only unless a server-configured grant binds tenant,
 
 ## Evidence, telemetry and retention
 
-`EvidencePlanner` reserves claim scopes durably before invoking an injected offline adapter. Reservations bind account, entitlement, locality, pool and claim fingerprint; enforce RPM/RPD/total/concurrency limits; and reject unknown outcomes instead of blindly retrying. `RecordedEvidenceAdapter` normalizes existing source records. Account, parser version, entitlement and protected raw-payload commitments are explicit. Expired cache payloads can be evicted without deleting quota reservations. There is no configured live collection path, automatic paid retry or inferred provider-origin signature.
+`GraphCollector` reconciles only required claim scopes at every repair round. It reserves calls durably before I/O, freezes round inputs, and binds caches to tenant, account, entitlement, policy, city, pool, and input fingerprint. Fresh Qloo captures retain their original observation/expiry times on reuse; expired captures require new admitted tickets. Signed business records remain bound to their original frozen plan. RPM/RPD/total/per-review/concurrency and absolute collection deadlines are enforced. Unknown outcomes are never automatically retried; `reconcile` requires an explicit usage check and matching response digest. Entitlement revocation is durable. `RecordedEvidenceAdapter` and the offline planner remain available for captured inputs.
 
-`GET /api/control/reviews/{id}/trace` exports authenticated, redacted controller spans. `scripts/control_load.py` profiles a bounded local worker queue. These are local controller measurements; provider inference/search/rank and real cold-host performance remain unmeasured until an authorized adapter supplies them. Saved private reviews poll cursor events without resubmitting and expose explicit recovery.
+`GET /api/control/reviews/{id}/trace` exports authenticated, redacted spans and OTLP JSON. Queue, controller, search, rank, extraction, inference, narration, attestation, policy, optimization, recheck, CAS, and proof stages share parent/child correlation. Existing Copilot model/Qloo spans are carried into imported graph reviews. Percentiles separate source, simulation, and process cold/warm classes; process classification is not infrastructure cold-start certification. `scripts/control_load.py` profiles the local queue. Saved reviews poll persisted source stages with cursors, without resubmitting, and expose explicit recovery.
 
 `GET /api/control/reviews/{id}/public-proof` exports commitments only. It omits normalized facts, labels, actors and locality. `public_projection` optionally signs the projection; `verify_projection` requires an independent signature key or pinned projection digest. It cannot establish the undisclosed private claims. Retained private proofs require their exact pinned verifier policy; `VerifierRegistry` refuses unknown versions. Contract revisions `/1` remain the first stable isolated API revision; they are not silently renamed. `contracts` provides negotiation, an action contract, source-preserving migration ledgers and source round trips.
 
-Run `python scripts/control_security_gate.py` and `python scripts/control_rehearsal.py` for source/license gates and an isolated encrypted SQLite backup/restore/key-rotation rehearsal. Neither changes production. PostgreSQL restore, production key rotation and multi-process qualification remain separate checks.
+Run `python scripts/control_security_gate.py`, `python scripts/control_canary.py`, and `python scripts/control_rehearsal.py` for source/license gates and an isolated encrypted SQLite backup/restore/key-rotation rehearsal. Neither changes production. PostgreSQL restore, production key rotation and multi-process qualification remain separate checks.
 
 ## Registered evaluation and research
 
-`evaluation` publishes 410 deterministic synthetic case IDs with 260 development and 150 reserved cases, sealed-label commitments, immutable experiment digests, exact confusion/abstention denominators, Wilson and bootstrap intervals, and all five comparator slots. Labels must be sealed with an externally held key; the committed synthetic generator is not an independently blinded study. Missing comparator arms remain `NOT_MEASURED`. An acceptance index requires independently signed holdout certification and passing hard gates; no study has been certified here.
+`acceptance` registers 410 executable development cases with locked policy/oracle hashes. `evaluation` publishes a separate 560-ID corpus contract with 410 development and 150 holdout IDs, sealed-label commitments, immutable experiment digests, exact confusion/abstention denominators, Wilson and bootstrap intervals, and all five comparator slots. Labels must be sealed with an externally held key; the committed synthetic generator is not an independently blinded study. Missing comparator arms remain `NOT_MEASURED`. An acceptance index requires independently signed holdout certification and passing hard gates; no study has been certified here.
 
 `research` defines consent-required feedback, keyed blind assignment, source/scorer IDs and explicitly stated financial assumptions. Empty studies are `NOT_RUN`; reported avoided loss is not a causal ROI claim. `/api/control/intake` accepts explicitly authenticated synthetic typed campaigns through durable admission and preserves their original objective and pools; it never calls a language model or converts cultural affinity into a business authorization.
+
+
+## Optional source configuration
+
+`OFC_CONTROL_COLLECTION=ENABLED` installs the graph collector only in the private runtime. No source is configured by the sandbox. `OFC_CONTROL_SOURCES` is a JSON list of one to eight entries:
+
+```json
+{
+  "origin": "https://hackathon.api.qloo.com",
+  "token_env": "QLOO_SOURCE_TOKEN",
+  "issuer": "licensed-qloo-adapter",
+  "signer_env": "QLOO_ADAPTER_SIGNER",
+  "grant": {
+    "id": "account-grant",
+    "tenant_id": "your-tenant",
+    "provider": "qloo",
+    "account_scope": "your-account",
+    "entitlement_id": "confirmed-free-entitlement",
+    "claims": ["cultural_brand_rank", "place_cultural_relevance"],
+    "expires_at": "2030-01-01T00:00:00Z",
+    "allow_live": true,
+    "free_entitlement": true,
+    "unit_cost_minor": 0,
+    "rpm": 20,
+    "rpd": 100,
+    "total": 100,
+    "per_review": 16,
+    "concurrency": 2,
+    "timeout_ms": 10000
+  }
+}
+```
+
+The example is one entry, rather than the enclosing list, and contains no credentials. An operator must confirm the entitlement is free before enabling it. Qloo origins are pinned to the documented API hosts. The adapter signer must match an independently configured `Authority`, including account and entitlement. `resolve_entities: true` permits the admitted, cached `/search` resolver; ambiguous names require confirmation. Brand rank collection uses fixed entity pools; place queries additionally bind exact locality.
+
+For a signed business feed, use `provider: operator`, a pinned HTTPS `origin`, `token_env`, and optional `path` (default `/evidence`). The collector POSTs the exact claim scope. The response must be an `ofc.source-evidence/1` envelope with matching `account_scope`, `entitlement_id`, and at most eight signed `Evidence` records. The sender's public keys must already be pinned in `OFC_CONTROL_AUTHORITIES`. A response cannot introduce its own trusted issuer. Capacity, rights, budget, schedule, and suitability remain separate claims.
+
+Collection receipts are signed by `OFC_CONTROL_JOURNAL_ISSUER` and raw base64 Ed25519 `OFC_CONTROL_JOURNAL_SIGNER`; `OFC_CONTROL_JOURNAL_PUBLIC_KEY` must independently match. A submitted plan must also allow nonzero `limits.provider_calls`, while `limits.spend_minor` remains zero. Grant and plan bounds both apply. No automatic retry can exceed them.
+
+A collected proof uses `ofc.collected-review/1` around its independently verifiable control proof. Verify it with the same pinned source authorities and a JSON mapping from journal issuer to base64 public key:
+
+```sh
+python -m ofc_engine.control.verifier private-proof.json \
+  --authorities trusted-authorities.json --collection-keys trusted-journals.json
+```
+
+Delegated plans additionally require `--delegations trusted-delegations.json`. Retained verifier bundles accept the same external anchors. See [implementation coverage](CONTROL_COVERAGE.md) for the code-check mapping and unmeasured qualification boundaries.

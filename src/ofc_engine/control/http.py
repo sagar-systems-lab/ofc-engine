@@ -202,7 +202,16 @@ class ControlHTTPMixin:
                 self._copilot_reply(
                     200,
                     capabilities()
-                    | {"private_api_enabled": self.server.control is not None},
+                    | {
+                        "private_api_enabled": self.server.control is not None,
+                        "collection": self.server.control.acquisition.capabilities()
+                        if self.server.control is not None
+                        and hasattr(self.server.control.acquisition, "capabilities")
+                        else {
+                            "pipeline_available": False,
+                            "live_collection_enabled": False,
+                        },
+                    },
                 )
             elif path == "/api/control/schema" and not parts.query:
                 self._copilot_reply(200, ReviewRequest.model_json_schema())

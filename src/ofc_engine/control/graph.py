@@ -209,10 +209,25 @@ def constraints(plan: Plan) -> list[dict]:
                 ):
                     status, reason = "BLOCKED", "EXCLUSIVE_RESOURCE_OVERLAP"
         elif edge.type == "CONSUMES_BUDGET":
-            c = chosen[left.id]
-            if c.cost_minor is None or c.currency != edge.budget_currency:
+            consumers = [
+                nodes[e.source]
+                for e in plan.edges
+                if e.type == "CONSUMES_BUDGET"
+                and e.target == edge.target
+                and e.budget_currency == edge.budget_currency
+            ]
+            costs = [chosen[n.id] for n in consumers]
+            total = sum(
+                c.cost_minor
+                for c in costs
+                if c.cost_minor is not None and c.currency == edge.budget_currency
+            )
+            if any(
+                c.cost_minor is None or c.currency != edge.budget_currency
+                for c in costs
+            ):
                 status, reason = "UNCERTAIN", "BUDGET_EDGE_INPUT_MISSING"
-            elif c.cost_minor > edge.budget_limit_minor:
+            elif total > edge.budget_limit_minor:
                 status, reason = "BLOCKED", "BUDGET_EDGE_EXCEEDED"
         elif edge.type == "APPROVAL_REQUIRES":
             status, reason = "UNCERTAIN", "SCOPED_HUMAN_APPROVAL_REQUIRED"

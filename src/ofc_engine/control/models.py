@@ -20,6 +20,7 @@ Claim = Literal[
     "channel_suitability",
     "media_suitability",
     "collaborator_suitability",
+    "audience_suitability",
 ]
 EdgeType = Literal[
     "REQUIRES",
@@ -131,7 +132,8 @@ class Limits(Strict):
     max_expansions: int = Field(default=4096, ge=1, le=65536)
     max_rounds: int = Field(default=3, ge=1, le=3)
     deadline_ms: int = Field(default=200, ge=1, le=2000)
-    provider_calls: Literal[0] = 0
+    provider_calls: int = Field(default=0, ge=0, le=128)
+    collection_deadline_ms: int = Field(default=30000, ge=1, le=120000)
     spend_minor: Literal[0] = 0
 
 
@@ -156,6 +158,18 @@ class Plan(Strict):
             raise ValueError("duplicate node id")
         if len({b.currency for b in self.budgets}) != len(self.budgets):
             raise ValueError("duplicate budget currency")
+        budget_scopes = {}
+        for edge in self.edges:
+            if edge.type == "CONSUMES_BUDGET":
+                key = (edge.target, edge.budget_currency)
+                if (
+                    key in budget_scopes
+                    and budget_scopes[key] != edge.budget_limit_minor
+                ):
+                    raise ValueError("budget edges must share one bucket limit")
+                budget_scopes[key] = edge.budget_limit_minor
+            if edge.buffer_seconds and edge.type != "TEMPORAL_BEFORE":
+                raise ValueError("temporal buffer only applies to temporal edges")
         seen, adjacency, indegree = (
             set(),
             {k: [] for k in nodes},

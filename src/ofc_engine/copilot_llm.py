@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import re
 import socket
 from typing import Protocol
 from urllib.error import HTTPError, URLError
@@ -250,18 +249,22 @@ _PAIR_RULES = (
 )
 
 
+from .control.telemetry import instrument
+
+
 class CopilotLLM:
     """Text→typed draft only; evidence, repairs and release remain server-owned."""
 
     def __init__(
         self, *, provider: str, api_key: str,
         transport: JSONTransport | None = None, timeout: float = 15.0,
-        intake_profile: str = "standard",
+        intake_profile: str = "standard", trace=None,
     ) -> None:
         if provider not in ("gemini", "groq"):
             raise ValueError("unsupported LLM provider")
         if intake_profile not in ("standard", "graph"):
             raise ValueError("unsupported intake profile")
+        self.trace = trace
         self.intake_profile = intake_profile
         if not isinstance(api_key, str) or not api_key.strip() or any(
             c in api_key for c in "\r\n"
@@ -359,6 +362,7 @@ class CopilotLLM:
         ):
             raise LLMUnavailable("MODEL_PROBE_INVALID")
 
+    @instrument("inference")
     def extract(self, prompt: str, *, prior_plan: dict | None = None) -> CopilotDraft:
         if (
             not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= _MAX_PROMPT
@@ -486,6 +490,7 @@ class CopilotLLM:
         except (ValueError, TypeError):
             raise LLMUnavailable("MODEL_DRAFT_SCHEMA_INVALID") from None
 
+    @instrument("narration")
     def narrate_pair(self, pair, *, prompt: str) -> PairNarration:
         """Narrate one saved comparison; Qloo is shared, only OFC changes."""
         from .copilot_compare import CopilotPair
@@ -570,6 +575,7 @@ class CopilotLLM:
         except (KeyError, IndexError, TypeError, ValueError):
             raise LLMUnavailable("MODEL_NARRATION_INVALID") from None
 
+    @instrument("narration")
     def narrate_arm(self, pair, *, prompt: str, mode: str) -> str:
         """One inference arm; OFF never receives OFC's reviewed decisions."""
         from hashlib import sha256

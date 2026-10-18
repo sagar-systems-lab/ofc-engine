@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 import secrets
+from datetime import datetime, timezone
 import sqlite3
 import time
 from urllib.parse import urlsplit
@@ -11,7 +12,7 @@ from cryptography.fernet import Fernet, InvalidToken
 import psycopg
 
 from .canonical import canonical_bytes, digest, strict_json
-from .models import ReviewRequest, utc_now
+from .models import ReviewRequest
 from .policies import POLICY_DIGEST
 from .verifier import verify
 
@@ -51,6 +52,7 @@ class ControlStore:
         initialize: bool = False,
         clock=time.time,
     ):
+        self.collection_keys = {}
         self.delegations = ()
         self.tenant_weights = {}
         self.location, self.clock = str(location), clock
@@ -168,6 +170,14 @@ class ControlStore:
             db.execute(
                 f"create index if not exists control_retention_expiry on {self.prefix}retention(tenant_id,expires_at)"
             )
+            from .collection import migrate_tables
+
+            migrate_tables(self, db)
+            self._run(
+                db,
+                f"insert into {self.prefix}schema_versions values(3,?) on conflict(version) do nothing",
+                (int(self.clock()),),
+            )
             if self.postgres:
                 for table in (
                     "reviews",
@@ -260,7 +270,11 @@ class ControlStore:
             raise ValueError("private review clock is server controlled")
         frozen = request.data()
         frozen["as_of"] = (
-            utc_now() if private or request.as_of is None else request.as_of
+            datetime.fromtimestamp(self.clock(), timezone.utc)
+            .isoformat(timespec="microseconds")
+            .replace("+00:00", "Z")
+            if private or request.as_of is None
+            else request.as_of
         )
         packed = {"input": original, "frozen": frozen}
         encoded = self._encode(packed, private=private)
@@ -432,7 +446,10 @@ class ControlStore:
         if value["current_digest"] != row[2] or value["revision"] != row[3]:
             raise IntegrityError("review revision mismatch")
         verify(
-            value, trusted_authorities=authorities, trusted_delegations=self.delegations
+            value,
+            trusted_authorities=authorities,
+            trusted_delegations=self.delegations,
+            trusted_collection_keys=self.collection_keys,
         )
         return value
 
@@ -515,7 +532,10 @@ class ControlStore:
 
     def finish(self, job, proof, *, authorities=None):
         verify(
-            proof, trusted_authorities=authorities, trusted_delegations=self.delegations
+            proof,
+            trusted_authorities=authorities,
+            trusted_delegations=self.delegations,
+            trusted_collection_keys=self.collection_keys,
         )
         encoded = self._encode(proof, private=proof["mode"] == "PRIVATE")
         with self._tx(write=True) as db:
@@ -579,6 +599,11 @@ class ControlStore:
                     (review_id, version),
                 ).rowcount
                 if count:
+                    self._run(
+                        db,
+                        f"update {self.prefix}provider_io set state='UNKNOWN_OUTCOME' where review_id=? and state='SENT'",
+                        (review_id,),
+                    )
                     self._append(
                         db,
                         review_id,
@@ -607,7 +632,10 @@ class ControlStore:
 
     def commit_round(self, job, number, proof, *, authorities=None):
         verify(
-            proof, trusted_authorities=authorities, trusted_delegations=self.delegations
+            proof,
+            trusted_authorities=authorities,
+            trusted_delegations=self.delegations,
+            trusted_collection_keys=self.collection_keys,
         )
         packed = self._encode(proof, private=proof["mode"] == "PRIVATE")
         with self._tx(write=True) as db:
@@ -727,7 +755,41 @@ class ControlStore:
                     f"insert into {self.prefix}tombstones values(?,?,?,?,?,?,?,'retention/1')",
                     (rid, tenant_id, actor, key, input_hash, head, int(self.clock())),
                 )
-                for table in ("intents", "events", "revisions", "retention", "traces"):
+                source_rows = self._run(
+                    db,
+                    f"select call_id,payload,payload_digest from {self.prefix}provider_io where review_id=? and tenant_id=?",
+                    (rid, tenant_id),
+                ).fetchall()
+                for call_id, payload, payload_hash in source_rows:
+                    original = self._decode(payload, payload_hash)
+                    cache_key = original.get("scope", {}).get("cache_key")
+                    if cache_key:
+                        self._run(
+                            db,
+                            f"delete from {self.prefix}claim_cache where cache_key=? and tenant_id=?",
+                            (cache_key, tenant_id),
+                        )
+                    erased = {
+                        "retention": "retention/1",
+                        "original_commitment": payload_hash,
+                    }
+                    self._run(
+                        db,
+                        f"update {self.prefix}provider_io set payload=?,payload_digest=?,response=null where call_id=?",
+                        (
+                            self._encode(erased, private=self.cipher is not None),
+                            digest(erased),
+                            call_id,
+                        ),
+                    )
+                for table in (
+                    "intents",
+                    "events",
+                    "revisions",
+                    "retention",
+                    "traces",
+                    "collection_rounds",
+                ):
                     self._run(
                         db,
                         f"delete from {self.prefix}{table} where review_id=?",
@@ -803,18 +865,31 @@ class ControlStore:
             "revisions": (("payload", "payload_digest"),),
             "attempts": (("payload", "payload_digest"),),
             "traces": (("payload", "payload_digest"),),
+            "provider_io": (
+                ("payload", "payload_digest"),
+                ("response", "response_digest"),
+            ),
+            "claim_cache": (("payload", "payload_digest"),),
+            "entity_cache": (("payload", "payload_digest"),),
+            "collection_rounds": (("payload", "payload_digest"),),
         }
         with self._tx(write=True) as db:
             for table, columns in tables.items():
                 primary = (
-                    "intent_id"
+                    "call_id"
+                    if table == "provider_io"
+                    else "cache_key"
+                    if table in {"claim_cache", "entity_cache"}
+                    else "intent_id"
                     if table == "intents"
                     else "scope_id"
                     if table == "attempts"
                     else "review_id"
                 )
                 for payload_col, hash_col in columns:
-                    extra = ",round" if table == "revisions" else ""
+                    extra = (
+                        ",round" if table in {"revisions", "collection_rounds"} else ""
+                    )
                     rows = self._run(
                         db,
                         f"select {primary},{payload_col},{hash_col}{extra} from {self.prefix}{table} where {payload_col} is not null",
@@ -833,3 +908,41 @@ class ControlStore:
                             args,
                         )
         self.cipher = replacement
+
+    def note(self, job, kind, payload):
+        if kind not in {
+            "SOURCE_SENT",
+            "SOURCE_OBSERVED",
+            "EVIDENCE_RECONCILED",
+            "RECHECK_QUEUED",
+            "NOT_EVALUATED",
+        }:
+            raise ValueError("unregistered collection event")
+        with self._tx(write=True) as db:
+            changed = self._run(
+                db,
+                f"update {self.prefix}reviews set version=version+1 where review_id=? and version=? and lease_owner=? and lease_until>?",
+                (job["review_id"], job["version"], job["owner"], int(self.clock())),
+            ).rowcount
+            if changed != 1:
+                raise Conflict("collection coordinator lease lost")
+            self._append(db, job["review_id"], kind, payload)
+        return job | {"version": job["version"] + 1}
+
+    def renew(self, job, *, lease_seconds=30):
+        if not 1 <= lease_seconds <= 300:
+            raise ValueError("invalid lease extension")
+        with self._tx(write=True) as db:
+            changed = self._run(
+                db,
+                f"update {self.prefix}reviews set lease_until=? where review_id=? and tenant_id=? and actor_id=? and lease_owner=? and lease_until>?",
+                (
+                    int(self.clock()) + lease_seconds,
+                    job["review_id"],
+                    job["tenant_id"],
+                    job["actor_id"],
+                    job["owner"],
+                    int(self.clock()),
+                ),
+            ).rowcount
+        return changed == 1

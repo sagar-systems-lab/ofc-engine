@@ -66,6 +66,17 @@ def main():
             assert verify(json.loads(saved.read_text()))["valid"]
             page.get_by_role("tab", name="Impact graph").click()
             page.locator(".input-details").evaluate("element => element.open = true")
+            page.locator("#scenario").select_option("cascade")
+            page.wait_for_function("() => document.getElementById('run-review').disabled === false && document.getElementById('changed-count').textContent === '2'")
+            assert page.locator("#preserved-count").inner_text() == "20"
+            assert page.locator("#revision-label").inner_text() == "REVISION 0 → 2"
+            with page.expect_download() as connected_download:
+                page.get_by_role("button", name="Export proof").click()
+            connected = args.output / "connected-review-proof.json"
+            connected_download.value.save_as(str(connected))
+            connected_proof = json.loads(connected.read_text())
+            assert connected_proof["impact"]["changed"] == ["B01", "D01"]
+            assert verify(connected_proof)["valid"]
             for scenario in ("preserve", "abstain", "stale", "conflict"):
                 page.locator("#scenario").select_option(scenario)
                 page.wait_for_function("() => document.getElementById('run-review').disabled === false && document.getElementById('changed-count').textContent === '0'")
@@ -84,7 +95,8 @@ def main():
             assert not external and not errors, {"external": external, "errors": errors}
             browser.close()
         print(json.dumps({"result": "PASS", "viewports": report, "external_requests": 0,
-                          "provider_calls": 0, "javascript_errors": 0, "proof_verified": True}))
+                          "provider_calls": 0, "javascript_errors": 0, "proof_verified": True,
+                          "connected_rounds_verified": 2}))
     finally:
         server.shutdown(); server.server_close(); worker.join(timeout=3)
 

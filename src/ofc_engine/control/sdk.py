@@ -42,8 +42,8 @@ class ControlClient:
         with build_opener(_NoRedirect()).open(
             request, timeout=self.timeout
         ) as response:
-            raw = response.read(2_000_001)
-            if len(raw) > 2_000_000:
+            raw = response.read(8_000_001)
+            if len(raw) > 8_000_000:
                 raise ValueError("response exceeds size limit")
             return json.loads(raw)
 

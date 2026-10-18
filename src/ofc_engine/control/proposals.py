@@ -20,10 +20,14 @@ class ProposalInput(Strict):
 
 def preview(runtime, review_id, identity, payload):
     proposal = ProposalInput.model_validate_json(json.dumps(payload))
+    from .ownership import review_actor, authorized
+    from .models import utc_now
+
+    owner = review_actor(runtime, review_id, identity, permission="read")
     proof = runtime.store.proof(
         review_id,
         identity.tenant_id,
-        identity.actor_id,
+        owner,
         authorities=runtime.authorities,
     )
     if (
@@ -80,7 +84,23 @@ def preview(runtime, review_id, identity, payload):
                 ],
             }
         )
-    proposed = apply_patches(plan, proposal.patches)
+    node_map = {n.id: n for n in plan.nodes}
+    for patch in proposal.patches:
+        node = node_map.get(patch.node_id)
+        if node is None or not authorized(
+            runtime.delegations,
+            tenant_id=identity.tenant_id,
+            owner=node.owner,
+            delegate=identity.actor_id,
+            plan_digest=plan.digest,
+            nodes=(node.id,),
+            permission="patch",
+            at=utc_now(),
+        ):
+            raise PermissionError("NODE_OWNER_MUTATION_DENIED")
+    proposed = apply_patches(
+        plan, proposal.patches, authorized_nodes={p.node_id for p in proposal.patches}
+    )
     return {
         "status": "DRY_RUN_ONLY",
         "eligibility": eligibility,

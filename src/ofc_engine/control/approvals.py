@@ -37,12 +37,28 @@ def create_intent(runtime, review_id, identity, data):
         raise ValueError("intent expiry must be within one hour")
     if len(request.node_ids) != len(set(request.node_ids)):
         raise ValueError("duplicate intent resource")
-    owner = review_actor(runtime, review_id, identity, request.node_ids)
+    owner = review_actor(
+        runtime, review_id, identity, request.node_ids, permission="read"
+    )
     proof = runtime.store.proof(
         review_id, identity.tenant_id, owner, authorities=runtime.authorities
     )
     if not set(request.node_ids) <= {n["id"] for n in proof["current"]["nodes"]}:
         raise ValueError("intent resource outside reviewed plan")
+    from .ownership import authorized
+
+    for node in proof["current"]["nodes"]:
+        if node["id"] in request.node_ids and not authorized(
+            runtime.delegations,
+            tenant_id=identity.tenant_id,
+            owner=node["owner"],
+            delegate=identity.actor_id,
+            plan_digest=proof["current_digest"],
+            nodes=(node["id"],),
+            permission="approve",
+            at=utc_now(),
+        ):
+            raise PermissionError("NODE_APPROVER_DELEGATION_REQUIRED")
     payload = {
         "schema": "ofc.approval-intent/1",
         "review_id": review_id,

@@ -13,15 +13,17 @@ SCORER = "decision-confusion/1"
 
 
 def corpus_manifest(seed=18731):
-    ids = [f"case-{i:04}" for i in range(410)]
+    ids = [f"case-{i:04}" for i in range(560)]
     random.Random(seed).shuffle(ids)
     return {
         "schema": "ofc.corpus/1",
         "generator": "campaign-mutations/1",
         "seed": seed,
-        "development": ids[:260],
-        "holdout": ids[260:],
-        "case_count": 410,
+        "development": ids[:410],
+        "holdout": ids[410:],
+        "case_count": 560,
+        "development_count": 410,
+        "holdout_count": 150,
         "scorer": SCORER,
         "qualification": "SYNTHETIC_CORPUS",
         "independent_validation": False,
@@ -144,14 +146,54 @@ def acceptance_index(report, certificate=None, *, independent_public_key=None):
     ):
         raise ValueError("validation certificate scope mismatch")
     if any(
-        r.get("status") == "NOT_MEASURED"
-        or r.get("FP", 1) > 0
-        or r.get("FN", 1) > 0
-        or r.get("evaluated", 0) < 150
+        r.get("status") == "NOT_MEASURED" or r.get("evaluated", 0) < 150
         for r in report["comparators"].values()
     ):
+        return {"index": None, "reason": "COMPARATOR_COVERAGE_REQUIRED"}
+    controlled = report["comparators"]["controlled"]
+    gates = claims.get("hard_gates", {})
+    required = {
+        "zero_unauthorized_actions",
+        "zero_false_passes",
+        "all_patch_invariants",
+        "zero_unapproved_provider_calls",
+        "three_independent_domain_claims",
+        "independent_replay",
+        "live_slo_met",
+        "external_adopter_value",
+    }
+    if controlled.get("FP", 1) > 0 or not all(
+        gates.get(name) is True for name in required
+    ):
         return {"index": None, "reason": "HARD_GATES_UNMET"}
-    return {"index": 99, "qualification": "INDEPENDENTLY_ATTESTED_HOLDOUT_ONLY"}
+    dimensions = claims.get("dimension_results", {})
+    weights = {
+        "interoperability": (10, 30),
+        "graph": (15, 80),
+        "grounding": (20, 60),
+        "repair": (20, 60),
+        "safety": (15, 60),
+        "reproducibility": (8, 410),
+        "operations": (7, 30),
+        "adoption": (5, 1),
+    }
+    points = 0
+    for name, (weight, minimum) in weights.items():
+        value = dimensions.get(name, {})
+        passed, total = value.get("passed"), value.get("total")
+        if (
+            type(passed) is not int
+            or type(total) is not int
+            or not 0 <= passed <= total
+            or total < minimum
+        ):
+            return {"index": None, "reason": "DIMENSION_DENOMINATOR_UNQUALIFIED"}
+        points += weight * 100 * passed // total
+    return {
+        "index": points // 100,
+        "score_basis_points": points,
+        "qualification": "INDEPENDENTLY_ATTESTED_DECLARED_SCOPE",
+    }
 
 
 def bootstrap_interval(outcomes, *, seed=592, resamples=1000):
@@ -204,3 +246,40 @@ def registered_requests(manifest, *, split):
             "request": ReviewRequest.parse(data).data(),
             "source": "SYNTHETIC_REGISTERED_MUTATION",
         }
+
+
+def score_outcomes(gold, observed):
+    if set(gold) != set(observed):
+        raise ValueError("outcome denominator mismatch")
+    total_affected = found_affected = total_unqualified = false_pass = unsafe = 0
+    classification = {}
+    predicted = {}
+    unknown = proper_abstention = 0
+    for key, label in gold.items():
+        result = observed[key]
+        expected = label.get("repair")
+        if expected is None:
+            unknown += 1
+            proper_abstention += int(result.get("abstained") is True)
+        else:
+            classification[key] = bool(expected)
+            predicted[key] = result.get("repaired")
+        affected = set(label.get("affected", []))
+        found = set(result.get("invalidated", []))
+        total_affected += len(affected)
+        found_affected += len(affected & found)
+        if label.get("mandatory_evidence_qualified") is False:
+            total_unqualified += 1
+            false_pass += int(result.get("qualified") is True)
+        unsafe += int(result.get("external_action_executed") is True)
+    return {
+        "binary": confusion(classification, predicted),
+        "unassessable": unknown,
+        "proper_abstention": proper_abstention,
+        "affected_denominator": total_affected,
+        "affected_found": found_affected,
+        "missed_affected": total_affected - found_affected,
+        "unqualified_denominator": total_unqualified,
+        "false_passes": false_pass,
+        "unsafe_release_count": unsafe,
+    }

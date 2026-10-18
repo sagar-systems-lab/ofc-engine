@@ -65,4 +65,6 @@ OFC does not execute bookings, transfers or payments. The demonstrated outcome i
 
 An opt-in control service reviews up to 64 decisions, typed dependencies, scoped evidence, currency limits, and masked repair batches. The graph explorer shows exactly which choices changed, which obligations reopened, and which choices remained untouched. Agent clients receive durable review IDs, ordered events, and independently checkable control records.
 
+Connected reviews can collect fresh claim evidence between bounded repair rounds. Optional Qloo and signed business-feed adapters enforce account, entitlement, locality, quota, and deadline scopes; their durable tickets prevent blind retries after a crash. Source collection requires separate operator configuration and a confirmed zero-price entitlement. The default sandbox makes no provider requests.
+
 Run `OFC_CONTROL_MODE=SANDBOX python -m ofc_engine.hosted_preview` and open `/plans` for a keyless, synthetic 30-decision example. Private PostgreSQL admission, signed input attestations, saved Copilot capture replay, and the optional expanded natural-language intake require separate configuration. The hosted default remains unchanged. See [plan review operations and contracts](docs/CONTROL_PLANE.md).

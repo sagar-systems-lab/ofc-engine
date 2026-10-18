@@ -26,6 +26,9 @@ _MODULES = (
     "engine.py",
     "verifier.py",
     "ownership.py",
+    "collection_contracts.py",
+    "feeds.py",
+    "collection.py",
 )
 
 
@@ -80,7 +83,11 @@ def build_bundle(
 
 
 def verify_bundle(
-    raw: bytes, *, public_key: bytes | None = None, expected_sha256: str | None = None
+    raw: bytes,
+    *,
+    public_key: bytes | None = None,
+    expected_sha256: str | None = None,
+    expected_policy_digest: str | None = None,
 ):
     if (
         len(raw) > 5_000_000
@@ -115,10 +122,18 @@ def verify_bundle(
         expected_files.update("src/ofc_engine/control/" + name for name in _MODULES)
         if (
             manifest.get("schema") != "ofc.verifier-bundle/1"
-            or manifest.get("policy_digest") != POLICY_DIGEST
+            or manifest.get("policy_digest")
+            != (expected_policy_digest or POLICY_DIGEST)
             or manifest.get("release_qualification") != "SOFTWARE_ARTIFACT_ONLY"
             or manifest.get("external_action_authorized") is not False
-            or set(manifest["files"]) != expected_files
+            or (
+                expected_policy_digest in (None, POLICY_DIGEST)
+                and set(manifest["files"]) != expected_files
+            )
+            or (
+                expected_policy_digest not in (None, POLICY_DIGEST)
+                and expected_sha256 is None
+            )
         ):
             raise ValueError("unsupported verifier manifest")
         if set(manifest["files"]) != set(names) - {"manifest.json"}:

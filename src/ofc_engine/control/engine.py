@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from itertools import product
 from copy import deepcopy
+from contextlib import nullcontext
 import json
 from time import monotonic_ns
 
 from .canonical import digest
 from .graph import claim_fingerprint, constraints, impact, recheck_state
-from .models import Patch, Plan, ReviewRequest
+from .models import Patch, Plan, ReviewRequest, Evidence
 from .policies import (
     Authority,
     MANIFEST,
@@ -129,7 +130,11 @@ def decision_options(
                     not in ("cultural_brand_rank", "place_cultural_relevance")
                 ]
                 # Rank is cultural utility, not a substitute for alternative-specific money or permissions.
-                needs_business = bool(plan.budgets) or node.domain != "brand"
+                needs_business = (
+                    bool(plan.budgets)
+                    or node.domain != "brand"
+                    or not evaluation["synthetic"]
+                )
                 if needs_business and verdict["upstream_blockers"]:
                     continue
                 if needs_business and (
@@ -292,7 +297,11 @@ def optimize(
             for patch in patches:
                 node = next(n for n in candidate.nodes if n.id == patch.node_id)
                 needed = joint[node.id]["claims"]
-                if node.domain == "brand" and not plan.budgets:
+                if (
+                    node.domain == "brand"
+                    and not plan.budgets
+                    and evaluation["synthetic"]
+                ):
                     needed = [c for c in needed if c["claim"] == "cultural_brand_rank"]
                 if (
                     not needed
@@ -379,6 +388,8 @@ def _single_review(
     authorities: dict[str, Authority] | None = None,
     optimizer=optimize,
     authorized_nodes=(),
+    trace=None,
+    parent=None,
 ) -> dict:
     request = ReviewRequest.parse(request.data())
     plan, evidence = request.plan, request.evidence
@@ -404,7 +415,8 @@ def _single_review(
         "FROZEN",
         {"digest": plan.digest, "revision": 0, "policy_digest": POLICY_DIGEST},
     )
-    original_verdicts = evaluate(plan, evidence, **kwargs)
+    with trace.span("policy", parent=parent) if trace else nullcontext():
+        original_verdicts = evaluate(plan, evidence, **kwargs)
     _event(
         events,
         "EVALUATED",
@@ -413,17 +425,18 @@ def _single_review(
             "evidence_root": digest([e.data() for e in evidence]),
         },
     )
-    optimization = (
-        optimizer(
-            plan,
-            original_verdicts,
-            evidence=evidence,
-            evaluation=kwargs,
-            authorized_nodes=authorized_nodes,
+    with trace.span("optimize", parent=parent) if trace else nullcontext():
+        optimization = (
+            optimizer(
+                plan,
+                original_verdicts,
+                evidence=evidence,
+                evaluation=kwargs,
+                authorized_nodes=authorized_nodes,
+            )
+            if optimizer is optimize
+            else optimizer(plan, original_verdicts)
         )
-        if optimizer is optimize
-        else optimizer(plan, original_verdicts)
-    )
     patches = tuple(
         Patch.model_validate_json(json.dumps(p)) for p in optimization["patches"]
     )
@@ -451,7 +464,8 @@ def _single_review(
             "INVALIDATED",
             {"nodes": affected["invalidated"], "paths": affected["paths"]},
         )
-    verdicts = evaluate(current, evidence, **kwargs)
+    with trace.span("recheck", parent=parent) if trace else nullcontext():
+        verdicts = evaluate(current, evidence, **kwargs)
     rechecks = []
     for key in affected["recheck_order"]:
         node = next(n for n in current.nodes if n.id == key)
@@ -563,6 +577,9 @@ def review(
     optimizer=optimize,
     on_round=None,
     delegations=(),
+    reconcile=None,
+    trace=None,
+    parent=None,
 ):
     request = ReviewRequest.parse(request.data())
     from .ownership import authorized
@@ -583,16 +600,25 @@ def review(
         )
     }
     current, rounds, seen = request.plan, [], {request.plan.digest}
-    started = monotonic_ns()
+    elapsed = 0
+    evidence, as_of = request.evidence, request.as_of
     for index in range(request.plan.limits.max_rounds):
+        if reconcile is not None:
+            evidence, as_of = reconcile(current, evidence, index + 1, as_of)
+        started = monotonic_ns()
         step = _single_review(
-            request.model_copy(update={"plan": current}),
+            request.model_copy(
+                update={"plan": current, "evidence": evidence, "as_of": as_of}
+            ),
             authorities=authorities,
             anchor_digest=request.plan.digest,
             optimizer=optimizer,
             authorized_nodes=authorized_nodes,
+            trace=trace,
+            parent=parent,
         )
-        if index and not step["patches"] and len(rounds) == 1:
+        elapsed += monotonic_ns() - started
+        if index and not step["patches"] and len(rounds) == 1 and reconcile is None:
             break
         rounds.append(step)
         if on_round:
@@ -603,12 +629,12 @@ def review(
         if not step["patches"] or current.digest in seen:
             break
         seen.add(current.digest)
-        if (monotonic_ns() - started) // 1_000_000 >= request.plan.limits.deadline_ms:
+        if elapsed // 1_000_000 >= request.plan.limits.deadline_ms:
             break
-    return cascade_record(request, rounds)
+    return cascade_record(request, rounds, authorities=authorities)
 
 
-def cascade_record(request, rounds):
+def cascade_record(request, rounds, *, authorities=None):
     current = Plan.parse(rounds[-1]["current"])
     if len(rounds) == 1:
         return rounds[0]
@@ -618,6 +644,8 @@ def cascade_record(request, rounds):
         baseline=request.plan.data(),
         baseline_digest=request.plan.digest,
         baseline_verdicts=rounds[0]["baseline_verdicts"],
+        frozen_at=request.as_of,
+        initial_evidence=[e.data() for e in request.evidence],
         revision=sum(bool(r["patches"]) for r in rounds),
         rounds=rounds,
         termination="FIXED_POINT"
@@ -654,9 +682,33 @@ def cascade_record(request, rounds):
         }
         for k, v in sorted(changes.items())
     ]
+    comparison_verdicts = evaluate(
+        request.plan,
+        tuple(Evidence.model_validate_json(json.dumps(e)) for e in result["evidence"]),
+        baseline_digest=request.plan.digest,
+        as_of=result["as_of"],
+        synthetic=request.mode == "SYNTHETIC",
+        authorities=authorities,
+    )
+    static = {n.id: n.candidate_id for n in request.plan.nodes}
+    for key, rank in _rank_options(request.plan, comparison_verdicts).items():
+        static[key] = rank["order"][0]
     result["comparison"] = rounds[0]["comparison"] | {
-        "controlled": {n.id: n.candidate_id for n in current.nodes}
+        "static_rank_rule": static,
+        "evaluation_as_of": result["as_of"],
+        "shared_evidence_root": result["evidence_root"],
+        "controlled": {n.id: n.candidate_id for n in current.nodes},
     }
+    events = []
+    for number, step in enumerate(rounds, 1):
+        for event in step["events"]:
+            _event(events, event["kind"], event["payload"] | {"round": number})
+    result["events"], result["journal_head"] = events, events[-1]["hash"]
+    result["rechecks"] = [
+        dict(check, round=number)
+        for number, step in enumerate(rounds, 1)
+        for check in step["rechecks"]
+    ]
     result.pop("proof_digest", None)
     result["proof_digest"] = digest(result)
     return result

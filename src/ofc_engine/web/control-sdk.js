@@ -63,11 +63,15 @@ export class ControlClient {
     }
     const response = await fetch(this.origin + path, options);
     const body = await response.text();
-    if (body.length > 2000000) throw Error("RESPONSE_TOO_LARGE");
+    if (body.length > 8000000) throw Error("RESPONSE_TOO_LARGE");
     const value = JSON.parse(body);
     if (!response.ok) {
       const error = Error(value.error || "REVIEW_UNAVAILABLE");
       error.fields = value.validation_errors || [];
+      error.code = value.error || "TRANSPORT_UNAVAILABLE";
+      error.status = response.status;
+      error.writeRetryAllowed = false;
+      error.retryableRead = [429,503].includes(response.status);
       throw error;
     }
     return value;

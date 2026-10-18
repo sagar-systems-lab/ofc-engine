@@ -66,6 +66,7 @@ def configured_control(environment):
         if signer
         else None
     )
+    acquisition = configured_collection(environment, store, authorities)
     return (
         True,
         ControlRuntime(
@@ -75,6 +76,73 @@ def configured_control(environment):
             capture_issuer=issuer or None,
             delegations=grants,
             approval_keys=approval_keys,
+            acquisition=acquisition,
         ),
         ControlAccess(tokens),
+    )
+
+
+def configured_collection(environment, store, authorities):
+    if environment.get("OFC_CONTROL_COLLECTION", "") != "ENABLED":
+        return None
+    from .collection import GraphCollector, SourceBinding
+    from .collection_contracts import CollectionGrant
+    from .feeds import SourceHTTP, QlooGraphSource, SignedBusinessSource
+
+    raw = environment.get("OFC_CONTROL_SOURCES", "[]")
+    if len(raw) > 65536:
+        raise ValueError("oversized source configuration")
+    entries = json.loads(raw)
+    if not 1 <= len(entries) <= 8:
+        raise ValueError("one to eight explicitly scoped sources required")
+    bindings = []
+    for item in entries:
+        grant = CollectionGrant.model_validate_json(json.dumps(item["grant"]))
+        if not grant.allow_live:
+            raise ValueError(
+                "source configuration needs an explicit live capability grant"
+            )
+        secret = environment.get(item["token_env"], "")
+        origin = item["origin"]
+        if grant.provider == "qloo":
+            if origin not in {"https://hackathon.api.qloo.com", "https://api.qloo.com"}:
+                raise ValueError("Qloo source origin is not pinned")
+            issuer = item["issuer"]
+            key = Ed25519PrivateKey.from_private_bytes(
+                base64.b64decode(environment.get(item["signer_env"], ""), validate=True)
+            )
+            authority = authorities.get(issuer)
+            if (
+                authority is None
+                or authority.source != "qloo"
+                or authority.tenant_id != grant.tenant_id
+                or authority.provider_account_scope != grant.account_scope
+                or authority.entitlement_id != grant.entitlement_id
+                or authority.public_key != key.public_key().public_bytes_raw()
+            ):
+                raise ValueError("source signer must match a pinned account authority")
+            adapter = QlooGraphSource(
+                SourceHTTP(origin, token=secret, header="X-Api-Key"),
+                issuer=issuer,
+                signing_key=key,
+            )
+        else:
+            adapter = SignedBusinessSource(
+                SourceHTTP(origin, token="Bearer " + secret),
+                path=item.get("path", "/evidence"),
+            )
+        bindings.append(SourceBinding(grant, adapter))
+    issuer = environment.get("OFC_CONTROL_JOURNAL_ISSUER", "")
+    key = Ed25519PrivateKey.from_private_bytes(
+        base64.b64decode(
+            environment.get("OFC_CONTROL_JOURNAL_SIGNER", ""), validate=True
+        )
+    )
+    expected = base64.b64decode(
+        environment.get("OFC_CONTROL_JOURNAL_PUBLIC_KEY", ""), validate=True
+    )
+    if not issuer or expected != key.public_key().public_bytes_raw():
+        raise ValueError("independently pinned journal public key required")
+    return GraphCollector(
+        store, bindings, authorities=authorities, issuer=issuer, signing_key=key
     )

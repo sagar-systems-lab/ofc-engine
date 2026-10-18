@@ -190,14 +190,18 @@ def qloo_search_entities(payload: object) -> list | None:
     return entities if isinstance(entities, list) and len(entities) <= 20 else None
 
 
+from .control.telemetry import instrument
+
+
 class QlooProbeClient:
     """Explicitly initiated exploratory reads; never feeds policy or external actions."""
 
-    def __init__(self, *, api_key: str, transport: Transport | None = None, timeout: float = 8) -> None:
+    def __init__(self, *, api_key: str, transport: Transport | None = None, timeout: float = 8, trace=None) -> None:
         if not api_key or not api_key.strip() or "\r" in api_key or "\n" in api_key:
             raise QlooProbeError("API_KEY_MISSING")
         if type(timeout) not in (float, int) or not 0 < timeout <= 20:
             raise ValueError("timeout must be between 0 and 20 seconds")
+        self.trace, self.provider = trace, "qloo"
         self._api_key = api_key.strip()
         self._transport = transport if transport is not None else HTTPSGet()
         self._timeout = timeout
@@ -206,6 +210,7 @@ class QlooProbeClient:
     def from_environment(cls, *, transport: Transport | None = None) -> "QlooProbeClient":
         return cls(api_key=os.environ.get("QLOO_API_KEY", ""), transport=transport)
 
+    @instrument(lambda self,args,kwargs: "search" if (args[0] if args else kwargs["spec"]).path=="/search" else "rank")
     def probe(self, spec: ProbeSpec) -> ProbeObservation:
         if not isinstance(spec, ProbeSpec):
             raise TypeError("expected a ProbeSpec")

@@ -10,7 +10,7 @@ from .canonical import digest, strict_json
 from itertools import product
 from time import monotonic
 from .graph import claim_fingerprint, constraints, impact, recheck_state
-from .models import Patch, Plan, ReviewRequest
+from .models import Patch, Plan, ReviewRequest, instant
 from .policies import (
     Authority,
     MANIFEST,
@@ -112,7 +112,11 @@ def _verify_repair_objective(
             for patch in patches:
                 node = next(n for n in candidate.nodes if n.id == patch.node_id)
                 claims = joint[node.id]["claims"]
-                if node.domain == "brand" and not baseline.budgets:
+                if (
+                    node.domain == "brand"
+                    and not baseline.budgets
+                    and evaluation["synthetic"]
+                ):
                     claims = [c for c in claims if c["claim"] == "cultural_brand_rank"]
                 if (
                     not claims
@@ -147,8 +151,52 @@ def verify(
     expected_digest: str | None = None,
     trusted_authorities: dict[str, Authority] | None = None,
     trusted_delegations=(),
+    trusted_collection_keys=None,
 ) -> dict:
     try:
+        if proof.get("schema") == "ofc.collected-review/1":
+            from .collection_contracts import verify_collection
+
+            fields = deepcopy(proof)
+            claimed = fields.pop("proof_digest")
+            if (
+                digest(fields) != claimed
+                or expected_digest is not None
+                and expected_digest != claimed
+            ):
+                raise ProofRejected("collected proof digest mismatch")
+            control = proof["control"]
+            verify(
+                control,
+                trusted_authorities=trusted_authorities,
+                trusted_delegations=trusted_delegations,
+            )
+            verify_collection(
+                proof["collection"],
+                trusted_keys=trusted_collection_keys or {},
+                plan=Plan.parse(control["baseline"]),
+                expected_policy=POLICY_DIGEST,
+            )
+            expected = dict(control)
+            expected.update(
+                schema="ofc.collected-review/1",
+                control=control,
+                collection=proof["collection"],
+                provider_calls=proof["collection"]["provider_calls"],
+                spend_minor=0,
+            )
+            expected.pop("proof_digest", None)
+            expected["proof_digest"] = digest(expected)
+            if expected != proof:
+                raise ProofRejected("collected summary mismatch")
+            return {
+                "valid": True,
+                "proof_digest": claimed,
+                "action_status": "WITHHELD",
+                "provider_calls": proof["provider_calls"],
+                "spend_minor": 0,
+                "external_action_executed": False,
+            }
         if proof.get("schema") == "ofc.control-cascade/1":
             from .engine import cascade_record
 
@@ -164,13 +212,18 @@ def verify(
             if not 2 <= len(rounds) <= request.plan.limits.max_rounds:
                 raise ProofRejected("invalid cascade round bound")
             previous = request.plan.digest
+            evidence_before = {
+                e["id"]: e for e in proof.get("initial_evidence", proof["evidence"])
+            }
+            clock = proof.get("frozen_at", proof["as_of"])
             for step in rounds:
+                evidence_now = {e["id"]: e for e in step["evidence"]}
                 if (
-                    step["evidence"] != proof["evidence"]
-                    or step["as_of"] != request.as_of
+                    any(evidence_now.get(k) != v for k, v in evidence_before.items())
+                    or instant(step["as_of"]) < instant(clock)
                     or step["mode"] != request.mode
                 ):
-                    raise ProofRejected("cascade frozen evidence or clock mismatch")
+                    raise ProofRejected("cascade evidence or clock regression")
                 if (
                     step["baseline_digest"] != previous
                     or step.get("evidence_anchor") != request.plan.digest
@@ -181,8 +234,24 @@ def verify(
                     trusted_authorities=trusted_authorities,
                     trusted_delegations=trusted_delegations,
                 )
-                previous = step["current_digest"]
-            regenerated = cascade_record(request, rounds)
+                previous, clock, evidence_before = (
+                    step["current_digest"],
+                    step["as_of"],
+                    evidence_now,
+                )
+            if rounds[-1]["evidence"] != proof["evidence"]:
+                raise ProofRejected("cascade evidence tail mismatch")
+            request = ReviewRequest.parse(
+                {
+                    "plan": proof["baseline"],
+                    "evidence": proof.get("initial_evidence", proof["evidence"]),
+                    "mode": proof["mode"],
+                    "as_of": proof.get("frozen_at", proof["as_of"]),
+                }
+            )
+            regenerated = cascade_record(
+                request, rounds, authorities=trusted_authorities
+            )
             if (
                 proof != regenerated
                 or expected_digest is not None
@@ -196,7 +265,7 @@ def verify(
                 "action_status": "WITHHELD",
                 "external_action_executed": False,
             }
-        document = deepcopy(proof)
+        document = __import__("copy").deepcopy(proof)
         claimed = document.pop("proof_digest")
         if (
             digest(document) != claimed
@@ -491,9 +560,11 @@ def main(argv=None):
     parser.add_argument("proof", type=Path)
     parser.add_argument("--expected-digest")
     parser.add_argument("--authorities", type=Path)
+    parser.add_argument("--collection-keys", type=Path)
+    parser.add_argument("--delegations", type=Path)
     args = parser.parse_args(argv)
     try:
-        if args.proof.stat().st_size > 2_000_000:
+        if args.proof.stat().st_size > 8_000_000:
             raise ProofRejected("proof exceeds size limit")
         authorities = None
         if args.authorities:
@@ -506,12 +577,28 @@ def main(argv=None):
                 )
                 authority = Authority(public_key=public_key, **item)
                 authorities[authority.issuer] = authority
+        collection_keys = {}
+        if args.collection_keys:
+            collection_keys = {
+                name: base64.b64decode(key, validate=True)
+                for name, key in strict_json(args.collection_keys.read_bytes()).items()
+            }
+        delegations = []
+        if args.delegations:
+            from .ownership import Delegation
+
+            for item in strict_json(args.delegations.read_bytes()):
+                item["node_ids"] = frozenset(item["node_ids"])
+                item["permissions"] = frozenset(item["permissions"])
+                delegations.append(Delegation(**item))
         print(
             json.dumps(
                 verify(
                     strict_json(args.proof.read_bytes()),
                     expected_digest=args.expected_digest,
                     trusted_authorities=authorities,
+                    trusted_collection_keys=collection_keys,
+                    trusted_delegations=delegations,
                 ),
                 sort_keys=True,
             )

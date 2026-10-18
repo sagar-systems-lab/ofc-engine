@@ -49,7 +49,13 @@ def authorized(
             delegate=delegate,
             plan_digest=plan_digest,
             nodes=nodes,
-            permission=permission,
+            permission=(
+                "approve"
+                if permission == "read"
+                and "read" not in g.permissions
+                and "approve" in g.permissions
+                else permission
+            ),
             at=at,
         )
         for g in grants
