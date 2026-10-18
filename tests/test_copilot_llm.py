@@ -440,4 +440,26 @@ def test_qloo_budget_counts_distinct_brand_lookups_and_rechecks():
     })
     typed = CopilotDraft.model_validate_json(json.dumps(data))
     assert HostedCopilot._qloo_budget_projection(typed, {}, "artist") == (7, 7)
-    assert HostedCopilot._qloo_budget_projection(typed, {}, "brand") == (1, 3)
+    assert HostedCopilot._qloo_budget_projection(typed, {}, "brand") == (1, 1)
+
+
+def test_multicity_place_scope_requires_one_unambiguous_city():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    cities = ("Chicago", "Austin", "Seattle")
+    def choice(id, names):
+        return DraftChoice.model_validate_json(json.dumps({
+            "decision_id": id, "domain": "place",
+            "selected_name": names[0], "candidate_names": names,
+            "mutable": True, "depends_on": ["brand"],
+        }))
+    assert HostedCopilot._place_city_scope(
+        choice("venue_chicago", ["Venue A", "Venue B"]), cities) == "Chicago"
+    assert HostedCopilot._place_city_scope(
+        choice("venue", ["Austin Venue A", "Austin Venue B"]), cities) == "Austin"
+    assert HostedCopilot._place_city_scope(
+        choice("venue_chicago_seattle", ["Venue A", "Venue B"]), cities) is None
+    assert HostedCopilot._place_city_scope(
+        choice("venue", ["Generic Venue A", "Generic Venue B"]), cities) is None
+    assert HostedCopilot._place_city_scope(
+        choice("venue_chicago", ["Venue A", "Venue B"]), ()) is None
