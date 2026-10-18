@@ -814,18 +814,6 @@ class HostedCopilot:
                     catalog_domains[choice.decision_id] = category_for(choice.domain)
                 except ValueError:
                     continue
-            for choice in draft.choices:
-                if catalog_domains.get(choice.decision_id) != "place":
-                    continue
-                # Discovery has its own locality-bound request fingerprint.
-                if native_discovery is not None and choice.decision_id == "taste_recommendation":
-                    continue
-                city = self._place_city_scope(choice, draft.cities)
-                if city is None:
-                    catalog_skipped[choice.decision_id] = catalog_domains.pop(choice.decision_id)
-                    catalog_skip_reasons[choice.decision_id] = "PLACE_CITY_SCOPE_UNQUALIFIED"
-                else:
-                    place_city_scopes[choice.decision_id] = city
             if not supported and not catalog_domains:
                 return self._needs_input(
                     run_id, draft, model.model,
@@ -843,6 +831,26 @@ class HostedCopilot:
                     status="CLARIFICATION_REQUIRED",
                     reason="ARTIST_NAME_REQUIRED",
                     question="Which named Qloo entity should anchor the taste comparison?",
+                )
+
+            for choice in draft.choices:
+                if catalog_domains.get(choice.decision_id) != "place":
+                    continue
+                # Discovery has its own locality-bound request fingerprint.
+                if native_discovery is not None and choice.decision_id == "taste_recommendation":
+                    continue
+                city = self._place_city_scope(choice, draft.cities)
+                if city is None:
+                    catalog_skipped[choice.decision_id] = catalog_domains.pop(choice.decision_id)
+                    catalog_skip_reasons[choice.decision_id] = "PLACE_CITY_SCOPE_UNQUALIFIED"
+                else:
+                    place_city_scopes[choice.decision_id] = city
+            if not supported and not catalog_domains:
+                return self._needs_input(
+                    run_id, draft, model.model,
+                    status="CAPABILITY_UNAVAILABLE",
+                    reason="PLACE_CITY_SCOPE_UNQUALIFIED",
+                    question="Which explicit city does each proposed place decision belong to?",
                 )
 
             if native_discovery is None:
