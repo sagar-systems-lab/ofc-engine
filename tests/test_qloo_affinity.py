@@ -75,6 +75,62 @@ def test_fail_closed_on_invalid_evidence(change, expected):
 
 
 
+def test_insights_uuid_casing_matches_resolved_search_identity():
+    # Search canonicalizes Qloo IDs to lowercase; insights may echo uppercase.
+    lower = tuple(value.lower() for value in BRANDS)
+    spec = brand_affinity_probe(ARTIST.lower(), lower)
+    data = capture()
+    data["summary"]["query_fingerprint"] = spec.fingerprint
+    result = normalize_affinity_capture(data, spec)
+    assert [row["entity_id"] for row in result["ranking"]] == [
+        lower[1], lower[0], lower[2],
+    ]
+
+
+def test_foreign_uuid_is_not_normalized_into_candidate_pool():
+    lower = tuple(value.lower() for value in BRANDS)
+    spec = brand_affinity_probe(ARTIST.lower(), lower)
+    data = capture()
+    data["summary"]["query_fingerprint"] = spec.fingerprint
+    data["payload"]["results"]["entities"][0]["entity_id"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    with pytest.raises(AffinityCaptureError, match="UNEXPECTED_RESULT_ENTITY"):
+        normalize_affinity_capture(data, spec)
+
+
+def test_case_variant_duplicate_candidates_are_rejected():
+    spec = brand_affinity_probe(ARTIST, (BRANDS[0], BRANDS[0].lower()))
+    with pytest.raises(AffinityCaptureError, match="INVALID_QUERY_POOL"):
+        normalize_affinity_capture(capture(), spec)
+
+
+def test_uuid_format_is_not_relaxed_for_insights_results():
+    data = capture()
+    data["payload"]["results"]["entities"][0]["entity_id"] = BRANDS[1].replace("-", "")
+    with pytest.raises(AffinityCaptureError, match="UNEXPECTED_RESULT_ENTITY"):
+        normalize_affinity_capture(data, SPEC)
+
+
+def test_legacy_opaque_ids_still_match_exactly():
+    legacy = ("brand-a", "brand-b")
+    spec = brand_affinity_probe("artist-ci", legacy)
+    data = capture()
+    data["summary"]["query_fingerprint"] = spec.fingerprint
+    data["payload"]["results"]["entities"] = [
+        {"entity_id": "brand-b", "type": "urn:entity",
+         "query": {"affinity": 0.8, "explainability": {}}},
+        {"entity_id": "brand-a", "type": "urn:entity",
+         "query": {"affinity": 0.4, "explainability": {}}},
+    ]
+    assert [item["entity_id"] for item in normalize_affinity_capture(data, spec)["ranking"]] == [
+        "brand-b", "brand-a",
+    ]
+    data["payload"]["results"]["entities"][0]["entity_id"] = "BRAND-B"
+    with pytest.raises(AffinityCaptureError, match="UNEXPECTED_RESULT_ENTITY"):
+        normalize_affinity_capture(data, spec)
+
+
 def test_generic_insights_type_is_not_independent_brand_proof():
     data = capture()
     assert all(e["type"] == "urn:entity" for e in data["payload"]["results"]["entities"])
