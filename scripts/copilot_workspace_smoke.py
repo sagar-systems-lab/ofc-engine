@@ -184,7 +184,12 @@ def qualify(origin: str) -> dict:
                             if pending_response["polls"]:
                                 messages.append({
                                 "run_id": FAKE_RUN, "status": "PROCESSING",
-                                "prompt": PROMPT,
+                                "prompt": (
+                                    PROMPT + "\n\n--- USER-SUPPLIED TEXT NOTES (context, not Qloo evidence) ---\n"
+                                    + "Document: production-notes.md\n"
+                                    + "confidential planning context; artist, brand, venue\n"
+                                    + "--- END USER-SUPPLIED NOTES ---"
+                                ),
                                 "activity": {
                                     "source": "PERSISTED_ATTEMPTS",
                                     "agent_plan": "ADMITTED",
