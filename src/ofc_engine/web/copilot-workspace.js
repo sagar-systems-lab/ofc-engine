@@ -584,6 +584,47 @@
       statusText("Private visitor session deleted. New reviews require a new session.");
     },
   });
+  const scope = el("scope-guide");
+  const scopeVersion = "ofc.copilot.scope-reviewed.v1";
+  const scopeAcknowledged = () => {
+    try { return localStorage.getItem(scopeVersion) === "yes"; }
+    catch { return false; }
+  };
+  const showScope = () => {
+    if (scope && !scope.open && !document.querySelector("#ofc-intro") &&
+        !document.querySelector("body > .shell[inert]")) scope.showModal();
+  };
+  const intro = el("ofc-intro");
+  if (scope && !scopeAcknowledged()) {
+    if (intro) {
+      const observer = new MutationObserver(() => {
+        if (!intro.isConnected) {
+          observer.disconnect();
+          showScope();
+        }
+      });
+      observer.observe(document.body, {childList: true, subtree: true});
+    } else showScope();
+  }
+  scope?.addEventListener("close", () => {
+    try { localStorage.setItem(scopeVersion, "yes"); } catch {}
+  });
+  el("scope-done")?.addEventListener("click", () => scope.close());
+  el("scope-reopen")?.addEventListener("click", showScope);
+  el("scope-example")?.addEventListener("click", () => {
+    const example = "Artist: Taylor Swift. Candidate brands: Nike and Adidas. " +
+      "Original choice: Nike. Review exactly one hypothetical cultural brand partnership " +
+      "decision with Qloo evidence; no contract, payment, booking or external action.";
+    if (!state.busy) {
+      state.selected = null;
+      el("chat-input").value = example;
+      clearAttachment();
+      render();
+      resizeComposer();
+    }
+    scope.close(); // Only drafts text. Sending still requires separate approval.
+    el("chat-input").focus();
+  });
   state.sessionId = readId();
   updateModeExplanation();
   updateShell();
