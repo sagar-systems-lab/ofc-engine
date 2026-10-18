@@ -37,7 +37,11 @@ from .revisions import digest_obj
 
 
 _log = logging.getLogger(__name__)
-_log.setLevel(logging.INFO)  # Stage timings are sanitized; keep module logs visible.
+# Render's default last-resort logger discards INFO without an attached handler.
+if not _log.handlers:
+    _log.addHandler(logging.StreamHandler())
+_log.setLevel(logging.INFO)
+_log.propagate = False
 
 
 class SessionDenied(ValueError):
