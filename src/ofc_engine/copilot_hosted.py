@@ -817,6 +817,9 @@ class HostedCopilot:
             for choice in draft.choices:
                 if catalog_domains.get(choice.decision_id) != "place":
                     continue
+                # Discovery has its own locality-bound request fingerprint.
+                if native_discovery is not None and choice.decision_id == "taste_recommendation":
+                    continue
                 city = self._place_city_scope(choice, draft.cities)
                 if city is None:
                     catalog_skipped[choice.decision_id] = catalog_domains.pop(choice.decision_id)
