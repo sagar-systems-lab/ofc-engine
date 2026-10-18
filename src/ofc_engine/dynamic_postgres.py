@@ -21,8 +21,8 @@ class PostgresDynamicQlooReview(DynamicQlooReview):
     def __init__(self, store: PostgresRevisionStore, client: QlooProbeClient, *, daily_limit: int):
         if not isinstance(store, PostgresRevisionStore) or not isinstance(client, QlooProbeClient):
             raise TypeError("Postgres store and Qloo client required")
-        if type(daily_limit) is not int or not 1 <= daily_limit <= 64:
-            raise ValueError("Qloo request budget must be between 1 and 64")
+        if type(daily_limit) is not int or not 1 <= daily_limit <= 256:
+            raise ValueError("Qloo request budget must be between 1 and 256")
         self.store = store
         self.client = client
         self.daily_limit = daily_limit
