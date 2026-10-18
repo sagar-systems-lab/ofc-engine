@@ -444,6 +444,30 @@ def qualify(origin: str) -> dict:
                 assert exported["qloo_evidence_digest"] == "e" * 64
                 assert exported["decisions"][0]["changed"] is True
                 assert "prompt" not in exported and "private" not in json.dumps(exported).lower()
+                assert exported["ranked_evidence"] == []
+                ranked = page.evaluate("""saved => {
+                  const source = structuredClone(saved);
+                  source._sessionReadConfirmed = true;
+                  source.off.decisions[0].candidate_pool = ["Brand A", "Brand B"];
+                  source.off.decisions[0].qloo_observation = {
+                    ranked_candidate_ids: ["Brand B", "Brand A"],
+                    source_mode: "LIVE_HTTP_UNVERIFIED",
+                    query_fingerprint: "f".repeat(64),
+                    capture_digest: "a".repeat(64),
+                    collected_at: "2026-10-18T08:00:00Z"
+                  };
+                  source.on.decisions[0].rank_recheck_completed = true;
+                  source.on.decisions[0].ofc_reason = "QLOO_RANK_RECHECK_MATCHED";
+                  const proof = window.OFCResults.buildProof(source, "ON");
+                  const resultCSV = window.OFCResults.csv(proof);
+                  source.off.decisions[0].qloo_observation.ranked_candidate_ids[0] = "Unknown Brand";
+                  const blocked = window.OFCResults.buildProof(source, "ON");
+                  return {proof, resultCSV, blocked:blocked.ranked_evidence};
+                }""", SAVED)
+                assert ranked["proof"]["ranked_evidence"][0]["ranked_candidates"] == ["Brand B", "Brand A"]
+                assert ranked["proof"]["ranked_evidence"][0]["rank_recheck_matched"]
+                assert "Brand B > Brand A" in ranked["resultCSV"]
+                assert ranked["blocked"] == []
                 with page.expect_download() as csv_file:
                     page.locator("#proof-csv-download").click()
                 csv_bytes = Path(csv_file.value.path()).read_bytes()

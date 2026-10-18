@@ -828,24 +828,42 @@ class HostedCopilot:
                     selection_ref=entity_selection_ref,
                 )
             )
+            brand_names = list(dict.fromkeys(
+                name for choice in draft.choices
+                if choice.domain.lower() in ("brand", "partner", "brand_partner")
+                for name in choice.candidate_names
+            ))
             brands = {}
-            for choice in draft.choices:
-                if choice.domain.lower() in ("brand", "partner", "brand_partner"):
-                    for name in choice.candidate_names:
-                        if name not in brands:
-                            brands[name] = (
-                                ResolvedEntity(
-                                    name=name, entity_id=discovered_ids[name],
-                                    entity_type="urn:entity:brand",
-                                    query_fingerprint=native_discovery["query_fingerprint"],
-                                    source="QLOO_DISCOVERY",
-                                )
-                                if name in discovered_ids
-                                else resolver.resolve(
-                                    run_id=run_id, name=name, kind="brand",
-                                    selection_ref=entity_selection_ref,
-                                )
-                            )
+            if native_discovery is None and entity_selection_ref is None and len(brand_names) > 1:
+                search_started = monotonic()
+
+                def lookup_brand(name: str) -> ResolvedEntity:
+                    # Each worker owns an independent reviewer; all admissions
+                    # still serialize through the durable shared quota row.
+                    return HostedQlooResolver(self._reviewer()).resolve(
+                        run_id=run_id, name=name, kind="brand",
+                    )
+
+                with ThreadPoolExecutor(max_workers=min(4, len(brand_names))) as pool:
+                    results = list(pool.map(lookup_brand, brand_names))
+                brands = dict(zip(brand_names, results))
+                _log.info("COPILOT_STAGE stage=brand_searches duration_ms=%d count=%d",
+                          round((monotonic() - search_started) * 1000), len(brands))
+            else:
+                for name in brand_names:
+                    brands[name] = (
+                        ResolvedEntity(
+                            name=name, entity_id=discovered_ids[name],
+                            entity_type="urn:entity:brand",
+                            query_fingerprint=native_discovery["query_fingerprint"],
+                            source="QLOO_DISCOVERY",
+                        )
+                        if name in discovered_ids
+                        else resolver.resolve(
+                            run_id=run_id, name=name, kind="brand",
+                            selection_ref=entity_selection_ref,
+                        )
+                    )
             catalog_identities = {}
             for choice in draft.choices:
                 if choice.decision_id not in catalog_domains:

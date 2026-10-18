@@ -62,6 +62,36 @@
     };
   }) : [];
 
+  const rankedEvidence = pair => {
+    if (!pair) return [];
+    const observations = [];
+    for (const [key, original] of pair.before) {
+      const reviewed = pair.after.get(key);
+      const proof = original.qloo_observation;
+      const order = proof?.ranked_candidate_ids;
+      const pool = original.candidate_pool;
+      if (!original.cultural_rank_observed || !reviewed?.rank_recheck_completed ||
+          !proof || proof.source_mode !== "LIVE_HTTP_UNVERIFIED" ||
+          !/^[a-f0-9]{64}$/.test(proof.query_fingerprint || "") ||
+          !/^[a-f0-9]{64}$/.test(proof.capture_digest || "") ||
+          !Array.isArray(order) || !Array.isArray(pool) ||
+          order.length < 2 || order.length !== pool.length ||
+          !order.every(x => typeof x === "string" && x.length > 0 && x.length <= 300) ||
+          new Set(order).size !== order.length ||
+          !order.every(x => pool.includes(x))) continue;
+      observations.push({
+        decision_id: id(key),
+        ranked_candidates: order.map(name),
+        rank_recheck_matched: reviewed.ofc_reason === "QLOO_RANK_RECHECK_MATCHED",
+        source_mode: proof.source_mode,
+        observation_time_utc: name(proof.collected_at) || null,
+        query_fingerprint: proof.query_fingerprint,
+        capture_digest: proof.capture_digest,
+      });
+    }
+    return observations;
+  };
+
   const buildProof = (run, mode, generatedAt = new Date().toISOString()) => {
     if (!recorded(run)) return null;
     const pair = pairing(run), usage = {};
@@ -85,7 +115,7 @@
       qloo_evidence_digest: pair?.digest || null,
       verification_status: id(run.verification_status || run.status),
       reason_code: id(run.reason_code) || null,
-      decisions: decisions(run, pair), usage,
+      decisions: decisions(run, pair), ranked_evidence: rankedEvidence(pair), usage,
       receipt: pair && run.value_receipt ? {
         schema_version: "ofc-value.v1",
         receipt_digest: id(run.value_receipt.receipt_digest) || null,
@@ -110,10 +140,14 @@
   const csv = proof => {
     if (!proof?.comparison_available) return null;
     const fields = ["run_id", "decision_id", "domain", "off_choice", "on_choice",
-      "changed", "verdict", "reason", "pending_recheck", "evidence_digest"];
+      "changed", "verdict", "reason", "pending_recheck", "evidence_digest",
+      "observed_rank_order", "rank_recheck_matched"];
     const lines = [fields.join(",")];
     for (const decision of proof.decisions) {
-      const row = {...decision, run_id: proof.run_id, evidence_digest: proof.qloo_evidence_digest};
+      const evidence = proof.ranked_evidence?.find(x => x.decision_id === decision.decision_id);
+      const row = {...decision, run_id: proof.run_id, evidence_digest: proof.qloo_evidence_digest,
+        observed_rank_order: evidence?.ranked_candidates.join(" > ") || "",
+        rank_recheck_matched: evidence?.rank_recheck_matched ?? false};
       lines.push(fields.map(key => csvCell(row[key])).join(","));
     }
     return "\uFEFF" + lines.join("\r\n") + "\r\n";
@@ -165,6 +199,9 @@
       ["Selected view",proof.selected_view],["Model",proof.model_id],
       ["Decisions",proof.comparison_available ? proof.decisions.length : null],
       ["Qloo ranked attempts",proof.usage.saved_attempt_states?.rank_complete ?? null],
+      ["Saved pool ranking",proof.ranked_evidence.length
+        ? proof.ranked_evidence.map(x => x.ranked_candidates.join(" → ")).join(" | ")
+        : "Not available or not rechecked"],
       ["Changed selections",proof.comparison_available ? proof.decisions.filter(d=>d.changed).length : null],
       ["Shared evidence digest",proof.qloo_evidence_digest],
       ["Receipt digest",proof.receipt?.receipt_digest ?? null],
@@ -198,6 +235,13 @@
           changed?"Selection revised; further checks required":"Original selection preserved"),
         make("small","","Verdict: "+id(revised.ofc_verdict||"UNCERTAIN")));
       if(revised.ofc_reason)on.append(make("small","","Reason: "+id(revised.ofc_reason)));
+      const rank=rankedEvidence(pair).find(x=>x.decision_id===key);
+      if(rank){
+        off.append(make("small","","Qloo pool rank: "+rank.ranked_candidates.join(" → ")));
+        on.append(make("small","",rank.rank_recheck_matched
+          ? "Independent ranking recheck matched"
+          : "Ranking replay recorded; independent match not verified"));
+      }
       row.append(title,off,on);
       rows.append(row);
     }
