@@ -113,6 +113,9 @@ def test_readiness_controls_are_bounded_without_new_endpoints():
     assert 'id="run-confirm-budget"' in page
     assert "Server availability is separate" in script
     assert 'limits.qloo_requests_remaining' in script
+    assert 'state.capability?.capacity?.qloo_requests_remaining' in script
+    assert 'Live cultural review unavailable:' in script
+    assert 'No provider request made. Existing history and synthetic tests remain available.' in script
     assert 'state.runs.length >= state.sessionMessageLimit' in script
     assert 'caps.session_message_limit' in script
     assert 'saved.session_message_limit' in script
