@@ -92,7 +92,9 @@
     target.replaceChildren();
     if (!choices.length) return;
     const known = new Map(choices.map(choice => [choice.decision_id, choice]));
-    target.append(element("p", "activity-minor", "Dependencies from the saved agent plan; arrows indicate required prior decisions."));
+    const comparison = window.OFCResults?.pairing?.(run);
+    target.append(element("p", "activity-minor",
+      "Original agent choices → OFC-reviewed selections. Arrows show dependencies; commercial approval is withheld."));
     for (const choice of choices) {
       const card = element("article", "map-node");
       const dependencyIds = Array.isArray(choice.depends_on)
@@ -110,14 +112,20 @@
         card.append(element("span", "map-origin", "Independent decision"));
       }
       const main = element("div", "map-node-main");
+      const original = comparison?.before.get(choice.decision_id);
+      const reviewed = comparison?.after.get(choice.decision_id);
+      const originalName = short(original?.candidate_id || choice.selected_name || "Unspecified");
+      const reviewedName = short(reviewed?.candidate_id || originalName);
+      const changed = Boolean(original && reviewed && original.candidate_id !== reviewed.candidate_id);
       main.append(element("span", "map-node-id", short(choice.decision_id)),
-        element("strong", "", short(choice.selected_name || "Unspecified")));
-      const on = run.on?.decisions;
-      const checked = Array.isArray(on) ? on.find(item => item.decision_id === choice.decision_id) : null;
-      if (checked?.changed === true) main.append(element("small", "map-change", "Revised by OFC · review required"));
-      else if (checked?.ofc_verdict === "UNCERTAIN")
-        main.append(element("small", "map-uncertain", "Review uncertain"));
-      else main.append(element("small", "map-unknown", "Change not established"));
+        element("strong", "", changed ? originalName + " → " + reviewedName : originalName));
+      if (changed)
+        main.append(element("small", "map-change", "Original → OFC reviewed · further checks required"));
+      else if (reviewed?.ofc_verdict === "UNCERTAIN")
+        main.append(element("small", "map-uncertain", "Original preserved · review uncertain"));
+      else if (reviewed)
+        main.append(element("small", "map-unknown", "Original preserved · further checks required"));
+      else main.append(element("small", "map-unknown", "No qualified review comparison saved"));
       card.append(main);
       target.append(card);
     }

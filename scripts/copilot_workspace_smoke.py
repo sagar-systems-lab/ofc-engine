@@ -468,8 +468,10 @@ def qualify(origin: str) -> dict:
                 assert "Agent proposal" in page.locator("#plan-content").inner_text()
                 page.locator("#map-expand").click()
                 graph = page.locator("#map-content").inner_text()
-                assert "Brand A" in graph and "Depends on" in graph
-                assert "Revised by OFC" in graph
+                assert "Brand A → Brand B" in graph
+                assert "Original → OFC reviewed" in graph
+                assert "Depends on" in graph and "Experience A" in graph
+                assert "Original preserved · review uncertain" in graph
                 assert calls["message"] == 1 and calls["provider"] == 0
                 if width <= 1180:
                     page.locator("#activity-hide").click()
