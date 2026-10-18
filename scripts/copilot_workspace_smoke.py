@@ -110,6 +110,7 @@ def qualify(origin: str) -> dict:
                 calls = {"session": 0, "message": 0, "provider": 0,
                          "demo": 0, "owner_read": 0, "owner_login": 0, "owner_test": 0}
                 owner_active = {"value": False}
+                provider_budget = {"qloo": 5}
                 submitted = []
                 pending_response = {"active": False, "polls": 0}
                 page.on("pageerror", lambda error: errors.append(str(error)))
@@ -161,7 +162,7 @@ def qualify(origin: str) -> dict:
                                 "ofc": "ACTIVE", "storage": "ACTIVE",
                                 "qloo": "CHECK_REQUIRED", "llm": "CONNECTED",
                                 "product": "CHECK_REQUIRED",
-                                "capacity": {"qloo_requests_remaining": 5,
+                                "capacity": {"qloo_requests_remaining": provider_budget["qloo"],
                                              "llm_requests_remaining": 4},
                             }),
                         )
@@ -382,6 +383,7 @@ def qualify(origin: str) -> dict:
                 assert "entity search" in page.locator("#activity-steps").inner_text()
                 assert calls["message"] == 0 and calls["provider"] == 0
                 pending_response["active"] = False
+                provider_budget["qloo"] = 1  # reflect usage after the first completed review
                 page.evaluate("window.releaseSavedMessage()")
                 try:
                     page.locator(".message.assistant").wait_for(state="visible", timeout=10_000)
@@ -522,6 +524,20 @@ def qualify(origin: str) -> dict:
                     state="visible",
                 )
                 assert calls["message"] == 1 and calls["provider"] == 0
+                # A second user-authored review must not become a phantom run
+                # when the refreshed global Qloo allowance is insufficient.
+                input_box.fill("Review venues in Chicago, Austin and Seattle for this tour.")
+                input_box.press("Enter")
+                page.get_by_text("NOT SUBMITTED — only 1 Qloo calls remain", exact=False).wait_for(
+                    state="visible", timeout=8_000)
+                assert page.locator("#run-confirm").is_hidden()
+                assert page.locator(".message.user").count() == 1
+                assert "Review venues in Chicago" in page.locator(".message.user").inner_text()
+                assert calls["message"] == 1 and calls["provider"] == 0
+                assert page.locator(".conversation-row").count() == 1
+                page.locator(".conversation-row").first.click()
+                page.get_by_text("LLM + Qloo: the baseline cultural ranking is recorded.").wait_for(
+                    state="visible")
                 if width <= 768:
                     page.locator("#sidebar-toggle").click()
                     page.locator("#sidebar-backdrop").wait_for(state="visible")
