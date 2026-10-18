@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import replace as replace_dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -516,7 +517,7 @@ class HostedCopilot:
     @staticmethod
     def _public_pair(pair, draft, brands: dict, artist) -> dict:
         """Expose human names, not private Qloo entity IDs or raw provider captures."""
-        data = pair.as_dict()
+        data = deepcopy(pair.as_dict())
         aliases = {artist.entity_id: artist.name}
         aliases.update({resolved.entity_id: name for name, resolved in brands.items()})
         for choice in draft.choices:
@@ -961,10 +962,13 @@ class HostedCopilot:
                     on={**pair.on, "qloo": shared},
                     qloo_evidence_digest=shared["evidence_digest"],
                 )
-            off_answer, on_answer = self._narrate_arms(
-                model=model, pair=pair, prompt=prompt, run_id=run_id,
-            )
             projection = self._public_pair(pair, draft, brands, artist)
+            narrated_pair = replace_dataclass(
+                pair, off=projection["off"], on=projection["on"],
+            )
+            off_answer, on_answer = self._narrate_arms(
+                model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
+            )
             receipt = decision_receipt(
                 projection, business_review=business_review,
             )
