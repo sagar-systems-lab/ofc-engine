@@ -148,6 +148,6 @@ def test_place_locality_scopes_are_fingerprinted_and_never_policy_qualified():
     with pytest.raises(CatalogEvidenceError, match="INVALID_PLACE_LOCALITY_SCOPE"):
         domain_affinity_probe(ART, "brand", (ONE, TWO), location="Chicago")
     with pytest.raises(CatalogEvidenceError, match="INVALID_PLACE_LOCALITY_SCOPE"):
-        domain_affinity_probe(ART, "place", (ONE, TWO), location="Chicago\\nAustin")
+        domain_affinity_probe(ART, "place", (ONE, TWO), location="Chicago\nAustin")
     with pytest.raises(CatalogEvidenceError, match="INSIGHTS_PROVENANCE_INVALID"):
         inspect_domain_rank(observation, austin)
