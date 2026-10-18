@@ -9,7 +9,9 @@ from .storage import ControlStore
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Apply additive control-review storage migrations")
+    parser = argparse.ArgumentParser(
+        description="Apply additive control-review storage migrations"
+    )
     parser.add_argument("command", choices=["migrate"])
     parser.add_argument("--database-url-env", default="OFC_CONTROL_DATABASE_URL")
     args = parser.parse_args(argv)
@@ -19,9 +21,16 @@ def main(argv=None):
     try:
         ControlStore(dsn, initialize=True)
     except Exception as exc:
-        print(json.dumps({"status": "MIGRATION_FAILED", "error_type": type(exc).__name__}), file=sys.stderr)
+        print(
+            json.dumps(
+                {"status": "MIGRATION_FAILED", "error_type": type(exc).__name__}
+            ),
+            file=sys.stderr,
+        )
         return 1
-    print(json.dumps({"status": "MIGRATED", "schema": "ofc_control", "provider_calls": 0}))
+    print(
+        json.dumps({"status": "MIGRATED", "schema": "ofc_control", "provider_calls": 0})
+    )
     return 0
 
 

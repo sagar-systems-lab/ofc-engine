@@ -329,10 +329,34 @@ $("saved-reviews").addEventListener("click", async () => {
         const id = message.control_review.review_id;
         try {
           const status = await privateClient.status(id);
-          if (status.state !== "FINISHED") {
-            notice(`Saved review state: ${pretty(status.state)}. Reopen this list to refresh. No provider request was made.`);
-            $("saved-dialog").close();
-            return;
+          let progress = status;
+          let cursor = 0;
+          const deadline = Date.now() + 120000;
+          $("saved-dialog").close();
+          while (progress.state !== "FINISHED") {
+            const update = await privateClient.events(id, cursor);
+            cursor = update.cursor;
+            const latest = update.events.at(-1);
+            notice(`Review: ${pretty(latest?.kind || progress.state)}. External actions withheld.`);
+            if (["FAILED", "CANCELLED_SAFE", "RECOVERY_REQUIRED"].includes(progress.state)) {
+              notice(`Review: ${pretty(progress.state)}. ${progress.state === "RECOVERY_REQUIRED" ? "Explicit resume is required." : "The saved record is available for review."}`, true);
+              if (progress.state === "RECOVERY_REQUIRED") {
+                const resume = make("button", "secondary", "Resume saved review");
+                resume.type = "button";
+                resume.addEventListener("click", async () => {
+                  resume.disabled = true;
+                  try {
+                    await privateClient.request(privateClient.path(id) + "/resume", {confirm: "RESUME"});
+                    notice("Review resumed. Open the saved review to follow progress.");
+                  } catch (error) { notice("Resume unavailable: " + error.message, true); }
+                });
+                $("notice").append(" ", resume);
+              }
+              return;
+            }
+            if (Date.now() >= deadline) { notice("Review is still running. Open the saved review to reconnect."); return; }
+            await new Promise(resolve => setTimeout(resolve, 700));
+            progress = await privateClient.status(id);
           }
           await show(await privateClient.proof(id), 0);
           $("saved-dialog").close();

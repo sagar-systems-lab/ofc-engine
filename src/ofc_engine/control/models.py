@@ -9,10 +9,27 @@ from .canonical import canonical_bytes, digest, strict_json
 
 Id = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")]
 Hash = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-Claim = Literal["cultural_brand_rank", "place_cultural_observation", "budget_quote",
-                "venue_capacity", "contract_rights", "schedule_window"]
-EdgeType = Literal["REQUIRES", "COMPATIBLE_WITH", "CONFLICTS_WITH", "CONSUMES_BUDGET",
-                   "SHARES_RESOURCE", "TEMPORAL_BEFORE", "APPROVAL_REQUIRES"]
+Claim = Literal[
+    "cultural_brand_rank",
+    "place_cultural_observation",
+    "budget_quote",
+    "venue_capacity",
+    "contract_rights",
+    "schedule_window",
+    "place_cultural_relevance",
+    "channel_suitability",
+    "media_suitability",
+    "collaborator_suitability",
+]
+EdgeType = Literal[
+    "REQUIRES",
+    "COMPATIBLE_WITH",
+    "CONFLICTS_WITH",
+    "CONSUMES_BUDGET",
+    "SHARES_RESOURCE",
+    "TEMPORAL_BEFORE",
+    "APPROVAL_REQUIRES",
+]
 CAUSAL_EDGES = frozenset({"REQUIRES", "APPROVAL_REQUIRES", "TEMPORAL_BEFORE"})
 MutableField = Literal["candidate_id", "start_at", "end_at"]
 
@@ -25,7 +42,11 @@ def instant(value: str) -> datetime:
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 class Strict(BaseModel):
@@ -97,6 +118,8 @@ class Edge(Strict):
     read_set: tuple[str, ...] = Field(default=(), max_length=32)
     candidate_pairs: tuple[tuple[Id, Id], ...] = Field(default=(), max_length=64)
     buffer_seconds: int = Field(default=0, ge=0, le=7 * 86400)
+    budget_currency: Literal["USD", "EUR", "INR"] | None = None
+    budget_limit_minor: int | None = Field(default=None, ge=0, le=10**12)
 
 
 class Budget(Strict):
@@ -133,24 +156,61 @@ class Plan(Strict):
             raise ValueError("duplicate node id")
         if len({b.currency for b in self.budgets}) != len(self.budgets):
             raise ValueError("duplicate budget currency")
-        seen, adjacency, indegree = set(), {k: [] for k in nodes}, dict.fromkeys(nodes, 0)
+        seen, adjacency, indegree = (
+            set(),
+            {k: [] for k in nodes},
+            dict.fromkeys(nodes, 0),
+        )
         for edge in self.edges:
-            if edge.source not in nodes or edge.target not in nodes or edge.source == edge.target:
+            if (
+                edge.source not in nodes
+                or edge.target not in nodes
+                or edge.source == edge.target
+            ):
                 raise ValueError("invalid edge endpoint")
             key = (edge.source, edge.target, edge.type)
             if key in seen:
                 raise ValueError("duplicate edge")
             seen.add(key)
-            allowed_reads = {f"{edge.source}.{name}" for name in ("candidate_id", "start_at", "end_at", "locality")}
-            if len(edge.read_set) != len(set(edge.read_set)) or not set(edge.read_set) <= allowed_reads:
+            allowed_reads = {
+                f"{edge.source}.{name}"
+                for name in ("candidate_id", "start_at", "end_at", "locality")
+            }
+            if (
+                len(edge.read_set) != len(set(edge.read_set))
+                or not set(edge.read_set) <= allowed_reads
+            ):
                 raise ValueError("invalid dependency read set")
+            if edge.type == "CONSUMES_BUDGET":
+                if (
+                    nodes[edge.target].domain != "budget"
+                    or edge.budget_currency is None
+                    or edge.budget_limit_minor is None
+                ):
+                    raise ValueError(
+                        "budget edge requires a budget target, currency and limit"
+                    )
+            elif (
+                edge.budget_currency is not None or edge.budget_limit_minor is not None
+            ):
+                raise ValueError("budget fields require CONSUMES_BUDGET")
+            if (
+                edge.type == "APPROVAL_REQUIRES"
+                and nodes[edge.source].domain != "approval"
+            ):
+                raise ValueError("approval dependency requires an approval source")
             if edge.type in CAUSAL_EDGES:
                 adjacency[edge.source].append(edge.target)
                 indegree[edge.target] += 1
-            if edge.type in ("CONFLICTS_WITH", "COMPATIBLE_WITH") and not edge.candidate_pairs:
+            if (
+                edge.type in ("CONFLICTS_WITH", "COMPATIBLE_WITH")
+                and not edge.candidate_pairs
+            ):
                 raise ValueError("candidate constraint needs explicit pairs")
             for left, right in edge.candidate_pairs:
-                if left not in {c.id for c in nodes[edge.source].candidate_pool} or right not in {c.id for c in nodes[edge.target].candidate_pool}:
+                if left not in {
+                    c.id for c in nodes[edge.source].candidate_pool
+                } or right not in {c.id for c in nodes[edge.target].candidate_pool}:
                     raise ValueError("constraint candidate outside pool")
         queue = sorted(k for k, count in indegree.items() if count == 0)
         visited = 0
@@ -177,7 +237,9 @@ class Plan(Strict):
 
 
 class Evidence(Strict):
-    schema_version: Literal["ofc.evidence/1"] = Field(default="ofc.evidence/1", alias="schema")
+    schema_version: Literal["ofc.evidence/1"] = Field(
+        default="ofc.evidence/1", alias="schema"
+    )
     id: Id
     tenant_id: Id
     plan_digest: Hash
@@ -201,6 +263,10 @@ class Evidence(Strict):
     parent_ids: tuple[Id, ...] = Field(default=(), max_length=16)
     issuer: Id | None = None
     signature: str | None = Field(default=None, max_length=128)
+    provider_account_scope: Id | None = None
+    extraction_rule_version: Id | None = None
+    entitlement_id: Id | None = None
+    raw_payload_ref: Hash | None = None
 
     @model_validator(mode="after")
     def valid_evidence(self):
@@ -208,9 +274,14 @@ class Evidence(Strict):
             raise ValueError("invalid evidence lifetime")
         if len(set(self.candidate_pool)) != len(self.candidate_pool):
             raise ValueError("duplicate evidence candidate")
-        if len(set(self.ranks)) != len(self.ranks) or not set(self.ranks) <= set(self.candidate_pool):
+        if len(set(self.ranks)) != len(self.ranks) or not set(self.ranks) <= set(
+            self.candidate_pool
+        ):
             raise ValueError("invalid rank order")
-        if len(self.parent_ids) != len(set(self.parent_ids)) or self.id in self.parent_ids:
+        if (
+            len(self.parent_ids) != len(set(self.parent_ids))
+            or self.id in self.parent_ids
+        ):
             raise ValueError("invalid provenance parents")
         canonical_bytes(self.facts)
         return self

@@ -64,11 +64,11 @@ Use a dedicated staging database first. `ofc_control` is an additive private sch
 5. Configure `OFC_CONTROL_AUTHORITIES` as pinned public-key records containing `issuer`, `tenant_id`, base64 `public_key`, allowed `claims`, `source`, `expires_at`, and `revoked`. A revoked or expired key cannot qualify evidence. Apply key revocation/rotation by changing this configuration and restarting the service.
 6. Set `OFC_CONTROL_MODE=PRIVATE`. Do not enable a production rollout solely because the sandbox passes.
 
-The database stores encrypted private request/result payloads. It never stores provider credentials. Review/event writes and revision CAS are transactional. Workers use bounded leases; PostgreSQL claims use `FOR UPDATE SKIP LOCKED`. An expired lease becomes `RECOVERY_REQUIRED`, not an automatic upstream retry. This implementation performs local evaluation and capture replay only. No new live collector is enabled.
+The database stores encrypted private request/result payloads. It never stores provider credentials. Review/event writes and revision CAS are transactional. Workers use bounded leases; PostgreSQL claims use `FOR UPDATE SKIP LOCKED`. An expired lease becomes `RECOVERY_REQUIRED`, not an automatic upstream retry. The default runtime performs local evaluation and capture replay. A provider-independent planner can be injected with an explicitly offline transport; no live transport is installed. No new live collector is enabled.
 
 To attach graph reviews to new Copilot results, configure `OFC_CONTROL_CAPTURE_ISSUER` and a base64 raw Ed25519 `OFC_CONTROL_CAPTURE_SIGNER`. The corresponding pinned authority must be a Qloo-adapter issuer for the `copilot` tenant. It attests to validated saved captures, not a Qloo-issued signature. Existing completed observations are checked against their original query/baseline hashes and replayed without another Qloo request. Missing or expired captures remain unqualified.
 
-Queue admission is bounded to 128 pending reviews per tenant and 4096 stored reviews. Capacity exhaustion returns 429. Retention/export policy, encryption-key custody, independent issuer verification, and operational monitoring must be established before sustained production use. There is no automatic deletion or paid scaling.
+Queue admission is bounded to 128 pending reviews per tenant and 4096 stored reviews. Capacity exhaustion returns 429. Retention/export policy, encryption-key custody, independent issuer verification, and operational monitoring must be established before sustained production use. Scoped retention cleanup is explicit: `set_retention` sets expiry/legal hold, and `prune(tenant_id)` removes expired terminal records while retaining audit tombstones and idempotency commitments. No paid scaling is configured.
 
 ## Verify and evaluate
 
@@ -90,3 +90,28 @@ The evaluation harness accepts paired recorded comparator arms only when plan an
 ## Rollback
 
 Unset `OFC_CONTROL_MODE` and restart to remove the graph/API entry points. Existing Copilot behavior remains available. Preserve the control database and encryption key for audit/replay. No destructive rollback migration is required. Do not deploy this feature to the current hosted demo until isolated PostgreSQL, recovery, access, and browser checks pass in the target environment.
+
+
+## Connected repairs and ownership
+
+`cascading_campaign()` is a 30-decision fixture with independently scoped synthetic partner and creative rights. Its first batch changes the partner; its second batch revisits and changes a dependent creative choice. A terminal evaluation records the fixed point. Independent choices remain unchanged. `max_rounds`, expansion and controller deadlines bound work; missing evidence leaves claims uncertain. Each batch has a durable revision CAS and a replayable per-round proof. Recovery reuses committed batches without incrementing their revision twice.
+
+Venue, schedule, collaborator, media and channel alternatives require their declared business evidence. Budgeted alternatives additionally require candidate-specific signed quote inputs. Declared price arithmetic is labeled separately from evidence-qualified feasibility. Two equally supported feasible replacements abstain. All external actions stay withheld, including after a signed human review intent.
+
+Foreign-owner nodes are read-only unless a server-configured grant binds tenant, owner, delegate, frozen plan digest, exact node IDs, permission and expiry. Grants never come from the submitted plan. `OFC_CONTROL_DELEGATIONS` supplies those grants. `OFC_CONTROL_APPROVAL_KEYS` pins distinct human signer keys; delegated human intents require an Ed25519 signature over the exact plan/revision/policy/evidence/request binding. Revocation and expiry invalidate them. Delegated proof reads require a grant covering the entire plan.
+
+## Evidence, telemetry and retention
+
+`EvidencePlanner` reserves claim scopes durably before invoking an injected offline adapter. Reservations bind account, entitlement, locality, pool and claim fingerprint; enforce RPM/RPD/total/concurrency limits; and reject unknown outcomes instead of blindly retrying. `RecordedEvidenceAdapter` normalizes existing source records. Account, parser version, entitlement and protected raw-payload commitments are explicit. Expired cache payloads can be evicted without deleting quota reservations. There is no configured live collection path, automatic paid retry or inferred provider-origin signature.
+
+`GET /api/control/reviews/{id}/trace` exports authenticated, redacted controller spans. `scripts/control_load.py` profiles a bounded local worker queue. These are local controller measurements; provider inference/search/rank and real cold-host performance remain unmeasured until an authorized adapter supplies them. Saved private reviews poll cursor events without resubmitting and expose explicit recovery.
+
+`GET /api/control/reviews/{id}/public-proof` exports commitments only. It omits normalized facts, labels, actors and locality. `public_projection` optionally signs the projection; `verify_projection` requires an independent signature key or pinned projection digest. It cannot establish the undisclosed private claims. Retained private proofs require their exact pinned verifier policy; `VerifierRegistry` refuses unknown versions. Contract revisions `/1` remain the first stable isolated API revision; they are not silently renamed. `contracts` provides negotiation, an action contract, source-preserving migration ledgers and source round trips.
+
+Run `python scripts/control_security_gate.py` and `python scripts/control_rehearsal.py` for source/license gates and an isolated encrypted SQLite backup/restore/key-rotation rehearsal. Neither changes production. PostgreSQL restore, production key rotation and multi-process qualification remain separate checks.
+
+## Registered evaluation and research
+
+`evaluation` publishes 410 deterministic synthetic case IDs with 260 development and 150 reserved cases, sealed-label commitments, immutable experiment digests, exact confusion/abstention denominators, Wilson and bootstrap intervals, and all five comparator slots. Labels must be sealed with an externally held key; the committed synthetic generator is not an independently blinded study. Missing comparator arms remain `NOT_MEASURED`. An acceptance index requires independently signed holdout certification and passing hard gates; no study has been certified here.
+
+`research` defines consent-required feedback, keyed blind assignment, source/scorer IDs and explicitly stated financial assumptions. Empty studies are `NOT_RUN`; reported avoided loss is not a causal ROI claim. `/api/control/intake` accepts explicitly authenticated synthetic typed campaigns through durable admission and preserves their original objective and pools; it never calls a language model or converts cultural affinity into a business authorization.

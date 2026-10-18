@@ -35,15 +35,46 @@ def configured_control(environment):
     for item in json.loads(authorities_raw):
         item["public_key"] = base64.b64decode(item["public_key"], validate=True)
         item["claims"] = frozenset(item["claims"])
+        item["revoked_entitlements"] = frozenset(item.get("revoked_entitlements", []))
         authority = Authority(**item)
         if authority.issuer in authorities:
             raise ValueError("duplicate authority")
         authorities[authority.issuer] = authority
+    from .ownership import Delegation
+    from .approvals import ApprovalKey
+
+    grants_raw = environment.get("OFC_CONTROL_DELEGATIONS", "[]")
+    approvers_raw = environment.get("OFC_CONTROL_APPROVAL_KEYS", "{}")
+    if max(len(grants_raw), len(approvers_raw)) > 32768:
+        raise ValueError("oversized delegation configuration")
+    grants = []
+    for item in json.loads(grants_raw):
+        item["node_ids"] = frozenset(item["node_ids"])
+        item["permissions"] = frozenset(item["permissions"])
+        grants.append(Delegation(**item))
+    approval_keys = {}
+    for actor, item in json.loads(approvers_raw).items():
+        item["public_key"] = base64.b64decode(item["public_key"], validate=True)
+        approval_keys[actor] = ApprovalKey(**item)
     store = ControlStore(dsn, encryption_key=key)
     signer = environment.get("OFC_CONTROL_CAPTURE_SIGNER", "")
     issuer = environment.get("OFC_CONTROL_CAPTURE_ISSUER", "")
     if bool(signer) != bool(issuer):
         raise ValueError("capture signer and issuer required together")
-    keypair = Ed25519PrivateKey.from_private_bytes(base64.b64decode(signer, validate=True)) if signer else None
-    return True, ControlRuntime(store, authorities=authorities, capture_signer=keypair,
-                                capture_issuer=issuer or None), ControlAccess(tokens)
+    keypair = (
+        Ed25519PrivateKey.from_private_bytes(base64.b64decode(signer, validate=True))
+        if signer
+        else None
+    )
+    return (
+        True,
+        ControlRuntime(
+            store,
+            authorities=authorities,
+            capture_signer=keypair,
+            capture_issuer=issuer or None,
+            delegations=grants,
+            approval_keys=approval_keys,
+        ),
+        ControlAccess(tokens),
+    )

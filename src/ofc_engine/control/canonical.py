@@ -22,15 +22,22 @@ def canonical_bytes(value) -> bytes:
             for child in item:
                 check(child)
             return
-        if type(item) is dict and all(type(k) is str and _KEY.fullmatch(k) for k in item):
+        if type(item) is dict and all(
+            type(k) is str and _KEY.fullmatch(k) for k in item
+        ):
             for child in item.values():
                 check(child)
             return
         raise ValueError("unsupported canonical value")
 
     check(value)
-    return json.dumps(value, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 def digest(value) -> str:
@@ -46,7 +53,10 @@ def strict_json(raw: str | bytes):
             result[key] = value
         return result
 
-    value = json.loads(raw, object_pairs_hook=pairs,
-                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError("non-finite JSON")))
+    value = json.loads(
+        raw,
+        object_pairs_hook=pairs,
+        parse_constant=lambda _: (_ for _ in ()).throw(ValueError("non-finite JSON")),
+    )
     canonical_bytes(value)
     return value
