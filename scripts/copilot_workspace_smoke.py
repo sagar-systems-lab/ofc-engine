@@ -509,6 +509,7 @@ def qualify(origin: str) -> dict:
                 assert not page.locator("#empty-title").is_visible()
                 page.locator("#ofc-intro-understand").click()
                 page.locator("#ofc-intro").wait_for(state="detached")
+                assert page.locator("#scope-guide").is_hidden()
                 page.get_by_text("LLM + Qloo + OFC: a decision still requires review.").wait_for(
                     state="visible",
                 )
