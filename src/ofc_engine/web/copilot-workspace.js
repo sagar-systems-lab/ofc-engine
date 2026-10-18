@@ -469,13 +469,21 @@
   const requestSend = () => {
     if (state.busy) return;
     if (state.runs.length >= state.sessionMessageLimit) {
-      statusText("This private visitor session has reached its four-request limit. No provider call made.");
+      statusText("This private visitor session has reached its " +
+        state.sessionMessageLimit + "-request limit. No provider call made.");
       return;
     }
     const prompt = composedPrompt();
     if (!prompt) return;
     if (prompt.length > 4000) {
       statusText("Maximum 4,000 characters including attached notes. No provider call made.");
+      return;
+    }
+    const available = state.capability?.capacity?.qloo_requests_remaining;
+    if (Number.isInteger(available) && available < 5) {
+      statusText("Live cultural review unavailable: " + available +
+        " Qloo calls remain; a qualifying artist/brand review needs at least 5. " +
+        "No provider request made. Existing history and synthetic tests remain available.");
       return;
     }
     state.pendingPrompt = prompt;

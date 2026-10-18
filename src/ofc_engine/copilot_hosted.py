@@ -716,6 +716,11 @@ class HostedCopilot:
         self._validate_entity_selection(
             session_id, parent_run_id, entity_selection_ref,
         )
+        # A qualified artist/brand review needs artist + two brand lookups
+        # and two independent rank observations. Do not spend a model call
+        # or consume a visitor slot when the shared Qloo gate cannot fit it.
+        # Exact plan cost is checked again after model extraction.
+        self._capacity(required_llm=3, required_qloo=5)
         run_id, cached = self._admit_message(
             session_id, request_id, digest, model.model, prompt, parent_run_id,
         )
