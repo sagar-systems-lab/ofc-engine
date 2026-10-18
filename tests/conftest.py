@@ -1,6 +1,29 @@
 import pytest
+import ipaddress
+import os
+import socket
 from ofc_engine.contracts import Decision, PlanSnapshot
 from ofc_engine.revisions import digest_obj
+
+
+@pytest.fixture(autouse=True)
+def offline_provider_guard(monkeypatch):
+    if os.environ.get("OFC_OFFLINE_TESTS") != "1":
+        return
+    original = socket.socket.connect
+
+    def connect(sock, address):
+        if isinstance(address, tuple):
+            host = address[0]
+            try:
+                local = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                local = host == "localhost"
+            if not local:
+                raise AssertionError("external network is disabled in offline tests")
+        return original(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
 
 @pytest.fixture
 def plan():

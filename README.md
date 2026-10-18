@@ -4,7 +4,7 @@
 
 **Live Copilot:** https://ofc-fixture-preview.onrender.com/
 
-The hosted Copilot accepts the visitor's own natural-language cultural decision proposal. The **live-qualified scope** is an artist comparing two to five named brand candidates, including an original choice. Gemini/Groq extracts the proposed plan; Qloo resolves exact entities, ranks the bounded candidate pool and independently rechecks the rank; OFC may revise the brand choice. The saved OFF/ON comparison uses the same Qloo evidence and shows what the control layer changed. Live requests consume finite provider quotas and require confirmation.
+The hosted Copilot accepts the visitor's own natural-language cultural decision proposal. The **live-qualified scope** is an artist comparing two to five named brand candidates, including an original choice. Gemini/Groq extracts the proposed plan; Qloo resolves exact entities, ranks the bounded candidate pool and supplies a second scoped rank observation; OFC may revise the brand choice. The saved OFF/ON comparison uses the same Qloo evidence and shows what the control layer changed. Live requests consume finite provider quotas and require confirmation.
 
 The Copilot also retains structured multi-city and dependent choices. Non-brand or locality evidence is **not policy-qualified**: such decisions remain unverified, never receive a fabricated PASS, and may be skipped when conserving daily provider capacity. Business readiness, bookings and other external actions remain withheld. Use the on-screen scope guide and synthetic scenarios to explore without spending provider quota.
 
@@ -60,3 +60,11 @@ Related: [Try it](docs/TRY_IT.md) · [Product contract](docs/PROJECT.md) · [Hos
 MIT license. Never commit Qloo credentials, PostgreSQL URLs, browser tickets, operator tokens, or raw provider captures. Provider-derived publication is subject to applicable event/account rights. A Git-history regex scan does not replace manual source/history and licensing review.
 
 OFC does not execute bookings, transfers or payments. The demonstrated outcome is **rank-grounded selective repair plus safe refusal**.
+
+## Typed plan review
+
+An opt-in control service reviews up to 64 decisions, typed dependencies, scoped evidence, currency limits, and masked repair batches. The graph explorer shows exactly which choices changed, which obligations reopened, and which choices remained untouched. Agent clients receive durable review IDs, ordered events, and independently checkable control records.
+
+Connected reviews can collect fresh claim evidence between bounded repair rounds. Optional Qloo and signed business-feed adapters enforce account, entitlement, locality, quota, and deadline scopes; their durable tickets prevent blind retries after a crash. Source collection requires separate operator configuration and a confirmed zero-price entitlement. The default sandbox makes no provider requests.
+
+Run `OFC_CONTROL_MODE=SANDBOX python -m ofc_engine.hosted_preview` and open `/plans` for a keyless, synthetic 30-decision example. Private PostgreSQL admission, signed input attestations, saved Copilot capture replay, and the optional expanded natural-language intake require separate configuration. The hosted default remains unchanged. See [plan review operations and contracts](docs/CONTROL_PLANE.md).

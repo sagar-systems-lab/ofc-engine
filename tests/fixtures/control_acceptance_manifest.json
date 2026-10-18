@@ -1,0 +1,2076 @@
+{
+  "schema": "ofc.acceptance-corpus/1",
+  "scorer": "registered-junit/1",
+  "development_count": 410,
+  "policy_digest": "fc4b2bb673c30f814ef6b337888cef7631c6631ac17c2ae7e108d9ec0e5b8ba5",
+  "holdout_minimum": 150,
+  "holdout_status": "EXTERNALLY_SEALED_LABELS_REQUIRED",
+  "categories": {
+    "contract": 60,
+    "graph": 80,
+    "evidence": 60,
+    "repair": 60,
+    "attacker": 60,
+    "temporal_budget": 30,
+    "workflow": 30,
+    "agent": 30
+  },
+  "source_digests": {
+    "tests/test_control_acceptance.py": "efad3c6ec5cfd9b7c26f2f281f7efa8f478d1811bf626b001ec64c3e957d8308",
+    "tests/test_control_graph.py": "8c9189883f8919a636530ab6460378b33dd0e84f7fe5d09238300854814dbe33",
+    "tests/test_control_oracles.py": "f94ad62589902a90cb839196496df96e5668fd861ee06826c4eb73e8c82f57c5",
+    "tests/test_control_evidence.py": "b50152b8b1b86634ebc0cbaba3d9096f0e92f2e8b1b2f14db1c888a789eefe1b"
+  },
+  "cases": [
+    {
+      "id": "contract-000",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[0]"
+    },
+    {
+      "id": "contract-001",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[1]"
+    },
+    {
+      "id": "contract-002",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[2]"
+    },
+    {
+      "id": "contract-003",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[3]"
+    },
+    {
+      "id": "contract-004",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[4]"
+    },
+    {
+      "id": "contract-005",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[5]"
+    },
+    {
+      "id": "contract-006",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[6]"
+    },
+    {
+      "id": "contract-007",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[7]"
+    },
+    {
+      "id": "contract-008",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[8]"
+    },
+    {
+      "id": "contract-009",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[9]"
+    },
+    {
+      "id": "contract-010",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[10]"
+    },
+    {
+      "id": "contract-011",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[11]"
+    },
+    {
+      "id": "contract-012",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[12]"
+    },
+    {
+      "id": "contract-013",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[13]"
+    },
+    {
+      "id": "contract-014",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[14]"
+    },
+    {
+      "id": "contract-015",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[15]"
+    },
+    {
+      "id": "contract-016",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[16]"
+    },
+    {
+      "id": "contract-017",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[17]"
+    },
+    {
+      "id": "contract-018",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[18]"
+    },
+    {
+      "id": "contract-019",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[19]"
+    },
+    {
+      "id": "contract-020",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[20]"
+    },
+    {
+      "id": "contract-021",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[21]"
+    },
+    {
+      "id": "contract-022",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[22]"
+    },
+    {
+      "id": "contract-023",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[23]"
+    },
+    {
+      "id": "contract-024",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[24]"
+    },
+    {
+      "id": "contract-025",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[25]"
+    },
+    {
+      "id": "contract-026",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[26]"
+    },
+    {
+      "id": "contract-027",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[27]"
+    },
+    {
+      "id": "contract-028",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[28]"
+    },
+    {
+      "id": "contract-029",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[29]"
+    },
+    {
+      "id": "contract-030",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[30]"
+    },
+    {
+      "id": "contract-031",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[31]"
+    },
+    {
+      "id": "contract-032",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[32]"
+    },
+    {
+      "id": "contract-033",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[33]"
+    },
+    {
+      "id": "contract-034",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[34]"
+    },
+    {
+      "id": "contract-035",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[35]"
+    },
+    {
+      "id": "contract-036",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[36]"
+    },
+    {
+      "id": "contract-037",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[37]"
+    },
+    {
+      "id": "contract-038",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[38]"
+    },
+    {
+      "id": "contract-039",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[39]"
+    },
+    {
+      "id": "contract-040",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[40]"
+    },
+    {
+      "id": "contract-041",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[41]"
+    },
+    {
+      "id": "contract-042",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[42]"
+    },
+    {
+      "id": "contract-043",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[43]"
+    },
+    {
+      "id": "contract-044",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[44]"
+    },
+    {
+      "id": "contract-045",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[45]"
+    },
+    {
+      "id": "contract-046",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[46]"
+    },
+    {
+      "id": "contract-047",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[47]"
+    },
+    {
+      "id": "contract-048",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[48]"
+    },
+    {
+      "id": "contract-049",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[49]"
+    },
+    {
+      "id": "contract-050",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[50]"
+    },
+    {
+      "id": "contract-051",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[51]"
+    },
+    {
+      "id": "contract-052",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[52]"
+    },
+    {
+      "id": "contract-053",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[53]"
+    },
+    {
+      "id": "contract-054",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[54]"
+    },
+    {
+      "id": "contract-055",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[55]"
+    },
+    {
+      "id": "contract-056",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[56]"
+    },
+    {
+      "id": "contract-057",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[57]"
+    },
+    {
+      "id": "contract-058",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[58]"
+    },
+    {
+      "id": "contract-059",
+      "category": "contract",
+      "oracle": "tests/test_control_acceptance.py::test_registered_contract[59]"
+    },
+    {
+      "id": "graph-000",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[0]"
+    },
+    {
+      "id": "graph-001",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[1]"
+    },
+    {
+      "id": "graph-002",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[2]"
+    },
+    {
+      "id": "graph-003",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[3]"
+    },
+    {
+      "id": "graph-004",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[4]"
+    },
+    {
+      "id": "graph-005",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[5]"
+    },
+    {
+      "id": "graph-006",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[6]"
+    },
+    {
+      "id": "graph-007",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[7]"
+    },
+    {
+      "id": "graph-008",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[8]"
+    },
+    {
+      "id": "graph-009",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[9]"
+    },
+    {
+      "id": "graph-010",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[10]"
+    },
+    {
+      "id": "graph-011",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[11]"
+    },
+    {
+      "id": "graph-012",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[12]"
+    },
+    {
+      "id": "graph-013",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[13]"
+    },
+    {
+      "id": "graph-014",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[14]"
+    },
+    {
+      "id": "graph-015",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[15]"
+    },
+    {
+      "id": "graph-016",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[16]"
+    },
+    {
+      "id": "graph-017",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[17]"
+    },
+    {
+      "id": "graph-018",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[18]"
+    },
+    {
+      "id": "graph-019",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[19]"
+    },
+    {
+      "id": "graph-020",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[20]"
+    },
+    {
+      "id": "graph-021",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[21]"
+    },
+    {
+      "id": "graph-022",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[22]"
+    },
+    {
+      "id": "graph-023",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[23]"
+    },
+    {
+      "id": "graph-024",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[24]"
+    },
+    {
+      "id": "graph-025",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[25]"
+    },
+    {
+      "id": "graph-026",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[26]"
+    },
+    {
+      "id": "graph-027",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[27]"
+    },
+    {
+      "id": "graph-028",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[28]"
+    },
+    {
+      "id": "graph-029",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[29]"
+    },
+    {
+      "id": "graph-030",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[30]"
+    },
+    {
+      "id": "graph-031",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[31]"
+    },
+    {
+      "id": "graph-032",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[32]"
+    },
+    {
+      "id": "graph-033",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[33]"
+    },
+    {
+      "id": "graph-034",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[34]"
+    },
+    {
+      "id": "graph-035",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[35]"
+    },
+    {
+      "id": "graph-036",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[36]"
+    },
+    {
+      "id": "graph-037",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[37]"
+    },
+    {
+      "id": "graph-038",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[38]"
+    },
+    {
+      "id": "graph-039",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[39]"
+    },
+    {
+      "id": "graph-040",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[40]"
+    },
+    {
+      "id": "graph-041",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[41]"
+    },
+    {
+      "id": "graph-042",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[42]"
+    },
+    {
+      "id": "graph-043",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[43]"
+    },
+    {
+      "id": "graph-044",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[44]"
+    },
+    {
+      "id": "graph-045",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[45]"
+    },
+    {
+      "id": "graph-046",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[46]"
+    },
+    {
+      "id": "graph-047",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[47]"
+    },
+    {
+      "id": "graph-048",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[48]"
+    },
+    {
+      "id": "graph-049",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[49]"
+    },
+    {
+      "id": "graph-050",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[50]"
+    },
+    {
+      "id": "graph-051",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[51]"
+    },
+    {
+      "id": "graph-052",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[52]"
+    },
+    {
+      "id": "graph-053",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[53]"
+    },
+    {
+      "id": "graph-054",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[54]"
+    },
+    {
+      "id": "graph-055",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[55]"
+    },
+    {
+      "id": "graph-056",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[56]"
+    },
+    {
+      "id": "graph-057",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[57]"
+    },
+    {
+      "id": "graph-058",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[58]"
+    },
+    {
+      "id": "graph-059",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[59]"
+    },
+    {
+      "id": "graph-060",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[60]"
+    },
+    {
+      "id": "graph-061",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[61]"
+    },
+    {
+      "id": "graph-062",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[62]"
+    },
+    {
+      "id": "graph-063",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[63]"
+    },
+    {
+      "id": "graph-064",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[64]"
+    },
+    {
+      "id": "graph-065",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[65]"
+    },
+    {
+      "id": "graph-066",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[66]"
+    },
+    {
+      "id": "graph-067",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[67]"
+    },
+    {
+      "id": "graph-068",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[68]"
+    },
+    {
+      "id": "graph-069",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[69]"
+    },
+    {
+      "id": "graph-070",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[70]"
+    },
+    {
+      "id": "graph-071",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[71]"
+    },
+    {
+      "id": "graph-072",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[72]"
+    },
+    {
+      "id": "graph-073",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[73]"
+    },
+    {
+      "id": "graph-074",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[74]"
+    },
+    {
+      "id": "graph-075",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[75]"
+    },
+    {
+      "id": "graph-076",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[76]"
+    },
+    {
+      "id": "graph-077",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[77]"
+    },
+    {
+      "id": "graph-078",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[78]"
+    },
+    {
+      "id": "graph-079",
+      "category": "graph",
+      "oracle": "tests/test_control_acceptance.py::test_registered_graph[79]"
+    },
+    {
+      "id": "evidence-000",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[0]"
+    },
+    {
+      "id": "evidence-001",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[1]"
+    },
+    {
+      "id": "evidence-002",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[2]"
+    },
+    {
+      "id": "evidence-003",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[3]"
+    },
+    {
+      "id": "evidence-004",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[4]"
+    },
+    {
+      "id": "evidence-005",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[5]"
+    },
+    {
+      "id": "evidence-006",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[6]"
+    },
+    {
+      "id": "evidence-007",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[7]"
+    },
+    {
+      "id": "evidence-008",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[8]"
+    },
+    {
+      "id": "evidence-009",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[9]"
+    },
+    {
+      "id": "evidence-010",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[10]"
+    },
+    {
+      "id": "evidence-011",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[11]"
+    },
+    {
+      "id": "evidence-012",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[12]"
+    },
+    {
+      "id": "evidence-013",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[13]"
+    },
+    {
+      "id": "evidence-014",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[14]"
+    },
+    {
+      "id": "evidence-015",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[15]"
+    },
+    {
+      "id": "evidence-016",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[16]"
+    },
+    {
+      "id": "evidence-017",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[17]"
+    },
+    {
+      "id": "evidence-018",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[18]"
+    },
+    {
+      "id": "evidence-019",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[19]"
+    },
+    {
+      "id": "evidence-020",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[20]"
+    },
+    {
+      "id": "evidence-021",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[21]"
+    },
+    {
+      "id": "evidence-022",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[22]"
+    },
+    {
+      "id": "evidence-023",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[23]"
+    },
+    {
+      "id": "evidence-024",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[24]"
+    },
+    {
+      "id": "evidence-025",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[25]"
+    },
+    {
+      "id": "evidence-026",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[26]"
+    },
+    {
+      "id": "evidence-027",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[27]"
+    },
+    {
+      "id": "evidence-028",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[28]"
+    },
+    {
+      "id": "evidence-029",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[29]"
+    },
+    {
+      "id": "evidence-030",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[30]"
+    },
+    {
+      "id": "evidence-031",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[31]"
+    },
+    {
+      "id": "evidence-032",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[32]"
+    },
+    {
+      "id": "evidence-033",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[33]"
+    },
+    {
+      "id": "evidence-034",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[34]"
+    },
+    {
+      "id": "evidence-035",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[35]"
+    },
+    {
+      "id": "evidence-036",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[36]"
+    },
+    {
+      "id": "evidence-037",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[37]"
+    },
+    {
+      "id": "evidence-038",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[38]"
+    },
+    {
+      "id": "evidence-039",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[39]"
+    },
+    {
+      "id": "evidence-040",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[40]"
+    },
+    {
+      "id": "evidence-041",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[41]"
+    },
+    {
+      "id": "evidence-042",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[42]"
+    },
+    {
+      "id": "evidence-043",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[43]"
+    },
+    {
+      "id": "evidence-044",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[44]"
+    },
+    {
+      "id": "evidence-045",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[45]"
+    },
+    {
+      "id": "evidence-046",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[46]"
+    },
+    {
+      "id": "evidence-047",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[47]"
+    },
+    {
+      "id": "evidence-048",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[48]"
+    },
+    {
+      "id": "evidence-049",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[49]"
+    },
+    {
+      "id": "evidence-050",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[50]"
+    },
+    {
+      "id": "evidence-051",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[51]"
+    },
+    {
+      "id": "evidence-052",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[52]"
+    },
+    {
+      "id": "evidence-053",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[53]"
+    },
+    {
+      "id": "evidence-054",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[54]"
+    },
+    {
+      "id": "evidence-055",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[55]"
+    },
+    {
+      "id": "evidence-056",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[56]"
+    },
+    {
+      "id": "evidence-057",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[57]"
+    },
+    {
+      "id": "evidence-058",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[58]"
+    },
+    {
+      "id": "evidence-059",
+      "category": "evidence",
+      "oracle": "tests/test_control_acceptance.py::test_registered_evidence[59]"
+    },
+    {
+      "id": "repair-000",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[0]"
+    },
+    {
+      "id": "repair-001",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[1]"
+    },
+    {
+      "id": "repair-002",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[2]"
+    },
+    {
+      "id": "repair-003",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[3]"
+    },
+    {
+      "id": "repair-004",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[4]"
+    },
+    {
+      "id": "repair-005",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[5]"
+    },
+    {
+      "id": "repair-006",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[6]"
+    },
+    {
+      "id": "repair-007",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[7]"
+    },
+    {
+      "id": "repair-008",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[8]"
+    },
+    {
+      "id": "repair-009",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[9]"
+    },
+    {
+      "id": "repair-010",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[10]"
+    },
+    {
+      "id": "repair-011",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[11]"
+    },
+    {
+      "id": "repair-012",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[12]"
+    },
+    {
+      "id": "repair-013",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[13]"
+    },
+    {
+      "id": "repair-014",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[14]"
+    },
+    {
+      "id": "repair-015",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[15]"
+    },
+    {
+      "id": "repair-016",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[16]"
+    },
+    {
+      "id": "repair-017",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[17]"
+    },
+    {
+      "id": "repair-018",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[18]"
+    },
+    {
+      "id": "repair-019",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[19]"
+    },
+    {
+      "id": "repair-020",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[20]"
+    },
+    {
+      "id": "repair-021",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[21]"
+    },
+    {
+      "id": "repair-022",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[22]"
+    },
+    {
+      "id": "repair-023",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[23]"
+    },
+    {
+      "id": "repair-024",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[24]"
+    },
+    {
+      "id": "repair-025",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[25]"
+    },
+    {
+      "id": "repair-026",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[26]"
+    },
+    {
+      "id": "repair-027",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[27]"
+    },
+    {
+      "id": "repair-028",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[28]"
+    },
+    {
+      "id": "repair-029",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[29]"
+    },
+    {
+      "id": "repair-030",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[30]"
+    },
+    {
+      "id": "repair-031",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[31]"
+    },
+    {
+      "id": "repair-032",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[32]"
+    },
+    {
+      "id": "repair-033",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[33]"
+    },
+    {
+      "id": "repair-034",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[34]"
+    },
+    {
+      "id": "repair-035",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[35]"
+    },
+    {
+      "id": "repair-036",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[36]"
+    },
+    {
+      "id": "repair-037",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[37]"
+    },
+    {
+      "id": "repair-038",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[38]"
+    },
+    {
+      "id": "repair-039",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[39]"
+    },
+    {
+      "id": "repair-040",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[40]"
+    },
+    {
+      "id": "repair-041",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[41]"
+    },
+    {
+      "id": "repair-042",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[42]"
+    },
+    {
+      "id": "repair-043",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[43]"
+    },
+    {
+      "id": "repair-044",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[44]"
+    },
+    {
+      "id": "repair-045",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[45]"
+    },
+    {
+      "id": "repair-046",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[46]"
+    },
+    {
+      "id": "repair-047",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[47]"
+    },
+    {
+      "id": "repair-048",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[48]"
+    },
+    {
+      "id": "repair-049",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[49]"
+    },
+    {
+      "id": "repair-050",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[50]"
+    },
+    {
+      "id": "repair-051",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[51]"
+    },
+    {
+      "id": "repair-052",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[52]"
+    },
+    {
+      "id": "repair-053",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[53]"
+    },
+    {
+      "id": "repair-054",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[54]"
+    },
+    {
+      "id": "repair-055",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[55]"
+    },
+    {
+      "id": "repair-056",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[56]"
+    },
+    {
+      "id": "repair-057",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[57]"
+    },
+    {
+      "id": "repair-058",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[58]"
+    },
+    {
+      "id": "repair-059",
+      "category": "repair",
+      "oracle": "tests/test_control_acceptance.py::test_registered_repair[59]"
+    },
+    {
+      "id": "attacker-000",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[0]"
+    },
+    {
+      "id": "attacker-001",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[1]"
+    },
+    {
+      "id": "attacker-002",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[2]"
+    },
+    {
+      "id": "attacker-003",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[3]"
+    },
+    {
+      "id": "attacker-004",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[4]"
+    },
+    {
+      "id": "attacker-005",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[5]"
+    },
+    {
+      "id": "attacker-006",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[6]"
+    },
+    {
+      "id": "attacker-007",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[7]"
+    },
+    {
+      "id": "attacker-008",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[8]"
+    },
+    {
+      "id": "attacker-009",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[9]"
+    },
+    {
+      "id": "attacker-010",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[10]"
+    },
+    {
+      "id": "attacker-011",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[11]"
+    },
+    {
+      "id": "attacker-012",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[12]"
+    },
+    {
+      "id": "attacker-013",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[13]"
+    },
+    {
+      "id": "attacker-014",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[14]"
+    },
+    {
+      "id": "attacker-015",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[15]"
+    },
+    {
+      "id": "attacker-016",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[16]"
+    },
+    {
+      "id": "attacker-017",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[17]"
+    },
+    {
+      "id": "attacker-018",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[18]"
+    },
+    {
+      "id": "attacker-019",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[19]"
+    },
+    {
+      "id": "attacker-020",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[20]"
+    },
+    {
+      "id": "attacker-021",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[21]"
+    },
+    {
+      "id": "attacker-022",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[22]"
+    },
+    {
+      "id": "attacker-023",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[23]"
+    },
+    {
+      "id": "attacker-024",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[24]"
+    },
+    {
+      "id": "attacker-025",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[25]"
+    },
+    {
+      "id": "attacker-026",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[26]"
+    },
+    {
+      "id": "attacker-027",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[27]"
+    },
+    {
+      "id": "attacker-028",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[28]"
+    },
+    {
+      "id": "attacker-029",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[29]"
+    },
+    {
+      "id": "attacker-030",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[30]"
+    },
+    {
+      "id": "attacker-031",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[31]"
+    },
+    {
+      "id": "attacker-032",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[32]"
+    },
+    {
+      "id": "attacker-033",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[33]"
+    },
+    {
+      "id": "attacker-034",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[34]"
+    },
+    {
+      "id": "attacker-035",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[35]"
+    },
+    {
+      "id": "attacker-036",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[36]"
+    },
+    {
+      "id": "attacker-037",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[37]"
+    },
+    {
+      "id": "attacker-038",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[38]"
+    },
+    {
+      "id": "attacker-039",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[39]"
+    },
+    {
+      "id": "attacker-040",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[40]"
+    },
+    {
+      "id": "attacker-041",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[41]"
+    },
+    {
+      "id": "attacker-042",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[42]"
+    },
+    {
+      "id": "attacker-043",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[43]"
+    },
+    {
+      "id": "attacker-044",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[44]"
+    },
+    {
+      "id": "attacker-045",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[45]"
+    },
+    {
+      "id": "attacker-046",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[46]"
+    },
+    {
+      "id": "attacker-047",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[47]"
+    },
+    {
+      "id": "attacker-048",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[48]"
+    },
+    {
+      "id": "attacker-049",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[49]"
+    },
+    {
+      "id": "attacker-050",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[50]"
+    },
+    {
+      "id": "attacker-051",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[51]"
+    },
+    {
+      "id": "attacker-052",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[52]"
+    },
+    {
+      "id": "attacker-053",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[53]"
+    },
+    {
+      "id": "attacker-054",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[54]"
+    },
+    {
+      "id": "attacker-055",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[55]"
+    },
+    {
+      "id": "attacker-056",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[56]"
+    },
+    {
+      "id": "attacker-057",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[57]"
+    },
+    {
+      "id": "attacker-058",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[58]"
+    },
+    {
+      "id": "attacker-059",
+      "category": "attacker",
+      "oracle": "tests/test_control_acceptance.py::test_registered_attacker[59]"
+    },
+    {
+      "id": "temporal_budget-000",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[0]"
+    },
+    {
+      "id": "temporal_budget-001",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[1]"
+    },
+    {
+      "id": "temporal_budget-002",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[2]"
+    },
+    {
+      "id": "temporal_budget-003",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[3]"
+    },
+    {
+      "id": "temporal_budget-004",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[4]"
+    },
+    {
+      "id": "temporal_budget-005",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[5]"
+    },
+    {
+      "id": "temporal_budget-006",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[6]"
+    },
+    {
+      "id": "temporal_budget-007",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[7]"
+    },
+    {
+      "id": "temporal_budget-008",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[8]"
+    },
+    {
+      "id": "temporal_budget-009",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[9]"
+    },
+    {
+      "id": "temporal_budget-010",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[10]"
+    },
+    {
+      "id": "temporal_budget-011",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[11]"
+    },
+    {
+      "id": "temporal_budget-012",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[12]"
+    },
+    {
+      "id": "temporal_budget-013",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[13]"
+    },
+    {
+      "id": "temporal_budget-014",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[14]"
+    },
+    {
+      "id": "temporal_budget-015",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[15]"
+    },
+    {
+      "id": "temporal_budget-016",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[16]"
+    },
+    {
+      "id": "temporal_budget-017",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[17]"
+    },
+    {
+      "id": "temporal_budget-018",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[18]"
+    },
+    {
+      "id": "temporal_budget-019",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[19]"
+    },
+    {
+      "id": "temporal_budget-020",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[20]"
+    },
+    {
+      "id": "temporal_budget-021",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[21]"
+    },
+    {
+      "id": "temporal_budget-022",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[22]"
+    },
+    {
+      "id": "temporal_budget-023",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[23]"
+    },
+    {
+      "id": "temporal_budget-024",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[24]"
+    },
+    {
+      "id": "temporal_budget-025",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[25]"
+    },
+    {
+      "id": "temporal_budget-026",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[26]"
+    },
+    {
+      "id": "temporal_budget-027",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[27]"
+    },
+    {
+      "id": "temporal_budget-028",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[28]"
+    },
+    {
+      "id": "temporal_budget-029",
+      "category": "temporal_budget",
+      "oracle": "tests/test_control_acceptance.py::test_registered_temporal_budget[29]"
+    },
+    {
+      "id": "workflow-000",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[0]"
+    },
+    {
+      "id": "workflow-001",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[1]"
+    },
+    {
+      "id": "workflow-002",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[2]"
+    },
+    {
+      "id": "workflow-003",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[3]"
+    },
+    {
+      "id": "workflow-004",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[4]"
+    },
+    {
+      "id": "workflow-005",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[5]"
+    },
+    {
+      "id": "workflow-006",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[6]"
+    },
+    {
+      "id": "workflow-007",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[7]"
+    },
+    {
+      "id": "workflow-008",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[8]"
+    },
+    {
+      "id": "workflow-009",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[9]"
+    },
+    {
+      "id": "workflow-010",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[10]"
+    },
+    {
+      "id": "workflow-011",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[11]"
+    },
+    {
+      "id": "workflow-012",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[12]"
+    },
+    {
+      "id": "workflow-013",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[13]"
+    },
+    {
+      "id": "workflow-014",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[14]"
+    },
+    {
+      "id": "workflow-015",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[15]"
+    },
+    {
+      "id": "workflow-016",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[16]"
+    },
+    {
+      "id": "workflow-017",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[17]"
+    },
+    {
+      "id": "workflow-018",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[18]"
+    },
+    {
+      "id": "workflow-019",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[19]"
+    },
+    {
+      "id": "workflow-020",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[20]"
+    },
+    {
+      "id": "workflow-021",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[21]"
+    },
+    {
+      "id": "workflow-022",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[22]"
+    },
+    {
+      "id": "workflow-023",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[23]"
+    },
+    {
+      "id": "workflow-024",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[24]"
+    },
+    {
+      "id": "workflow-025",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[25]"
+    },
+    {
+      "id": "workflow-026",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[26]"
+    },
+    {
+      "id": "workflow-027",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[27]"
+    },
+    {
+      "id": "workflow-028",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[28]"
+    },
+    {
+      "id": "workflow-029",
+      "category": "workflow",
+      "oracle": "tests/test_control_acceptance.py::test_registered_workflow[29]"
+    },
+    {
+      "id": "agent-000",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[0]"
+    },
+    {
+      "id": "agent-001",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[1]"
+    },
+    {
+      "id": "agent-002",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[2]"
+    },
+    {
+      "id": "agent-003",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[3]"
+    },
+    {
+      "id": "agent-004",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[4]"
+    },
+    {
+      "id": "agent-005",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[5]"
+    },
+    {
+      "id": "agent-006",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[6]"
+    },
+    {
+      "id": "agent-007",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[7]"
+    },
+    {
+      "id": "agent-008",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[8]"
+    },
+    {
+      "id": "agent-009",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[9]"
+    },
+    {
+      "id": "agent-010",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[10]"
+    },
+    {
+      "id": "agent-011",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[11]"
+    },
+    {
+      "id": "agent-012",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[12]"
+    },
+    {
+      "id": "agent-013",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[13]"
+    },
+    {
+      "id": "agent-014",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[14]"
+    },
+    {
+      "id": "agent-015",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[15]"
+    },
+    {
+      "id": "agent-016",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[16]"
+    },
+    {
+      "id": "agent-017",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[17]"
+    },
+    {
+      "id": "agent-018",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[18]"
+    },
+    {
+      "id": "agent-019",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[19]"
+    },
+    {
+      "id": "agent-020",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[20]"
+    },
+    {
+      "id": "agent-021",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[21]"
+    },
+    {
+      "id": "agent-022",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[22]"
+    },
+    {
+      "id": "agent-023",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[23]"
+    },
+    {
+      "id": "agent-024",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[24]"
+    },
+    {
+      "id": "agent-025",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[25]"
+    },
+    {
+      "id": "agent-026",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[26]"
+    },
+    {
+      "id": "agent-027",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[27]"
+    },
+    {
+      "id": "agent-028",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[28]"
+    },
+    {
+      "id": "agent-029",
+      "category": "agent",
+      "oracle": "tests/test_control_acceptance.py::test_registered_agent[29]"
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import secrets
+import psycopg
 from time import monotonic
 
 from .copilot_activity import activity_projection
@@ -96,6 +97,8 @@ class HostedCopilot:
         self.session_message_limit = session_message_limit
         self.model_transport = model_transport
         self.qloo_transport = qloo_transport
+        self.control_runtime = None
+        self.graph_intake = False
         with store._connect() as db:
             for table in (
                 "copilot_sessions", "copilot_messages", "copilot_search",
@@ -508,15 +511,16 @@ class HostedCopilot:
             raise ValueError("LLM_NOT_CONFIGURED")
         return CopilotLLM(
             provider=selected, api_key=key, transport=self.model_transport,
+            intake_profile="graph" if self.graph_intake else "standard",
         )
 
-    def _reviewer(self):
+    def _reviewer(self, trace=None):
         key = self.vault.read_for_server("qloo")
         if key is None:
             raise ValueError("QLOO_NOT_CONFIGURED")
         return PostgresDynamicQlooReview(
             self.store,
-            QlooProbeClient(api_key=key, transport=self.qloo_transport),
+            QlooProbeClient(api_key=key, transport=self.qloo_transport,trace=trace),
             daily_limit=self.qloo_daily_limit,
         )
 
@@ -726,6 +730,11 @@ class HostedCopilot:
         )
         if cached is not None:
             return cached
+        source_trace=None
+        if self.control_runtime is not None:
+            from .control.telemetry import Trace
+            source_trace=Trace(run_id,simulation=self.model_transport is not None and getattr(self.model_transport,"offline",False))
+            if hasattr(model,"trace"): model.trace=source_trace
         try:
             started = monotonic()
             self._capacity(required_llm=3)
@@ -765,7 +774,7 @@ class HostedCopilot:
                         and context.target_category == "brand" else 0
                     ),
                 )
-                reviewer = self._reviewer()
+                reviewer = self._reviewer(trace=source_trace) if source_trace is not None else self._reviewer()
                 resolver = HostedQlooResolver(reviewer)
                 seed = resolver.resolve(
                     run_id=run_id, name=seed_name, kind=seed_category,
@@ -870,7 +879,7 @@ class HostedCopilot:
                 )
                 catalog_skipped.update(quota_skipped)
                 self._capacity(required_qloo=required)
-            reviewer = self._reviewer()
+            reviewer = self._reviewer(trace=source_trace) if source_trace is not None else self._reviewer()
             resolver = HostedQlooResolver(reviewer)
             artist = (
                 seed if native_discovery is not None
@@ -891,7 +900,7 @@ class HostedCopilot:
                 def lookup_brand(name: str) -> ResolvedEntity:
                     # Each worker owns an independent reviewer; all admissions
                     # still serialize through the durable shared quota row.
-                    return HostedQlooResolver(self._reviewer()).resolve(
+                    return HostedQlooResolver(self._reviewer(trace=source_trace) if source_trace is not None else self._reviewer()).resolve(
                         run_id=run_id, name=name, kind="brand",
                     )
 
@@ -1108,6 +1117,17 @@ class HostedCopilot:
                 "release_authorized": False,
                 "external_action_executed": False,
             }
+            if self.control_runtime is not None:
+                try:
+                    aliases = {item.entity_id: name for name, item in brands.items()}
+                    result["control_review"] = self.control_runtime.import_proposal(
+                        proposal, self.store, actor_id=session_id, labels=aliases, source_trace=source_trace,
+                    )
+                except (ValueError, psycopg.Error):
+                    result["control_review"] = {
+                        "status": "UNAVAILABLE", "additional_provider_calls": 0,
+                        "external_action_executed": False,
+                    }
             self._complete(run_id, result)
             _log.info("COPILOT_STAGE stage=total_run duration_ms=%d",
                       round((monotonic() - started) * 1000))
@@ -1181,6 +1201,7 @@ class HostedCopilot:
             "selected_llm_provider": chosen,
             "capacity": self._capacity(),
             "session_message_limit": self.session_message_limit,
+            "max_extracted_decisions": 64 if self.graph_intake else 6,
             "qloo_catalog": capability_registry(),
             "release_authorized": False,
         }

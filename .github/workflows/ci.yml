@@ -5,6 +5,8 @@ on:
     branches: [main]
 permissions:
   contents: read
+env:
+  OFC_OFFLINE_TESTS: '1'
 jobs:
   contracts:
     runs-on: ubuntu-latest
@@ -20,6 +22,14 @@ jobs:
       - run: python scripts/verify_submission_surface.py
       - run: python -m pip install -e '.[dev]'
       - run: python -m pytest
+      - name: Verify registered development corpus
+        run: >-
+          python -m ofc_engine.control.acceptance
+          --manifest tests/fixtures/control_acceptance_manifest.json
+          --expected-digest "$(cat tests/fixtures/control_acceptance_lock.txt)"
+      - run: python scripts/control_security_gate.py
+      - run: python scripts/control_rehearsal.py
+      - run: python scripts/control_canary.py
       - name: Rehearse keyless release boundary
         run: python -m scripts.rehearse_release --output release-rehearsal.json
       - name: Archive synthetic rehearsal evidence
@@ -82,4 +92,6 @@ jobs:
       - name: Verify atomic Postgres agent lifecycle
         env:
           OFC_TEST_POSTGRES_URL: postgresql://postgres:ci-only@127.0.0.1:5432/ofc_ci
-        run: python -m pytest tests/test_postgres_runtime.py
+        run: python -m pytest tests/test_postgres_runtime.py tests/test_control_runtime.py
+      - name: Check control benchmark and standalone verifier
+        run: python -m ofc_engine.control.benchmark

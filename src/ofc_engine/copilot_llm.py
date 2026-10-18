@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-import re
 import socket
 from typing import Protocol
 from urllib.error import HTTPError, URLError
@@ -250,15 +249,23 @@ _PAIR_RULES = (
 )
 
 
+from .control.telemetry import instrument
+
+
 class CopilotLLM:
     """Text→typed draft only; evidence, repairs and release remain server-owned."""
 
     def __init__(
         self, *, provider: str, api_key: str,
         transport: JSONTransport | None = None, timeout: float = 15.0,
+        intake_profile: str = "standard", trace=None,
     ) -> None:
         if provider not in ("gemini", "groq"):
             raise ValueError("unsupported LLM provider")
+        if intake_profile not in ("standard", "graph"):
+            raise ValueError("unsupported intake profile")
+        self.trace = trace
+        self.intake_profile = intake_profile
         if not isinstance(api_key, str) or not api_key.strip() or any(
             c in api_key for c in "\r\n"
         ):
@@ -355,6 +362,7 @@ class CopilotLLM:
         ):
             raise LLMUnavailable("MODEL_PROBE_INVALID")
 
+    @instrument("inference")
     def extract(self, prompt: str, *, prior_plan: dict | None = None) -> CopilotDraft:
         if (
             not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= _MAX_PROMPT
@@ -363,6 +371,15 @@ class CopilotLLM:
             raise ValueError("prompt outside bounds")
         text = prompt.strip()
         instructions = _INSTRUCTIONS
+        schema, draft_type, output_tokens = _SCHEMA, CopilotDraft, 2048
+        if self.intake_profile == "graph":
+            from .control.intake import GraphDraft, graph_schema
+            schema, draft_type, output_tokens = graph_schema(_SCHEMA), GraphDraft, 8192
+            instructions += (
+                " Preserve every explicitly proposed decision and causal dependency, up to 64 nodes. "
+                "An operation with one declared option may have one candidate. "
+                "Do not invent missing decisions, prices, approvals, or evidence to fill the graph."
+            )
         if prior_plan is not None:
             if not isinstance(prior_plan, dict) or len(
                 json.dumps(prior_plan, ensure_ascii=False)
@@ -385,10 +402,10 @@ class CopilotLLM:
                 "contents": [{"role": "user", "parts": [{"text": text}]}],
                 "generationConfig": {
                     "responseMimeType": "application/json",
-                    "responseJsonSchema": _SCHEMA,
+                    "responseJsonSchema": schema,
                     "thinkingConfig": {"thinkingLevel": "minimal"},
                     "temperature": 0,
-                    "maxOutputTokens": 2048,
+                    "maxOutputTokens": output_tokens,
                 },
             }
             url = _GEMINI_URL
@@ -401,13 +418,13 @@ class CopilotLLM:
                     {"role": "user", "content": text},
                 ],
                 "temperature": 0,
-                "max_completion_tokens": 2048,
+                "max_completion_tokens": output_tokens,
                 "response_format": {
                     "type": "json_schema",
                     "json_schema": {
                         "name": "copilot_draft",
                         "strict": True,
-                        "schema": _SCHEMA,
+                        "schema": schema,
                     },
                 },
             }
@@ -469,10 +486,11 @@ class CopilotLLM:
         except (ValueError, TypeError):
             raise LLMUnavailable("MODEL_DRAFT_JSON_INVALID") from None
         try:
-            return CopilotDraft.model_validate_json(raw)
+            return draft_type.model_validate_json(raw)
         except (ValueError, TypeError):
             raise LLMUnavailable("MODEL_DRAFT_SCHEMA_INVALID") from None
 
+    @instrument("narration")
     def narrate_pair(self, pair, *, prompt: str) -> PairNarration:
         """Narrate one saved comparison; Qloo is shared, only OFC changes."""
         from .copilot_compare import CopilotPair
@@ -557,6 +575,7 @@ class CopilotLLM:
         except (KeyError, IndexError, TypeError, ValueError):
             raise LLMUnavailable("MODEL_NARRATION_INVALID") from None
 
+    @instrument("narration")
     def narrate_arm(self, pair, *, prompt: str, mode: str) -> str:
         """One inference arm; OFF never receives OFC's reviewed decisions."""
         from hashlib import sha256

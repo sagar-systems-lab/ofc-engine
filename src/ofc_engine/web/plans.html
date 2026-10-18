@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f9fc">
+  <title>OFC Engine · Plan review</title>
+  <link rel="stylesheet" href="/plans.css">
+  <script type="module" src="/plans.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to plan review</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="OFC Engine home"><svg viewBox="0 0 45 42" aria-hidden="true"><circle cx="17" cy="21" r="12" fill="none" stroke="#8dcaff" stroke-width="8"/><circle cx="29" cy="21" r="12" fill="none" stroke="#1766df" stroke-width="8"/></svg><strong>OFC <span>Engine</span></strong></a>
+    <span class="product-name">Decision control</span>
+    <div class="top-actions"><span id="source-badge" class="source-badge">Synthetic sandbox</span><a href="/workspace">Open Copilot ↗</a></div>
+  </header>
+  <div class="app-layout">
+    <aside class="setup" aria-label="Plan inputs">
+      <div class="setup-label">WORKSPACE <span>01</span></div>
+      <h2>Campaign review</h2>
+      <p class="muted">Inspect what a change means before committing to a plan.</p>
+      <details class="input-details" open>
+        <summary>Review inputs</summary>
+        <label for="scenario">Evidence scenario</label>
+        <select id="scenario"><option value="repair">A better supported alternative</option><option value="cascade">Reconsider connected decisions</option><option value="preserve">Keep the original choice</option><option value="abstain">Conflicting observations</option><option value="stale">Expired evidence</option><option value="conflict">Hard constraint conflict</option></select>
+        <label for="original">Original partner</label>
+        <select id="original"><option value="nike">Nike</option><option value="adidas">Adidas</option><option value="puma">Puma</option></select>
+        <div class="input-note">Hypothetical data. These observations do not describe real partnerships or Qloo results.</div>
+        <button id="run-review" class="primary" type="button">Review plan <span aria-hidden="true">↗</span></button>
+        <button id="edit-plan" class="secondary" type="button">Edit typed plan</button>
+        <button id="saved-reviews" class="text-button" type="button">Open a saved Copilot review</button>
+      </details>
+      <div class="input-summary"><div><span>Decisions</span><strong id="node-count">30</strong></div><div><span>Maximum graph size</span><strong>64</strong></div><div><span>Provider requests</span><strong id="request-count">0</strong></div><div><span>External spend</span><strong>0</strong></div></div>
+      <div class="boundary"><span class="boundary-mark" aria-hidden="true">◇</span><strong>Evidence is scoped.</strong><p>Cultural relevance does not establish rights, availability, costs, or permission to act.</p></div>
+      <a class="api-link" href="/api/control/schema" target="_blank" rel="noopener">View agent contract ↗</a>
+    </aside>
+    <main id="main" tabindex="-1">
+      <div class="eyebrow"><span class="live-dot"></span>EVIDENCE-BOUND PLAN REVIEW <span id="revision-label">REVISION 0 → 1</span></div>
+      <div class="hero-row"><div><h1 id="headline">One change.<br>Every consequence.</h1><p id="subtitle">A controlled correction, an exact impact trail, and a clear boundary on what can happen next.</p></div><button id="download-proof" class="secondary export" type="button" disabled>↓ Export proof</button></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div class="metrics" aria-label="Review impact"><div class="metric change"><span>Changed</span><strong id="changed-count">—</strong><small>Evidence-supported edits</small></div><div class="metric affected"><span>Reopened</span><strong id="affected-count">—</strong><small>Dependent checks</small></div><div class="metric preserved"><span>Untouched</span><strong id="preserved-count">—</strong><small>Candidate choices preserved</small></div><div class="metric withheld"><span>Action status</span><strong>Withheld</strong><small>No booking, payment, or release</small></div></div>
+      <div class="view-toolbar"><div class="tabs" role="tablist" aria-label="Review views"><button id="tab-impact" role="tab" aria-selected="true" aria-controls="panel-impact" type="button">Impact graph</button><button id="tab-compare" role="tab" aria-selected="false" aria-controls="panel-compare" tabindex="-1" type="button">Compare</button><button id="tab-evidence" role="tab" aria-selected="false" aria-controls="panel-evidence" tabindex="-1" type="button">Evidence</button><button id="tab-proof" role="tab" aria-selected="false" aria-controls="panel-proof" tabindex="-1" type="button">Proof</button></div><span id="duration" class="duration">Waiting for review</span></div>
+      <section id="panel-impact" role="tabpanel" aria-labelledby="tab-impact">
+        <div class="review-grid"><section class="graph-panel" aria-label="Decision graph"><div class="panel-heading"><div><h2>Follow the impact</h2><p>Select a decision to inspect its evidence and dependencies.</p></div><div class="legend"><span class="blue">Changed</span><span class="amber">Reopened</span><span>Untouched</span></div></div><div class="graph-scroll" tabindex="0" role="region" aria-label="Scrollable decision graph"><div id="graph" class="graph"><p class="empty-state">Review a plan to see its dependency graph.</p></div></div><details class="independent"><summary><strong id="independent-title">Unaffected decisions</strong><span>Candidate preservation ≠ approval</span></summary><div id="independent-grid" class="independent-grid"></div></details></section><aside id="inspector" class="inspector" aria-label="Selected decision"><p class="muted">Select a node in the graph.</p></aside></div>
+        <section id="constraint-panel" class="trace-panel" aria-label="Constraint findings" hidden><div class="panel-heading"><h2>Constraints need attention</h2></div><ul id="constraint-list" class="constraint-list"></ul></section>
+        <section class="trace-panel" aria-label="Control trace"><div class="panel-heading"><h2>What the engine established</h2><span class="muted">Saved control events</span></div><ol id="trace" class="trace"></ol></section>
+      </section>
+      <section id="panel-compare" role="tabpanel" aria-labelledby="tab-compare" hidden><div class="section-intro"><h2>Same plan. Same evidence.</h2><p>Compare the original selections, a simple rank rule, and controlled repair. Switching views makes no provider requests. This is a software comparison, not a measured business outcome.</p></div><div class="table-scroll"><table><thead><tr><th>Decision</th><th>Original</th><th>Simple rank rule</th><th>Controlled plan</th><th>Result</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section>
+      <section id="panel-evidence" role="tabpanel" aria-labelledby="tab-evidence" hidden><div class="section-intro"><h2>Every claim has a boundary.</h2><p id="evidence-note">Synthetic observations test the policy. Repeated observations from one source do not constitute independent source validation.</p></div><div id="evidence-ledger" class="evidence-ledger"></div></section>
+      <section id="panel-proof" role="tabpanel" aria-labelledby="tab-proof" hidden><div class="section-intro"><h2>A result you can challenge.</h2><p>The exported record contains the frozen plan, patches, evidence, policy, invalidation paths, and event chain. A separate offline verifier checks the record.</p></div><div id="proof-facts" class="proof-facts"></div><div class="verifier-note"><strong>Verify without calling a provider</strong><code id="verify-command">python -m ofc_engine.control.verifier saved-proof.json</code><p>Control records are unsigned. Hashes establish consistency against a trusted digest; they do not authenticate Qloo or establish an external timestamp. Private records require independently pinned authority keys.</p></div></section>
+      <footer><span>OFC Engine · Decisions with evidence. Actions with authority.</span><span id="footer-source">Synthetic · 0 provider calls</span></footer>
+    </main>
+  </div>
+  <dialog id="editor"><form method="dialog"><div class="dialog-heading"><div><h2>Edit the review contract</h2><p>Change nodes, dependencies, candidates, and evidence. Invalid inputs are rejected before review.</p></div><button class="close" type="submit" aria-label="Close editor">×</button></div><label for="plan-json">Typed plan and evidence · JSON</label><textarea id="plan-json" spellcheck="false" autocapitalize="off"></textarea><p class="muted">This editor runs synthetic policy tests. It cannot collect live evidence or authorize an action.</p><div class="dialog-actions"><button id="apply-plan" class="primary" type="button">Review edited plan</button><button class="secondary" type="submit">Cancel</button></div><p id="editor-error" role="alert" hidden></p></form></dialog>
+  <dialog id="saved-dialog"><form method="dialog"><div class="dialog-heading"><h2>Saved Copilot reviews</h2><button class="close" type="submit" aria-label="Close saved reviews">×</button></div><div id="saved-list"></div></form></dialog>
+</body>
+</html>

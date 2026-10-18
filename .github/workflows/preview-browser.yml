@@ -4,6 +4,8 @@ on:
     paths:
       - ".github/workflows/preview-browser.yml"
       - "scripts/copilot_workspace_smoke.py"
+      - "scripts/control_browser_smoke.py"
+      - "src/ofc_engine/control/**"
       - "scripts/browser_smoke.py"
       - "scripts/journey_smoke.py"
       - "scripts/hosted_published_e2e.py"
@@ -72,6 +74,7 @@ jobs:
           python scripts/accessibility_smoke.py --base-url http://127.0.0.1:18080
           python scripts/bench_preview.py --base-url http://127.0.0.1:18080 --samples 64 --workers 4 --warmup 8
           python scripts/capture_ui.py --base-url http://127.0.0.1:18080 --output ui-review
+          python scripts/control_browser_smoke.py --output ui-review/control
       - name: Qualify persisted Qloo-shaped evidence through Postgres and Chromium
         env:
           OFC_TEST_POSTGRES_URL: postgresql://postgres:ci-only@127.0.0.1:5432/ofc_browser
@@ -81,6 +84,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ofc-ui-review
-          path: ui-review/*.png
+          path: ui-review/**/*.png
           if-no-files-found: ignore
           retention-days: 7

@@ -28,6 +28,7 @@ from .dynamic import DynamicScopeConflict
 from .copilot_credentials import CredentialVault
 from .copilot_hosted import HostedCopilot
 from .copilot_hosted_http import CopilotHTTPMixin
+from .control.http import ControlHTTPMixin, ControlAccess
 from .dynamic_postgres import PostgresDynamicQlooReview
 from .qloo import QlooProbeClient
 from pydantic import ValidationError
@@ -68,7 +69,7 @@ def _verified_fixture(scenario: str) -> bytes:
     return _encoded(value)
 
 
-class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
+class HostedFixtureHandler(ControlHTTPMixin, CopilotHTTPMixin, DemoHandler):
     server_version = "OFCPreview"
     sys_version = ""
 
@@ -81,6 +82,8 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
             self._send(503, b'{"error":"STUDIO_UNAVAILABLE"}', "application/json")
             return
         names = [] if workspace else ["/hosted-preflight.js"]
+        if getattr(self.server, "control_enabled", False):
+            names.append("/plan-entry.js")
         if not workspace:
             if self.server.tour_proposal is not None and self.server.run_registry is not None:
                 names.append("/hosted-tour.js")
@@ -116,6 +119,8 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
             return False
 
     def do_GET(self) -> None:
+        if self._control_get():
+            return
         if self._copilot_get():
             return
         if urlsplit(self.path).path == "/studio.html" and not urlsplit(self.path).query:
@@ -304,6 +309,8 @@ class HostedFixtureHandler(CopilotHTTPMixin, DemoHandler):
         if self.command != "POST":
             self._send(405, b'{"error":"METHOD_NOT_ALLOWED"}', "application/json")
             return
+        if self._control_post():
+            return
         if self._copilot_post():
             return
         if self.path == "/api/agent/evaluate":
@@ -479,6 +486,9 @@ class HostedFixtureServer(ThreadingHTTPServer):
         dynamic_review: PostgresDynamicQlooReview | None = None,
         dynamic_token: str | None = None,
         copilot: HostedCopilot | None = None,
+        control=None,
+        control_enabled: bool = False,
+        control_access: ControlAccess | None = None,
     ) -> None:
         if address[0] not in ("127.0.0.1", "0.0.0.0"):
             raise ValueError("bind address must be loopback or all IPv4 interfaces")
@@ -495,11 +505,18 @@ class HostedFixtureServer(ThreadingHTTPServer):
             or any(ord(c) < 33 or ord(c) > 126 for c in dynamic_token)
         ):
             raise ValueError("unsafe dynamic API token")
+        self.control = control
+        self.control_enabled = control_enabled
+        self.control_access = control_access or ControlAccess()
+        if control is not None and not control_enabled:
+            raise ValueError("control runtime requires an explicit feature flag")
         self.dynamic_review = dynamic_review
         self.dynamic_token = dynamic_token
         if copilot is not None and not isinstance(copilot, HostedCopilot):
             raise ValueError("invalid hosted Copilot runtime")
         self.copilot = copilot
+        if copilot is not None:
+            copilot.control_runtime = control
         self.run_registry = run_registry
         self.tour_proposal = tour_proposal
         self.public_showcase = public_showcase
@@ -518,6 +535,13 @@ class HostedFixtureServer(ThreadingHTTPServer):
         })
         self._slots = BoundedSemaphore(_MAX_CONNECTIONS)
         super().__init__(address, HostedFixtureHandler)
+        if control is not None:
+            control.start()
+
+    def server_close(self):
+        if self.control is not None:
+            self.control.close()
+        super().server_close()
 
     def get_request(self):
         request, address = super().get_request()
@@ -647,12 +671,23 @@ def main(argv: list[str] | None = None) -> None:
             )
         except (ValueError, TypeError, RuntimeError, psycopg.Error):
             parser.error("private Copilot configuration or migrations unavailable")
+    from .control.config import configured_control
+    try:
+        control_enabled, control, control_access = configured_control(os.environ)
+    except (ValueError, TypeError, KeyError, psycopg.Error):
+        parser.error("control configuration or migrations unavailable")
+    graph_intake = os.environ.get("OFC_COPILOT_GRAPH_INTAKE", "")
+    if graph_intake:
+        if graph_intake != "ENABLED" or copilot is None or control is None:
+            parser.error("graph intake requires explicit private Copilot and control runtimes")
+        copilot.graph_intake = True
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
         run_registry=registry, tour_proposal=tour, public_showcase=showcase,
         dynamic_review=dynamic_review, dynamic_token=dynamic_token,
         copilot=copilot,
+        control=control, control_enabled=control_enabled, control_access=control_access,
     ) as server:
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
