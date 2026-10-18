@@ -222,7 +222,11 @@
   const renderRun=(run,mode,makeMessage)=>{
     if(run.status!=="REVIEW_REQUIRED")return false;
     const answer=mode==="ON"?run.ofc_answer:run.original_answer;
-    const assistant=makeMessage("assistant",typeof answer==="string"&&answer.trim()?answer:
+    // Historical model narration may contain Qloo UUIDs; proof stays unchanged.
+    const readable=typeof answer==="string" ? answer.replace(
+      /\s*\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi, ""
+    ) : "";
+    const assistant=makeMessage("assistant",readable.trim()?readable:
       "A saved cultural review is available. Further verification is required.");
     const section=make("section","result-summary");
     const heading=make("div","result-heading");
@@ -251,8 +255,11 @@
         grid.append(tile);
       }
       section.append(grid);
-      section.append(make("p","result-caveat",pair.changed.length+" revised · "+
-        (pair.before.size-pair.changed.length)+" preserved. Cultural affinity is not commercial approval."));
+      const summary = mode==="ON"
+        ? pair.changed.length+" revised · "+(pair.before.size-pair.changed.length)+" preserved."
+        : pair.before.size+" original choice"+(pair.before.size===1?"":"s")+". OFC controls not applied.";
+      section.append(make("p","result-caveat",summary+
+        " Cultural affinity is not commercial approval."));
     }else section.append(make("p","result-caveat",
       "Saved evidence-bound OFF/ON comparison is unavailable. No improvement is inferred."));
     const footer=make("div","result-actions");

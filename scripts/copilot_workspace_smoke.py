@@ -380,6 +380,25 @@ def qualify(origin: str) -> dict:
                 page.get_by_text("LLM + Qloo + OFC: a decision still requires review.").wait_for(
                     state="visible",
                 )
+                page.locator("#mode-toggle").click()
+                baseline = page.locator(".result-caveat").inner_text()
+                assert "2 original choices. OFC controls not applied." in baseline
+                assert "revised" not in baseline
+                page.locator("#mode-toggle").click()
+                assert "1 revised" in page.locator(".result-caveat").inner_text()
+                # Archived, already-saved narration is scrubbed only for display.
+                legacy = page.evaluate("""saved => {
+                  const doc = {...saved, original_answer:
+                    "Nike (00000000-0000-4000-8000-000000000003) remains original."};
+                  const content = window.OFCResults.renderRun(doc, "OFF", (role, text) => {
+                    const element = document.createElement("div");
+                    element.textContent = text;
+                    return element;
+                  });
+                  return content?.textContent || "";
+                }""", SAVED)
+                assert "Nike remains original." in legacy
+                assert "00000000-0000-4000-8000-000000000003" not in legacy
                 assert calls["session"] == 1
                 assert calls["message"] == 1
                 assert len(submitted) == 1
