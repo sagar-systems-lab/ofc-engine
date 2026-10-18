@@ -319,3 +319,66 @@ def test_artist_brand_scope_never_relabels_contracts_or_ambiguous_requests():
     data["taste_seed_name"] = "Another Artist"
     mismatch = CopilotDraft.model_validate_json(json.dumps(data))
     assert HostedCopilot._explicit_brand_scope(mismatch, explicit).choices[0].domain == "sponsorship"
+
+
+def test_copilot_narration_uses_human_names_without_mutating_evidence():
+    from dataclasses import replace
+    from hashlib import sha256
+    from types import SimpleNamespace
+
+    from ofc_engine.copilot_compare import CopilotPair
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    artist_id = "00000000-0000-4000-8000-000000000001"
+    nike_id = "00000000-0000-4000-8000-000000000002"
+    adidas_id = "00000000-0000-4000-8000-000000000003"
+    ranked = [adidas_id, nike_id]
+    shared = {"provider": "QLOO", "evidence_digest": "f" * 64,
+              "observations": [{"ranked_candidate_ids": ranked.copy()}]}
+    observation = {"ranked_candidate_ids": ranked.copy()}
+    off = {
+        "ofc_enabled": False, "qloo": shared,
+        "decisions": [{"candidate_id": nike_id,
+                       "candidate_pool": [nike_id, adidas_id],
+                       "qloo_observation": observation.copy()}],
+    }
+    on = {
+        "ofc_enabled": True, "qloo": shared,
+        "decisions": [{"candidate_id": adidas_id,
+                       "candidate_pool": [nike_id, adidas_id],
+                       "qloo_observation": observation.copy(),
+                       "ofc_verdict": "PASS"}],
+    }
+    prompt = "Compare Nike and Adidas for a hypothetical artist partnership"
+    pair = CopilotPair(
+        run_id="test-run", prompt_digest=sha256(prompt.encode()).hexdigest(),
+        model_id="gemini-3.1-flash-lite",
+        baseline_digest="a" * 64, reviewed_digest="b" * 64,
+        qloo_evidence_digest="f" * 64,
+        off=off, on=on, verification_status="REVIEW_REQUIRED",
+    )
+    draft_obj = SimpleNamespace(choices=[SimpleNamespace(
+        domain="brand", decision_id="brand", candidate_names=("Nike", "Adidas"),
+    )])
+    brands = {
+        "Nike": SimpleNamespace(entity_id=nike_id),
+        "Adidas": SimpleNamespace(entity_id=adidas_id),
+    }
+    artist = SimpleNamespace(entity_id=artist_id, name="Example Artist")
+    projected = HostedCopilot._public_pair(pair, draft_obj, brands, artist)
+    assert pair.off["decisions"][0]["candidate_id"] == nike_id
+    assert pair.on["decisions"][0]["candidate_id"] == adidas_id
+    assert pair.off["qloo"]["observations"][0]["ranked_candidate_ids"] == ranked
+    assert projected["off"]["decisions"][0]["candidate_id"] == "Nike"
+    assert projected["on"]["decisions"][0]["candidate_id"] == "Adidas"
+    assert projected["off"]["qloo"] == projected["on"]["qloo"]
+    narrated_pair = replace(pair, off=projected["off"], on=projected["on"])
+    fake = FakeTransport(output={"answer": "Adidas has a higher observed ranking."})
+    client = CopilotLLM(provider="gemini", api_key="offline-only", transport=fake)
+    assert client.narrate_arm(narrated_pair, prompt=prompt, mode="off")
+    assert client.narrate_arm(narrated_pair, prompt=prompt, mode="on")
+    for _, _, request, _, _ in fake.calls:
+        text = request["contents"][0]["parts"][0]["text"]
+        assert nike_id not in text and adidas_id not in text
+        assert "Nike" in text and "Adidas" in text
+    assert pair.off["qloo"]["observations"][0]["ranked_candidate_ids"] == ranked
