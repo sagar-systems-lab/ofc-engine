@@ -80,9 +80,10 @@ class HostedCopilot:
     ):
         if not isinstance(store, PostgresRevisionStore) or vault.store is not store:
             raise TypeError("shared private PostgreSQL store and credential vault required")
-        for limit in (qloo_daily_limit, llm_daily_limit):
-            if type(limit) is not int or not 1 <= limit <= 64:
-                raise ValueError("provider budgets must be 1–64 daily requests")
+        if type(qloo_daily_limit) is not int or not 1 <= qloo_daily_limit <= 256:
+            raise ValueError("Qloo daily budget must be 1–256 requests")
+        if type(llm_daily_limit) is not int or not 1 <= llm_daily_limit <= 128:
+            raise ValueError("model daily budget must be 1–128 requests")
         if type(browser_daily_limit) is not int or not 1 <= browser_daily_limit <= 80:
             raise ValueError("invalid session budget")
         self.store = store

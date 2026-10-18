@@ -2325,3 +2325,33 @@ def test_multicity_judge_request_retains_qualified_brand_review(pg_url):
     assert result["off"]["qloo"] == result["on"]["qloo"]
     assert result["release_authorized"] is False
     assert result["external_action_executed"] is False
+
+
+def test_judge_volume_ceiling_is_configurable_but_preserves_low_defaults(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.dynamic_qloo_budget set utc_day=current_date,reserved=0")
+        db.execute("update ofc_private.copilot_llm_budget set utc_day=current_date,reserved=0")
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="capacity-test-owner-" + "z" * 50,
+    )
+    # 24 three-brand reviews need at least 144 Qloo + 72 LLM
+    # reservations. This merely proves supported configuration bounds.
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=150, llm_daily_limit=75,
+        browser_daily_limit=30,
+    )
+    capacity = runtime._capacity()
+    assert capacity["qloo_requests_remaining"] == 150
+    assert capacity["llm_requests_remaining"] == 75
+    with pytest.raises(ValueError, match="Qloo daily budget"):
+        HostedCopilot(store, vault, qloo_daily_limit=257, llm_daily_limit=75)
+    with pytest.raises(ValueError, match="model daily budget"):
+        HostedCopilot(store, vault, qloo_daily_limit=150, llm_daily_limit=129)
