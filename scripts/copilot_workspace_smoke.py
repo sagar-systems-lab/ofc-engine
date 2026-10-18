@@ -535,6 +535,8 @@ def qualify(origin: str) -> dict:
                 assert "Review venues in Chicago" in page.locator(".message.user").inner_text()
                 assert calls["message"] == 1 and calls["provider"] == 0
                 assert page.locator(".conversation-row").count() == 1
+                if width <= 1180:
+                    page.locator("#sidebar-toggle").click()
                 page.locator(".conversation-row").first.click()
                 page.get_by_text("LLM + Qloo: the baseline cultural ranking is recorded.").wait_for(
                     state="visible")
