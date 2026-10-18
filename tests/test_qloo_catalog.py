@@ -126,3 +126,28 @@ def test_mismatched_fingerprint_never_produces_suggestions():
         qloo_suggestions("Beyonce", "artist", observed(spec, {
             "success": True, "results": {"entities": []},
         }))
+
+
+def test_place_locality_scopes_are_fingerprinted_and_never_policy_qualified():
+    chicago = domain_affinity_probe(ART, "place", (ONE, TWO), location="Chicago")
+    austin = domain_affinity_probe(ART, "place", (ONE, TWO), location="Austin")
+    params = dict(chicago.params)
+    assert params["filter.location.query"] == "Chicago"
+    assert params["filter.location.radius"] == "0"
+    assert chicago.fingerprint != austin.fingerprint
+    assert chicago.fingerprint != domain_affinity_probe(
+        ART, "place", (ONE, TWO)).fingerprint
+    observation = observed(chicago, {
+        "success": True,
+        "results": {"entities": [
+            {"entity_id": ONE, "type": "urn:entity", "query": {"affinity": 0.9}},
+            {"entity_id": TWO, "type": "urn:entity", "query": {"affinity": 0.5}},
+        ]},
+    })
+    assert inspect_domain_rank(observation, chicago)["policy_qualified"] is False
+    with pytest.raises(CatalogEvidenceError, match="INVALID_PLACE_LOCALITY_SCOPE"):
+        domain_affinity_probe(ART, "brand", (ONE, TWO), location="Chicago")
+    with pytest.raises(CatalogEvidenceError, match="INVALID_PLACE_LOCALITY_SCOPE"):
+        domain_affinity_probe(ART, "place", (ONE, TWO), location="Chicago\\nAustin")
+    with pytest.raises(CatalogEvidenceError, match="INSIGHTS_PROVENANCE_INVALID"):
+        inspect_domain_rank(observation, austin)
