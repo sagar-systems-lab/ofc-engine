@@ -2,11 +2,15 @@
 
 **Pre-execution decision control for AI agents.** OFC freezes a proposed plan, checks bounded evidence, repairs only an allowed choice, records the revision, and refuses to release an inadequately verified action.
 
-**Hosted Studio:** https://ofc-fixture-preview.onrender.com/#plan
+**Live Copilot:** https://ofc-fixture-preview.onrender.com/
 
-The published Qloo-backed example is a **read-only review of one previously acquired genuine brand-affinity ranking**. It is not an API playground, a venue-booking agent, or a provider-authenticated cultural approval.
+The hosted Copilot accepts the visitor's own natural-language cultural decision proposal. The **live-qualified scope** is an artist comparing two to five named brand candidates, including an original choice. Gemini/Groq extracts the proposed plan; Qloo resolves exact entities, ranks the bounded candidate pool and independently rechecks the rank; OFC may revise the brand choice. The saved OFF/ON comparison uses the same Qloo evidence and shows what the control layer changed. Live requests consume finite provider quotas and require confirmation.
 
-## Walk through the product
+The Copilot also retains structured multi-city and dependent choices. Non-brand or locality evidence is **not policy-qualified**: such decisions remain unverified, never receive a fabricated PASS, and may be skipped when conserving daily provider capacity. Business readiness, bookings and other external actions remain withheld. Use the on-screen scope guide and synthetic scenarios to explore without spending provider quota.
+
+A separate **recorded tour** at [the legacy Studio](https://ofc-fixture-preview.onrender.com/studio.html#plan) displays one historical Qloo observation. It is read-only and must not be confused with the newly submitted live Copilot or its independent rank recheck.
+
+## Recorded tour — historical evidence
 
 Open **Create a plan → Review the Qloo-backed tour** to follow one frozen, $60,000 Chicago–Austin–Seattle tour:
 
@@ -29,13 +33,13 @@ The editable Plan Builder beneath the walkthrough is **separate**. Visitors can 
 - Private browser tickets, bounded publication approval and a redacted, read-only public evidence projection.
 - Fail-closed behavior on missing evidence, wrong scope, corrupted history, or mismatched revision.
 
-**Limitation:** The real Qloo HTTP response is not cryptographically provider-attested or independently rechecked. The relative brand rank does not prove tour suitability, valid contracts, venue readiness, budget feasibility or business outcomes. The same-baseline OFF/ON comparison is a *decision-policy contrast*, not an experiment establishing business causality. Full-plan release remains blocked.
+**Historical-tour limitation:** The recorded-tour Qloo HTTP response is not cryptographically provider-attested or independently rechecked. Live Copilot brand ranking has a separate two-observation repeatability check; neither path establishes real-world business fitness. The relative brand rank does not prove tour suitability, valid contracts, venue readiness, budget feasibility or business outcomes. The same-baseline OFF/ON comparison is a *decision-policy contrast*, not an experiment establishing business causality. Full-plan release remains blocked.
 
-## Optional hosted Copilot backend
+## Hosted live Copilot operations
 
-The B2 backend supports an opt-in, authenticated Copilot service with visitor sessions, an encrypted owner-managed Qloo/Gemini/Groq credential vault, PostgreSQL evidence and request reservations, and a shared-evidence **LLM + Qloo** (OFC OFF) versus **LLM + Qloo + OFC** (OFC ON) decision comparison. Provider keys are configured privately through the temporary website owner portal at `/connect` after the one-time server trust anchor is provisioned.
+The current hosted service has its private beta Copilot **enabled**. Visitor sessions, encrypted owner-managed credentials, PostgreSQL evidence and quota reservations support independent OFF/ON model narratives over shared Qloo observations. Owner credentials remain server-side, configured through `/connect`. A fresh local installation is **disabled by default** until private PostgreSQL, credentials and runtime configuration are explicitly provisioned.
 
-**This feature is disabled by default**; the existing hosted saved-review page does not become a live Copilot merely by merging the code. Review [hosted setup and qualification](docs/HOSTED_COPILOT_BACKEND.md) for private migration and provider-test gates. Unsupported Qloo domains remain unverified. No model or Qloo request is made by loading the settings or status endpoints.
+Read [hosted setup and qualification](docs/HOSTED_COPILOT_BACKEND.md) for deployment requirements, and [Try it](docs/TRY_IT.md) for current supported tests. Merely loading settings, previous history or the capability endpoint makes no provider call. The browser's proof file is a saved-session export, not a digitally signed Qloo attestation.
 
 ## Develop and test
 
