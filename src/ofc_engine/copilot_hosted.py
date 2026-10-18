@@ -515,6 +515,41 @@ class HostedCopilot:
         )
 
     @staticmethod
+    def _qloo_budget_projection(draft: CopilotDraft, catalog_domains: dict,
+                                seed_category: str) -> tuple[int, int]:
+        qualified = [
+            choice for choice in draft.choices
+            if seed_category == "artist" and choice.domain.lower() in (
+                "brand", "partner", "brand_partner"
+            )
+        ]
+        core_names = {name for choice in qualified for name in choice.candidate_names}
+        brand_rechecks = 2 * min(4, len(qualified))
+        core_required = 1 + len(core_names) + brand_rechecks
+        combined_names = {
+            (catalog_domains.get(choice.decision_id, "brand"), name)
+            for choice in draft.choices
+            for name in choice.candidate_names
+        }
+        full_required = 1 + len(combined_names) + len(catalog_domains) + brand_rechecks
+        return core_required, full_required
+
+    @classmethod
+    def _catalog_budget_scope(cls, draft: CopilotDraft, catalog_domains: dict,
+                              seed_category: str, qloo_remaining: int
+                              ) -> tuple[dict, dict, int]:
+        core, full = cls._qloo_budget_projection(
+            draft, catalog_domains, seed_category,
+        )
+        supports_brand = seed_category == "artist" and any(
+            choice.domain.lower() in ("brand", "partner", "brand_partner")
+            for choice in draft.choices
+        )
+        if supports_brand and catalog_domains and core <= qloo_remaining < full:
+            return {}, dict(catalog_domains), core
+        return dict(catalog_domains), {}, full
+
+    @staticmethod
     def _public_pair(pair, draft, brands: dict, artist) -> dict:
         """Expose human names, not private Qloo entity IDs or raw provider captures."""
         data = deepcopy(pair.as_dict())
@@ -677,6 +712,7 @@ class HostedCopilot:
             reviewed_at = monotonic()
             native_discovery = None
             discovered_ids = {}
+            catalog_skipped = {}
             context = None
             seed_name = draft.taste_seed_name or draft.artist_name
             seed_category = draft.taste_seed_category or "artist"
@@ -778,28 +814,9 @@ class HostedCopilot:
                 )
 
             if native_discovery is None:
-                categories = {
-                    choice.decision_id: category_for(choice.domain)
-                    for choice in draft.choices
-                    if choice.decision_id in catalog_domains
-                }
-                distinct_names = {
-                    (category, name)
-                    for choice in draft.choices
-                    for name in choice.candidate_names
-                    for category in [categories.get(
-                        choice.decision_id, "brand"
-                    )]
-                }
-                required = (
-                    1 + len(distinct_names)
-                    + len(catalog_domains)
-                    + 2 * min(4, sum(
-                        1 for choice in draft.choices
-                        if choice.domain.lower() in (
-                            "brand", "partner", "brand_partner"
-                        ) and seed_category == "artist"
-                    ))
+                catalog_domains, catalog_skipped, required = self._catalog_budget_scope(
+                    draft, catalog_domains, seed_category,
+                    self._capacity()["qloo_requests_remaining"],
                 )
                 self._capacity(required_qloo=required)
             reviewer = self._reviewer()
@@ -880,9 +897,21 @@ class HostedCopilot:
                 prompt=prompt, model_id=model.model,
                 baseline=baseline, reviewed=reviewed, evaluated=evaluated,
             )
-            if catalog_identities:
-                engine = HostedDomainObservations(reviewer)
-                catalog_results = []
+            if catalog_identities or catalog_skipped:
+                engine = HostedDomainObservations(reviewer) if catalog_identities else None
+                catalog_results = [
+                    {
+                        "decision_id": decision_id,
+                        "category": category,
+                        "source_mode": "NOT_REQUESTED",
+                        "status": "NOT_EVALUATED",
+                        "reason_code": "OPTIONAL_EVIDENCE_QUOTA_GUARD",
+                        "ranked_candidates": [],
+                        "policy_qualified": False,
+                        "external_action_authorized": False,
+                    }
+                    for decision_id, category in catalog_skipped.items()
+                ]
                 for decision_id, (choice, category, entities) in catalog_identities.items():
                     observation = (
                         {

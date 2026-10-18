@@ -382,3 +382,62 @@ def test_copilot_narration_uses_human_names_without_mutating_evidence():
         assert nike_id not in text and adidas_id not in text
         assert "Nike" in text and "Adidas" in text
     assert pair.off["qloo"]["observations"][0]["ranked_candidate_ids"] == ranked
+
+
+def test_qloo_budget_prioritizes_brands_in_three_city_agent_plan():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    data = draft()
+    data["objective"] = "Evaluate a three-city artist tour with a brand and three venues"
+    for city in ("Chicago", "Austin", "Seattle"):
+        data["choices"].append({
+            "decision_id": "venue_" + city.lower(),
+            "domain": "place",
+            "selected_name": city + " Venue A",
+            "candidate_names": [city + " Venue A", city + " Venue B"],
+            "mutable": True,
+            "depends_on": ["brand"],
+        })
+    typed = CopilotDraft.model_validate_json(json.dumps(data))
+    catalog = {choice.decision_id: "place" for choice in typed.choices[1:]}
+    core, full = HostedCopilot._qloo_budget_projection(
+        typed, catalog, "artist",
+    )
+    assert len(typed.cities) == 3
+    assert len(typed.choices) == 4
+    assert core == 5
+    assert full == 14
+    assert core <= 12 < full
+    planned, skipped, required = HostedCopilot._catalog_budget_scope(
+        typed, catalog, "artist", 12,
+    )
+    assert planned == {}
+    assert skipped == catalog
+    assert required == 5
+    planned, skipped, required = HostedCopilot._catalog_budget_scope(
+        typed, catalog, "artist", 14,
+    )
+    assert planned == catalog
+    assert skipped == {}
+    assert required == 14
+    planned, skipped, required = HostedCopilot._catalog_budget_scope(
+        typed, catalog, "artist", 4,
+    )
+    assert planned == catalog and skipped == {} and required == 14
+
+
+def test_qloo_budget_counts_distinct_brand_lookups_and_rechecks():
+    from ofc_engine.copilot_hosted import HostedCopilot
+
+    data = draft()
+    data["choices"].append({
+        "decision_id": "second_brand",
+        "domain": "brand",
+        "selected_name": "Brand B",
+        "candidate_names": ["Brand A", "Brand B"],
+        "mutable": True,
+        "depends_on": [],
+    })
+    typed = CopilotDraft.model_validate_json(json.dumps(data))
+    assert HostedCopilot._qloo_budget_projection(typed, {}, "artist") == (7, 7)
+    assert HostedCopilot._qloo_budget_projection(typed, {}, "brand") == (1, 3)
