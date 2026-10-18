@@ -24,9 +24,12 @@ class HostedDomainObservations:
     def inspect(
         self, *, run_id: str, decision_id: str, category: str,
         subject_id: str, candidate_ids: tuple[str, ...],
+        location: str | None = None,
     ) -> dict:
         domain = category_for(category)
-        spec = domain_affinity_probe(subject_id, domain, candidate_ids)
+        spec = domain_affinity_probe(
+            subject_id, domain, candidate_ids, location=location,
+        )
         store = self.reviewer.store
         with store._connect() as db:
             budget = db.execute(
@@ -59,6 +62,7 @@ class HostedDomainObservations:
                     or digest_obj(result) != saved[3]
                     or result.get("query_fingerprint") != spec.fingerprint
                     or result.get("category") != domain
+                    or result.get("requested_locality") != location
                     or set(result.get("ranking", [])) != set(candidate_ids)
                 ):
                     raise StorageIntegrityError("catalog observation digest mismatch")
@@ -93,6 +97,8 @@ class HostedDomainObservations:
         result = {
             **observed,
             "status": "OBSERVED_NOT_POLICY_QUALIFIED",
+            "requested_locality": location,
+            "locality_independently_verified": False,
         }
         with store._connect() as db:
             written = db.execute(
