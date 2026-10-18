@@ -4,7 +4,10 @@ import argparse
 import base64
 from copy import deepcopy
 import json
+from itertools import product
+from math import prod
 from pathlib import Path
+from time import monotonic
 
 from .canonical import digest, strict_json
 from .graph import claim_fingerprint, constraints, impact
@@ -14,6 +17,48 @@ from .policies import Authority, MANIFEST, POLICY_DIGEST, POLICY_VERSION, evalua
 
 class ProofRejected(ValueError):
     pass
+
+
+def _verify_repair_objective(baseline, current, before, optimization):
+    ranks = {}
+    for node in baseline.nodes:
+        for claim in before[node.id]["claims"]:
+            if "candidate_id" in node.mutable_fields and claim["claim"] == "cultural_brand_rank" and claim["status"] == "QUALIFIED":
+                ranks[node.id] = claim["ranked_candidates"]
+    keys = sorted(ranks)
+    combinations = prod(len(ranks[key]) for key in keys)
+    if not keys or combinations > baseline.limits.max_expansions:
+        raise ProofRejected("repair optimum exceeds declared search bound")
+    original = {node.id: node.candidate_id for node in baseline.nodes}
+
+    def score(plan):
+        choices = {node.id: node.candidate_id for node in plan.nodes}
+        changed = {key: {"candidate_id"} for key in keys if choices[key] != original[key]}
+        return (sum(c["status"] != "PASS" for c in constraints(plan)),
+                sum(choices[key] != ranks[key][0] for key in keys), len(changed),
+                len(impact(baseline, changed)["invalidated"]))
+
+    best, optimum_digest, ties = None, None, 0
+    deadline = monotonic() + 5
+    payload = baseline.data()
+    for choices in product(*(ranks[key] for key in keys)):
+        if monotonic() > deadline:
+            raise ProofRejected("repair optimum verification budget exceeded")
+        selection = dict(zip(keys, choices))
+        candidate_data = payload | {"nodes": [node | {"candidate_id": selection.get(node["id"], node["candidate_id"])} for node in payload["nodes"]]}
+        candidate = Plan.parse(candidate_data)
+        value = score(candidate)
+        if value[0] != 0:
+            continue
+        if best is None or value < best:
+            best, optimum_digest, ties = value, candidate.digest, 1
+        elif value == best:
+            ties += 1
+    if (best is None or ties != 1 or optimum_digest != current.digest or best >= score(baseline)
+            or optimization.get("status") != "REPAIR_PROPOSED" or optimization.get("objective") != list(best)
+            or optimization.get("expansions") != combinations
+            or optimization.get("objective_order") != ["hard_constraint_failures", "unmet_rank_obligations", "edits", "downstream_rechecks"]):
+        raise ProofRejected("repair is not the unique minimum qualified change")
 
 
 def verify(proof: dict, *, expected_digest: str | None = None,
@@ -80,6 +125,8 @@ def verify(proof: dict, *, expected_digest: str | None = None,
             if (set(patch.changes) != {"candidate_id"} or not ranks
                     or set(patch.evidence_ids) != set(ranks[0]["evidence_ids"])):
                 raise ProofRejected("patch is not evidence licensed")
+        if changed:
+            _verify_repair_objective(baseline, current, before, document["optimization"])
         expected_unresolved = [{"node_id": n.id, "reasons": after[n.id]["reasons"]}
                                for n in current.nodes if n.required and after[n.id]["status"] != "QUALIFIED"]
         if expected_unresolved != document["unresolved"]:
@@ -137,9 +184,9 @@ def verify(proof: dict, *, expected_digest: str | None = None,
         if comparison["static_rank_rule"] != static:
             raise ProofRejected("static comparator mismatch")
         return {"valid": True, "proof_digest": claimed, "mode": request.mode,
-                "action_status": "WITHHELD", "provider_authenticity": "TRUSTED_ISSUER_ATTESTATION" if authorities else "SYNTHETIC_ONLY",
+                "action_status": "WITHHELD", "provider_authenticity": ("TRUSTED_ISSUER_ATTESTATION" if authorities else "SYNTHETIC_ONLY" if request.mode == "SYNTHETIC" else "NO_QUALIFIED_ISSUER"),
                 "signature_status": "UNSIGNED_CONTROL_RECORD", "external_action_executed": False}
-    except (KeyError, TypeError, ValueError, IndexError) as exc:
+    except (KeyError, TypeError, ValueError, IndexError, RecursionError, OverflowError) as exc:
         if isinstance(exc, ProofRejected):
             raise
         raise ProofRejected("malformed control proof") from exc
@@ -164,7 +211,7 @@ def main(argv=None):
                 authorities[authority.issuer] = authority
         print(json.dumps(verify(strict_json(args.proof.read_bytes()), expected_digest=args.expected_digest,
                                 trusted_authorities=authorities), sort_keys=True))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError, OverflowError) as exc:
         print(json.dumps({"valid": False, "reason": str(exc)}))
         return 1
     return 0

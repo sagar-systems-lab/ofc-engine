@@ -9,7 +9,7 @@ from pydantic import Field
 
 from .canonical import digest
 from .models import Id, Strict, instant, utc_now
-from .storage import Conflict
+from .storage import Conflict, NotFound
 
 
 class IntentInput(Strict):
@@ -65,6 +65,10 @@ def revoke_intent(runtime, review_id, identity, intent_id):
     store = runtime.store
     store.snapshot(review_id, identity.tenant_id, identity.actor_id)
     with store._tx(write=True) as db:
+        existing = store._run(db, f"select state from {store.prefix}intents where intent_id=? and review_id=? and tenant_id=? and actor_id=?",
+                              (intent_id, review_id, identity.tenant_id, identity.actor_id)).fetchone()
+        if existing is None:
+            raise NotFound("approval intent unavailable")
         changed = store._run(db, f"update {store.prefix}intents set state='REVOKED' where intent_id=? and review_id=? and tenant_id=? and actor_id=? and state='APPROVAL_PENDING'",
                              (intent_id, review_id, identity.tenant_id, identity.actor_id)).rowcount
         if changed:

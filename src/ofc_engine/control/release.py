@@ -50,15 +50,24 @@ def verify_bundle(raw: bytes, *, public_key: bytes | None = None, expected_sha25
         names = archive.namelist()
         if (len(names) > 32 or len(names) != len(set(names))
                 or any(name.startswith("/") or ".." in name.split("/") or "\\" in name for name in names)
-                or sum(item.file_size for item in archive.infolist()) > 5_000_000):
+                or sum(item.file_size for item in archive.infolist()) > 5_000_000
+                or any((item.external_attr >> 16) & 0o170000 == 0o120000 for item in archive.infolist())):
             raise ValueError("invalid bundle contents")
         record = strict_json(archive.read("manifest.json"))
         manifest = record["manifest"]
+        expected_files = {"src/ofc_engine/__init__.py", "src/ofc_engine/control/__init__.py", "verify.py", "requirements.txt"}
+        expected_files.update("src/ofc_engine/control/" + name for name in _MODULES)
+        if (manifest.get("schema") != "ofc.verifier-bundle/1" or manifest.get("policy_digest") != POLICY_DIGEST
+                or manifest.get("release_qualification") != "SOFTWARE_ARTIFACT_ONLY"
+                or manifest.get("external_action_authorized") is not False or set(manifest["files"]) != expected_files):
+            raise ValueError("unsupported verifier manifest")
         if set(manifest["files"]) != set(names) - {"manifest.json"}:
             raise ValueError("bundle file set mismatch")
         for name, expected in manifest["files"].items():
             if sha256(archive.read(name)).hexdigest() != expected:
                 raise ValueError("bundle file digest mismatch")
+        if public_key is not None and record["signature_status"] != "ED25519_SIGNED":
+            raise ValueError("signed verifier bundle required")
         if record["signature_status"] == "ED25519_SIGNED":
             if public_key is None:
                 raise ValueError("independent public key required")
@@ -78,7 +87,7 @@ def main(argv=None):
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--signing-key-file", type=Path)
     args = parser.parse_args(argv)
-    key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(args.signing_key_file.read_bytes(), validate=True)) if args.signing_key_file else None
+    key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(args.signing_key_file.read_bytes().strip(), validate=True)) if args.signing_key_file else None
     raw = build_bundle(args.source_revision, signing_key=key)
     args.output.write_bytes(raw)
     print(json.dumps({"sha256": sha256(raw).hexdigest(), "signature_status": "ED25519_SIGNED" if key else "UNSIGNED"}))

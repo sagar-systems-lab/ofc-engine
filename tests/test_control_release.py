@@ -43,6 +43,22 @@ def test_bundle_detects_changed_verifier_source():
     with pytest.raises(ValueError, match="digest"): verify_bundle(output.getvalue())
 
 
+def test_signed_bundle_cannot_be_downgraded_to_unsigned():
+    key = Ed25519PrivateKey.generate()
+    raw = build_bundle("a" * 40, signing_key=key)
+    source, output = zipfile.ZipFile(BytesIO(raw)), BytesIO()
+    with zipfile.ZipFile(output, "w") as changed:
+        for name in source.namelist():
+            content = source.read(name)
+            if name == "manifest.json":
+                record = json.loads(content)
+                record.update(signature=None, signature_status="UNSIGNED")
+                content = json.dumps(record).encode()
+            changed.writestr(name, content)
+    with pytest.raises(ValueError, match="signed verifier bundle required"):
+        verify_bundle(output.getvalue(), public_key=key.public_key().public_bytes_raw())
+
+
 def test_missing_comparator_arms_are_reported_without_fabricated_scores():
     cases = [{"id": name, "request": campaign(name).data(), "gold": gold} for name, gold in BUILTIN_GOLD.items()]
     report = evaluate_cases(cases)

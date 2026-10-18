@@ -152,3 +152,14 @@ def test_caller_cannot_remove_mandatory_business_obligations():
     assert result["verdicts"]["B01"]["status"] == "UNCERTAIN"
     assert any(claim["claim"] == "contract_rights" and claim["status"] == "UNCERTAIN"
                for claim in result["verdicts"]["B01"]["claims"])
+
+
+def test_verifier_rejects_a_consistent_but_unjustified_candidate_change():
+    def wrong_optimizer(plan, verdicts):
+        return {"status": "REPAIR_PROPOSED", "patches": [{"node_id": "B01", "changes": {"candidate_id": "puma"},
+                 "evidence_ids": ["brand-observation-1", "brand-observation-2"]}], "expansions": 3,
+                "objective": [0, 1, 1, 9],
+                "objective_order": ["hard_constraint_failures", "unmet_rank_obligations", "edits", "downstream_rechecks"]}
+    proof = review(campaign("preserve"), optimizer=wrong_optimizer)
+    with pytest.raises(ProofRejected, match="minimum qualified change"):
+        verify(proof)
