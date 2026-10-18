@@ -408,6 +408,22 @@ def test_qloo_budget_prioritizes_brands_in_three_city_agent_plan():
     assert core == 5
     assert full == 14
     assert core <= 12 < full
+    planned, skipped, required = HostedCopilot._catalog_budget_scope(
+        typed, catalog, "artist", 12,
+    )
+    assert planned == {}
+    assert skipped == catalog
+    assert required == 5
+    planned, skipped, required = HostedCopilot._catalog_budget_scope(
+        typed, catalog, "artist", 14,
+    )
+    assert planned == catalog
+    assert skipped == {}
+    assert required == 14
+    planned, skipped, required = HostedCopilot._catalog_budget_scope(
+        typed, catalog, "artist", 4,
+    )
+    assert planned == catalog and skipped == {} and required == 14
 
 
 def test_qloo_budget_counts_distinct_brand_lookups_and_rechecks():
