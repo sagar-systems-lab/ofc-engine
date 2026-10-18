@@ -111,7 +111,7 @@ def qualify(origin: str) -> dict:
                          "demo": 0, "owner_read": 0, "owner_login": 0, "owner_test": 0}
                 owner_active = {"value": False}
                 submitted = []
-                pending_response = {"active": False}
+                pending_response = {"active": False, "polls": 0}
                 page.on("pageerror", lambda error: errors.append(str(error)))
 
                 def mock_request(route):
@@ -175,7 +175,14 @@ def qualify(origin: str) -> dict:
                     if path == "copilot/sessions/" + FAKE_SESSION and req.method == "GET":
                         messages = [{**SAVED, "prompt": submitted[0]}] if submitted else []
                         if pending_response["active"] and not submitted:
+                            # An older saved conversation may be visible before the
+                            # currently admitted request reaches durable session history.
                             messages = [{
+                                **SAVED, "run_id": "cp-run-" + "c" * 32,
+                                "prompt": "Previous saved comparison (not current request)",
+                            }]
+                            if pending_response["polls"]:
+                                messages.append({
                                 "run_id": FAKE_RUN, "status": "PROCESSING",
                                 "prompt": PROMPT,
                                 "activity": {
@@ -189,7 +196,8 @@ def qualify(origin: str) -> dict:
                                         "rank_complete": 0, "rank_reserved": 0,
                                     },
                                 },
-                            }]
+                                })
+                            pending_response["polls"] += 1
                         return route.fulfill(
                             status=200, content_type="application/json",
                             body=json.dumps({"session_id": FAKE_SESSION, "messages": messages}),
@@ -345,8 +353,11 @@ def qualify(origin: str) -> dict:
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert input_box.input_value() == ""
                 page.wait_for_function("typeof window.releaseSavedMessage === 'function'")
+                page.locator(".conversation-row").first.wait_for(state="visible", timeout=10_000)
+                assert "confidential planning context" in page.locator(".message.user").inner_text()
+                assert "Previous saved comparison" not in page.locator("#chat-transcript").inner_text()
                 page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
-                    state="visible", timeout=9_000)
+                    state="visible", timeout=15_000)
                 assert page.locator("#activity-steps").inner_text().count("Qloo evidence") == 1
                 assert "entity search" in page.locator("#activity-steps").inner_text()
                 assert calls["message"] == 0 and calls["provider"] == 0
