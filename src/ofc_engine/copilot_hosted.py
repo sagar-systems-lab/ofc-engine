@@ -37,6 +37,7 @@ from .revisions import digest_obj
 
 
 _log = logging.getLogger(__name__)
+_log.setLevel(logging.INFO)  # Stage timings are sanitized; keep module logs visible.
 
 
 class SessionDenied(ValueError):
