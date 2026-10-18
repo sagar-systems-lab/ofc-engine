@@ -398,7 +398,7 @@ def test_qloo_budget_prioritizes_brands_in_three_city_agent_plan():
             "mutable": True,
             "depends_on": ["brand"],
         })
-    typed = CopilotDraft.model_validate(data)
+    typed = CopilotDraft.model_validate_json(json.dumps(data))
     catalog = {choice.decision_id: "place" for choice in typed.choices[1:]}
     core, full = HostedCopilot._qloo_budget_projection(
         typed, catalog, "artist",
@@ -438,6 +438,6 @@ def test_qloo_budget_counts_distinct_brand_lookups_and_rechecks():
         "mutable": True,
         "depends_on": [],
     })
-    typed = CopilotDraft.model_validate(data)
+    typed = CopilotDraft.model_validate_json(json.dumps(data))
     assert HostedCopilot._qloo_budget_projection(typed, {}, "artist") == (7, 7)
     assert HostedCopilot._qloo_budget_projection(typed, {}, "brand") == (1, 3)
