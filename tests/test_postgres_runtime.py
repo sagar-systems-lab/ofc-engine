@@ -2406,3 +2406,51 @@ def test_visitor_session_limit_is_configurable_and_replay_safe(pg_url):
             store, vault, qloo_daily_limit=12, llm_daily_limit=9,
             session_message_limit=13,
         )
+
+
+def test_exhausted_qloo_preflight_spends_no_model_or_visitor_slot(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_hosted_quota import CopilotQuotaReached
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.dynamic_qloo_budget set utc_day=current_date,reserved=11")
+        db.execute("update ofc_private.copilot_llm_budget set utc_day=current_date,reserved=0")
+        db.execute("update ofc_private.copilot_browser_budget set utc_day=current_date,sessions=0")
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="preflight-test-owner-" + "x" * 48,
+    )
+    owner = vault.login("preflight-test-owner-" + "x" * 48)
+    vault.configure(owner, "qloo", "fake-qloo-no-request")
+    vault.configure(owner, "gemini", "fake-gemini-no-request")
+    class DenyNetwork:
+        def post(self, *args, **kwargs):
+            pytest.fail("low-quota preflight must not call the model")
+        def get(self, *args, **kwargs):
+            pytest.fail("low-quota preflight must not call Qloo")
+
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=75,
+        qloo_transport=DenyNetwork(), model_transport=DenyNetwork(),
+    )
+    session = runtime.session()
+    with pytest.raises(CopilotQuotaReached, match="QLOO_DAILY_QUOTA_EXHAUSTED"):
+        runtime.submit(
+            session_id=session["session_id"], ticket=session["ticket"],
+            request_id="preflight-blocked-001",
+            prompt="For Billie Eilish compare Nike, Puma and Adidas; original Nike.",
+        )
+    assert runtime.messages(session["session_id"],session["ticket"])["messages"] == []
+    with store._connect() as db:
+        assert db.execute(
+            "select reserved from ofc_private.copilot_llm_budget where id=1"
+        ).fetchone()[0] == 0
+        assert db.execute(
+            "select reserved from ofc_private.dynamic_qloo_budget where id=1"
+        ).fetchone()[0] == 11
