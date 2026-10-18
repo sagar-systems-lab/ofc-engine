@@ -125,3 +125,28 @@ The hosted Copilot can now resolve artist-anchored candidates in the documented 
 The original and OFC-enabled views share one immutable catalog-evidence digest and human-readable ranked candidate names. These non-brand observations are explicitly labeled `OBSERVED_NOT_POLICY_QUALIFIED`; OFC returns `UNCERTAIN / CATALOG_POLICY_NOT_LIVE_QUALIFIED` rather than committing a choice or inferring venue inventory, reservations, signed contracts, business suitability or verified audience geography.
 
 A taste subject is still necessary for the current website flow; the initial configured Copilot schema is artist-anchored. General free-form audience demographics, tags and location filters need separately qualified request grammars and provider-backed tests. Qloo's documented category names alone do not certify that arbitrary provider keys support every combination. Real domain-specific Qloo qualification must remain a controlled user-approved test step before any new domain may be promoted from observation-only to decision policy.
+
+## Judge-volume capacity planning (opt-in)
+
+The server defaults remain unchanged; a code merge does **not** increase the live daily limits.
+The Qloo gate supports 1–256 requests/day and the model gate 1–128/day with the same
+PostgreSQL atomic reservation and no automatic retry behavior. A hypothetical 24
+three-brand evaluations at six Qloo searches/ranks and three model calls each
+requires approximately 144 Qloo and 72 model reservations. For this controlled
+capacity envelope, the operator may configure, **only after checking provider
+rate limits, available credits, and a dollar spending ceiling**:
+
+```text
+OFC_COPILOT_QLOO_DAILY_LIMIT=150
+OFC_COPILOT_LLM_DAILY_LIMIT=75
+OFC_COPILOT_BROWSER_DAILY_LIMIT=30
+```
+
+These are *daily request ceilings*, not promises of successful end-to-end reviews,
+hard dollar limits, provider-approved quotas, or per-visitor allowances. Actual
+usage varies by the number of named candidates, extra domains, clarification,
+identity ambiguity and partial failures. A request admitted near a quota boundary
+may still be blocked by the durable quota gate. Keep the model/Qloo keys server
+side, monitor upstream credits, and do not activate these values without explicit
+owner spend approval. Avoid a public unauthenticated stress-test endpoint; use
+isolated CI transports for load and security regression tests.
