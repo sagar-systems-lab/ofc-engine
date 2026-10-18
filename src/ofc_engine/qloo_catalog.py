@@ -141,8 +141,9 @@ def qloo_suggestions(
 
 def domain_affinity_probe(
     subject_id: str, category: str, candidate_ids: tuple[str, ...],
+    *, location: str | None = None,
 ) -> ProbeSpec:
-    """Schema-supported Qloo GET; not by itself a live-qualified decision policy."""
+    """Strict candidate/locality request; place evidence remains observation-only."""
     canonical = category_for(category)
     subject = _uuid(subject_id)
     if (
@@ -153,13 +154,23 @@ def domain_affinity_probe(
     pool = tuple(_uuid(x) for x in candidate_ids)
     if len(set(pool)) != len(pool):
         raise CatalogEvidenceError("DUPLICATE_CANDIDATE_SCOPE")
-    return ProbeSpec("/v2/insights", (
+    params = [
         ("filter.type", "urn:entity:" + canonical),
         ("signal.interests.entities", subject),
         ("filter.results.entities", ",".join(pool)),
         ("take", str(len(pool))),
         ("feature.explainability", "true"),
-    ))
+    ]
+    if location is not None:
+        if (canonical != "place" or not isinstance(location, str)
+                or not 2 <= len(location.strip()) <= 100
+                or any(ord(c) < 32 for c in location)):
+            raise CatalogEvidenceError("INVALID_PLACE_LOCALITY_SCOPE")
+        params.extend((
+            ("filter.location.query", location.strip()),
+            ("filter.location.radius", "0"),
+        ))
+    return ProbeSpec("/v2/insights", tuple(params))
 
 
 def inspect_domain_rank(observation: ProbeObservation, spec: ProbeSpec) -> dict:
