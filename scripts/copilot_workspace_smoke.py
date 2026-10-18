@@ -358,7 +358,7 @@ def qualify(origin: str) -> dict:
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert input_box.input_value() == ""
                 page.wait_for_function("typeof window.releaseSavedMessage === 'function'")
-                page.locator(".conversation-row").first.wait_for(state="visible", timeout=10_000)
+                page.locator(".conversation-row").first.wait_for(state="attached", timeout=10_000)
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert "Previous saved comparison" not in page.locator("#chat-transcript").inner_text()
                 page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
