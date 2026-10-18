@@ -112,6 +112,25 @@ def test_uuid_format_is_not_relaxed_for_insights_results():
         normalize_affinity_capture(data, SPEC)
 
 
+def test_legacy_opaque_ids_still_match_exactly():
+    legacy = ("brand-a", "brand-b")
+    spec = brand_affinity_probe("artist-ci", legacy)
+    data = capture()
+    data["summary"]["query_fingerprint"] = spec.fingerprint
+    data["payload"]["results"]["entities"] = [
+        {"entity_id": "brand-b", "type": "urn:entity",
+         "query": {"affinity": 0.8, "explainability": {}}},
+        {"entity_id": "brand-a", "type": "urn:entity",
+         "query": {"affinity": 0.4, "explainability": {}}},
+    ]
+    assert [item["entity_id"] for item in normalize_affinity_capture(data, spec)["ranking"]] == [
+        "brand-b", "brand-a",
+    ]
+    data["payload"]["results"]["entities"][0]["entity_id"] = "BRAND-B"
+    with pytest.raises(AffinityCaptureError, match="UNEXPECTED_RESULT_ENTITY"):
+        normalize_affinity_capture(data, spec)
+
+
 def test_generic_insights_type_is_not_independent_brand_proof():
     data = capture()
     assert all(e["type"] == "urn:entity" for e in data["payload"]["results"]["entities"])
