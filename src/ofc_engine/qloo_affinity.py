@@ -43,10 +43,13 @@ def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
     artist_id = params.get("signal.interests.entities")
     canonical_pool = [_canonical_uuid(candidate) for candidate in candidates]
     if (not 2 <= len(candidates) <= 5 or not artist_id
-            or any(candidate is None for candidate in canonical_pool)
-            or len(set(canonical_pool)) != len(candidates)):
+            or len(set(candidates)) != len(candidates)):
         raise AffinityCaptureError("INVALID_QUERY_POOL")
-    requested = dict(zip(canonical_pool, candidates))
+    uuid_scope = all(item is not None for item in canonical_pool)
+    if uuid_scope and len(set(canonical_pool)) != len(candidates):
+        raise AffinityCaptureError("INVALID_QUERY_POOL")
+    # Legacy offline records use opaque non-UUID IDs; keep exact matching there.
+    requested = dict(zip(canonical_pool if uuid_scope else candidates, candidates))
 
     if not isinstance(capture, dict):
         raise AffinityCaptureError("INVALID_CAPTURE")
@@ -83,7 +86,8 @@ def normalize_affinity_capture(capture: Any, spec: ProbeSpec) -> dict[str, Any]:
     for entity in entities:
         if not isinstance(entity, dict):
             raise AffinityCaptureError("INVALID_RESULT_ENTITY")
-        entity_id = requested.get(_canonical_uuid(entity.get("entity_id")))
+        raw_id = entity.get("entity_id")
+        entity_id = requested.get(_canonical_uuid(raw_id) if uuid_scope else raw_id)
         if entity_id is None:
             raise AffinityCaptureError("UNEXPECTED_RESULT_ENTITY")
         # Insights returns the generic taxonomy; brand scope is query-bound.
