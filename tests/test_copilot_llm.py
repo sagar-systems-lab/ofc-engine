@@ -445,6 +445,7 @@ def test_qloo_budget_counts_distinct_brand_lookups_and_rechecks():
 
 def test_multicity_place_scope_requires_one_unambiguous_city():
     from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import DraftChoice
 
     cities = ("Chicago", "Austin", "Seattle")
     def choice(id, names):
