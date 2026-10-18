@@ -8,7 +8,7 @@
   const state = {
     sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
     pendingPrompt: "", sidebarOpen: window.innerWidth > 1180, search: "",
-    capability: null, activeRequestId: null, pollTimer: null,
+    capability: null, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
     attachment: null, attachmentVersion: 0,
   };
 
@@ -365,7 +365,14 @@
       const saved = await jsonRequest("/api/copilot/sessions/" + state.sessionId);
       state.runs = Array.isArray(saved.messages)
         ? saved.messages.map(item => ({...item, _sessionReadConfirmed: true})) : [];
-      if (!state.selected && state.runs.length) state.selected = state.runs.at(-1).run_id;
+      if (!state.selected && state.busy && state.pendingPrompt) {
+        const admitted = [...state.runs].reverse().find(run =>
+          run.prompt === state.pendingPrompt &&
+          !state.pendingBaselineIds?.has(run.run_id));
+        if (admitted) state.selected = admitted.run_id;
+      } else if (!state.selected && state.runs.length) {
+        state.selected = state.runs.at(-1).run_id;
+      }
       if (state.selected && !state.runs.some(x => x.run_id === state.selected))
         state.selected = state.runs.at(-1)?.run_id || null;
       if (state.selected && selectedRun()?.status !== "PROCESSING") {
@@ -412,6 +419,7 @@
     const prompt = state.pendingPrompt;
     if (!prompt || state.busy) return;
     const draftInput = el("chat-input").value;
+    state.pendingBaselineIds = new Set(state.runs.map(run => run.run_id));
     setBusy(true);
     state.selected = null;
     el("chat-input").value = "";
@@ -445,6 +453,7 @@
     } finally {
       state.pendingPrompt = "";
       state.activeRequestId = null;
+      state.pendingBaselineIds = null;
       setBusy(false);
       monitor(); // Continue only if the saved run is still processing.
     }
