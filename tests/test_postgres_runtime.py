@@ -2186,3 +2186,129 @@ def test_native_qloo_discovery_from_candidate_free_taste_prompt(pg_url):
     assert len(provider.calls) == 2 and transport.calls == 3
     vault.revoke(owner, "qloo")
     vault.revoke(owner, "gemini")
+
+
+def test_multicity_judge_request_retains_qualified_brand_review(pg_url):
+    from cryptography.fernet import Fernet
+    from urllib.parse import parse_qs, urlsplit
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot
+    from ofc_engine.copilot_llm import JSONReply
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.dynamic_qloo_budget set utc_day=current_date,reserved=0")
+        db.execute("update ofc_private.copilot_llm_budget set utc_day=current_date,reserved=0")
+        db.execute("update ofc_private.copilot_browser_budget set utc_day=current_date,sessions=0")
+    artist, first, second = (
+        "0a0a0a0a-0000-4000-8000-000000000001",
+        "0a0a0a0a-0000-4000-8000-000000000002",
+        "0a0a0a0a-0000-4000-8000-000000000003",
+    )
+    names = {"Artist Example": artist, "Brand A": first, "Brand B": second}
+
+    class FakeQloo:
+        def __init__(self):
+            self.searches = []
+            self.ranks = 0
+
+        def get(self, url, headers, *, timeout, max_bytes):
+            route = urlsplit(url)
+            if route.path == "/search":
+                query = parse_qs(route.query)
+                name = query["query"][0]
+                self.searches.append(name)
+                assert name in names, "unqualified place search cannot spend a call"
+                body = {"success": True, "results": {"entities": [{
+                    "name": name, "entity_id": names[name], "type": "urn:entity",
+                    "subtype": query["types"][0],
+                }]}}
+            else:
+                self.ranks += 1
+                body = {"success": True, "results": {"entities": [
+                    {"entity_id": key, "type": "urn:entity",
+                     "query": {"affinity": value, "explainability": {
+                         "signal.interests.entities": {},
+                     }}} for key, value in ((second, .9), (first, .6))
+                ]}}
+            return TransportReply(200, json.dumps(body).encode())
+
+    class FakeModel:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, headers, data, *, timeout, max_bytes):
+            self.calls += 1
+            schema = json.loads(data)["generationConfig"]["responseJsonSchema"]
+            if "answer" in schema["properties"]:
+                value = {"answer": "Brand evidence validated; venue choices withheld."}
+            else:
+                decisions = [{
+                    "decision_id": "brand", "domain": "brand",
+                    "selected_name": "Brand A",
+                    "candidate_names": ["Brand A", "Brand B"],
+                    "mutable": True, "depends_on": [],
+                }]
+                for city in ("Chicago", "Austin", "Seattle"):
+                    decisions.append({
+                        "decision_id": "venue_" + city.lower(), "domain": "place",
+                        "selected_name": city + " Venue A",
+                        "candidate_names": [city + " Venue A", city + " Venue B"],
+                        "mutable": True, "depends_on": ["brand"],
+                    })
+                value = {
+                    "objective": "Check an artist's hypothetical three-city tour",
+                    "artist_name": "Artist Example", "taste_seed_name": "Artist Example",
+                    "taste_seed_category": "artist", "discovery_category": None,
+                    "taste_location": None, "budget_usd": 60000,
+                    "cities": ["Chicago", "Austin", "Seattle"],
+                    "choices": decisions, "baseline_answer": "Brand A proposed.",
+                    "clarification_question": None,
+                }
+            return JSONReply(200, json.dumps({"candidates": [{
+                "finishReason": "STOP",
+                "content": {"parts": [{"text": json.dumps(value)}]},
+            }]}).encode())
+
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="judge-test-owner-" + "x" * 48,
+    )
+    owner = vault.login("judge-test-owner-" + "x" * 48)
+    vault.configure(owner, "qloo", "qloo-local-test-key")
+    vault.configure(owner, "gemini", "gemini-local-test-key")
+    fake_qloo, fake_model = FakeQloo(), FakeModel()
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=9,
+        browser_daily_limit=5,
+        qloo_transport=fake_qloo, model_transport=fake_model,
+    )
+    session = runtime.session()
+    result = runtime.submit(
+        session_id=session["session_id"], ticket=session["ticket"],
+        request_id="judge-freeform-three-city",
+        prompt=("My agent picked Brand A for Artist Example. Compare Brand B "
+                "and dependent venues across Chicago, Austin and Seattle. "
+                "No commercial action is allowed."),
+    )
+    assert result["status"] == "REVIEW_REQUIRED"
+    assert result["plan"]["cities"] == ["Chicago", "Austin", "Seattle"]
+    assert len(result["plan"]["choices"]) == 4
+    assert result["revision"] == 1
+    assert result["off"]["decisions"][0]["candidate_id"] == "Brand A"
+    assert result["on"]["decisions"][0]["candidate_id"] == "Brand B"
+    assert result["qloo_requests_this_run"] == 5
+    assert result["qloo_search_requests"] == 3
+    assert result["qloo_rank_requests"] == 2
+    assert fake_qloo.ranks == 2 and len(fake_qloo.searches) == 3
+    assert fake_model.calls == 3
+    observations = result["on"]["qloo"]["catalog_observations"]
+    assert len(observations) == 3
+    assert all(item["status"] == "NOT_EVALUATED" and
+               item["reason_code"] == "OPTIONAL_EVIDENCE_QUOTA_GUARD" and
+               item["policy_qualified"] is False for item in observations)
+    assert result["off"]["qloo"] == result["on"]["qloo"]
+    assert result["release_authorized"] is False
+    assert result["external_action_executed"] is False
