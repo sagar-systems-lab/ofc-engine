@@ -448,6 +448,7 @@ def qualify(origin: str) -> dict:
                 ranked = page.evaluate("""saved => {
                   const source = structuredClone(saved);
                   source._sessionReadConfirmed = true;
+                  source.off.decisions[0].candidate_pool = ["Brand A", "Brand B"];
                   source.off.decisions[0].qloo_observation = {
                     ranked_candidate_ids: ["Brand B", "Brand A"],
                     source_mode: "LIVE_HTTP_UNVERIFIED",
