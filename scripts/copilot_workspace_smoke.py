@@ -234,6 +234,21 @@ def qualify(origin: str) -> dict:
                 assert calls["provider"] == 0 and calls["owner_test"] == 0
                 page.locator("#ofc-intro-understand").click()
                 page.locator("#ofc-intro").wait_for(state="detached")
+                page.locator("#scope-guide").wait_for(state="visible")
+                guide = page.locator("#scope-guide").inner_text()
+                assert "Not a general chatbot." in guide
+                assert "Outside this beta" in guide
+                assert "bookings" in guide.lower() and "qloo" in guide.lower()
+                assert calls["message"] == 0 and calls["provider"] == 0
+                page.locator("#scope-example").click()
+                assert "Taylor Swift" in page.locator("#chat-input").input_value()
+                assert calls["message"] == 0 and calls["provider"] == 0
+                page.locator("#chat-input").fill("")
+                page.locator("#scope-reopen").click()
+                page.locator("#scope-guide").wait_for(state="visible")
+                page.locator("#scope-done").click()
+                page.locator("#scope-guide").wait_for(state="hidden")
+                assert page.evaluate("localStorage.getItem('ofc.copilot.scope-reviewed.v1')") == "yes"
                 page.locator("#empty-title").wait_for(state="visible")
                 assert not page.locator("#chat-send").is_enabled()
                 assert page.locator("#conversation-sidebar").count() == 1
@@ -494,6 +509,7 @@ def qualify(origin: str) -> dict:
                 assert not page.locator("#empty-title").is_visible()
                 page.locator("#ofc-intro-understand").click()
                 page.locator("#ofc-intro").wait_for(state="detached")
+                assert page.locator("#scope-guide").is_hidden()
                 page.get_by_text("LLM + Qloo + OFC: a decision still requires review.").wait_for(
                     state="visible",
                 )

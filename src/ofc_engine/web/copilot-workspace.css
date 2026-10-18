@@ -488,3 +488,26 @@ body.workspace-reduced-motion .workspace-dialog[open]{animation:none}
 .composer-session-info{text-align:center;color:#7890af;font-size:10px;line-height:1.4;margin:4px 0 0}
 .run-budget{background:#f2f7ff;color:#3f638e;border:1px solid #dbe9fa;border-radius:11px;
   font-size:12px;line-height:1.55;padding:10px 13px;margin:14px 0}
+
+
+/* Scope guidance is presentation-only; it never initiates provider requests. */
+.scope-dialog{width:min(660px,calc(100vw - 24px));padding:24px}
+.scope-head h2{font-size:clamp(19px,2.5vw,25px);letter-spacing:-.035em;line-height:1.2;margin:7px 0 10px}
+.scope-head>p:last-child{margin:0;color:#5b7294;font-size:13px;line-height:1.55;max-width:57ch}
+.scope-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+.scope-columns section{background:#f7faff;border:1px solid #e1ebfa;padding:14px;border-radius:13px}
+.scope-columns h3{font-size:13px;color:#16345e;margin:0 0 9px}
+.scope-columns ul{margin:0;padding-left:18px;color:#526a89;font-size:12px;line-height:1.55}
+.scope-columns li+li{margin-top:7px}
+.scope-note{padding:12px 14px;background:#edf5ff;border-radius:11px;font-size:11px;line-height:1.6;color:#48698e}
+.scope-actions{display:flex;justify-content:flex-end;gap:10px;align-items:center;flex-wrap:wrap}
+.scope-inline-link{border:0;background:none;padding:0 2px;color:#1768d5;font-size:inherit;text-decoration:underline;text-underline-offset:2px}
+.scope-inline-link:hover{color:#0b4c9d}
+@media(max-width:530px){
+  .scope-dialog{padding:17px;max-height:90dvh}
+  .scope-columns{grid-template-columns:minmax(0,1fr);gap:8px;margin-top:12px}
+  .scope-columns section{padding:11px}
+  .scope-columns li+li{margin-top:4px}
+  .scope-note{margin:10px 0}
+  .scope-actions>button{flex:1 1 175px}
+}

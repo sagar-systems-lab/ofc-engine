@@ -107,7 +107,7 @@
               </div>
               <button id="chat-send" class="send-button" type="button" aria-label="Send message" disabled><svg class="ico"><use href="#ofc-icon-arrow"/></svg></button></div>
           </div>
-          <p class="composer-note">Short text notes only (.txt/.md/.csv/.json). PDF, DOCX and long documentary plans need a separate ingestion workflow. Nothing is uploaded until you approve Send.</p>
+          <p class="composer-note">Short text notes only (.txt/.md/.csv/.json). PDF, DOCX and long documentary plans need a separate ingestion workflow. Nothing is uploaded until you approve Send. <button id="scope-reopen" type="button" class="scope-inline-link">What can OFC test?</button></p>
           <p id="composer-session-info" class="composer-session-info">0 of 4 submitted requests in this visitor session.</p>
         </div>
       </main>
@@ -234,6 +234,36 @@
         <p>Cultural affinity does not verify contracts, geographical feasibility or commercial outcomes. OFC never authorizes booking, payment or endorsement.</p>
       </section>
     </div>
+  </div>
+</dialog>
+<dialog class="workspace-dialog scope-dialog" id="scope-guide" aria-labelledby="scope-guide-title" aria-describedby="scope-guide-summary">
+  <div class="scope-head">
+    <p class="dialog-eyebrow">OFC Engine · private beta</p>
+    <h2 id="scope-guide-title">A decision reviewer. Not a general chatbot.</h2>
+    <p id="scope-guide-summary">OFC checks an agent's proposed cultural choice against Qloo observations, and changes it only when evidence supports that revision.</p>
+  </div>
+  <div class="scope-columns">
+    <section aria-labelledby="scope-supported-title">
+      <h3 id="scope-supported-title">Try a live cultural review</h3>
+      <ul>
+        <li>Choose one named artist and 2–5 named brand candidates, including the original choice.</li>
+        <li>Inspect Qloo rankings, an independent recheck and OFC's decision.</li>
+        <li>Switch OFF/ON, open the decision map and export the saved proof.</li>
+      </ul>
+    </section>
+    <section aria-labelledby="scope-limits-title">
+      <h3 id="scope-limits-title">Outside this beta</h3>
+      <ul>
+        <li>Open-ended questions, coding, general research or a ChatGPT replacement.</li>
+        <li>Verified city/locality suitability, real commercial feasibility or audience outcomes.</li>
+        <li>Bookings, payments, contracts, endorsements, PDF/DOCX analysis or external action.</li>
+      </ul>
+    </section>
+  </div>
+  <p class="scope-note">For zero-provider-cost testing, use the flask icon's clearly labeled synthetic scenarios. Live Send requires your approval and consumes limited Qloo/model quota. A cultural PASS never authorizes a commercial action.</p>
+  <div class="scope-actions">
+    <button id="scope-example" type="button" class="secondary-button">Use a sample question</button>
+    <button id="scope-done" type="button" class="primary-button">Done · start exploring</button>
   </div>
 </dialog>
 <dialog class="run-confirm" id="run-confirm" aria-labelledby="run-confirm-title">
