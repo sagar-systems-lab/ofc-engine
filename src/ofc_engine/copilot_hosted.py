@@ -516,6 +516,21 @@ class HostedCopilot:
         )
 
     @staticmethod
+    def _place_city_scope(choice: DraftChoice, cities: tuple[str, ...]) -> str | None:
+        if not cities:
+            return None
+        node = choice.decision_id.replace("_", " ").replace("-", " ").casefold()
+        options = [name.casefold() for name in choice.candidate_names]
+        matches = []
+        for city in cities:
+            token = r"(?<!\\w)" + re.escape(city.casefold()) + r"(?!\\w)"
+            if re.search(token, node) or (
+                options and all(re.search(token, option) for option in options)
+            ):
+                matches.append(city)
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
     def _qloo_budget_projection(draft: CopilotDraft, catalog_domains: dict,
                                 seed_category: str) -> tuple[int, int]:
         qualified = [
@@ -527,11 +542,13 @@ class HostedCopilot:
         core_names = {name for choice in qualified for name in choice.candidate_names}
         brand_rechecks = 2 * min(4, len(qualified))
         core_required = 1 + len(core_names) + brand_rechecks
-        combined_names = {
-            (catalog_domains.get(choice.decision_id, "brand"), name)
+        combined_names = {("brand", name) for name in core_names}
+        combined_names.update(
+            (catalog_domains[choice.decision_id], name)
             for choice in draft.choices
+            if choice.decision_id in catalog_domains
             for name in choice.candidate_names
-        }
+        )
         full_required = 1 + len(combined_names) + len(catalog_domains) + brand_rechecks
         return core_required, full_required
 
@@ -714,6 +731,8 @@ class HostedCopilot:
             native_discovery = None
             discovered_ids = {}
             catalog_skipped = {}
+            catalog_skip_reasons = {}
+            place_city_scopes = {}
             context = None
             seed_name = draft.taste_seed_name or draft.artist_name
             seed_category = draft.taste_seed_category or "artist"
@@ -795,6 +814,15 @@ class HostedCopilot:
                     catalog_domains[choice.decision_id] = category_for(choice.domain)
                 except ValueError:
                     continue
+            for choice in draft.choices:
+                if catalog_domains.get(choice.decision_id) != "place":
+                    continue
+                city = self._place_city_scope(choice, draft.cities)
+                if city is None:
+                    catalog_skipped[choice.decision_id] = catalog_domains.pop(choice.decision_id)
+                    catalog_skip_reasons[choice.decision_id] = "PLACE_CITY_SCOPE_UNQUALIFIED"
+                else:
+                    place_city_scopes[choice.decision_id] = city
             if not supported and not catalog_domains:
                 return self._needs_input(
                     run_id, draft, model.model,
@@ -815,10 +843,11 @@ class HostedCopilot:
                 )
 
             if native_discovery is None:
-                catalog_domains, catalog_skipped, required = self._catalog_budget_scope(
+                catalog_domains, quota_skipped, required = self._catalog_budget_scope(
                     draft, catalog_domains, seed_category,
                     self._capacity()["qloo_requests_remaining"],
                 )
+                catalog_skipped.update(quota_skipped)
                 self._capacity(required_qloo=required)
             reviewer = self._reviewer()
             resolver = HostedQlooResolver(reviewer)
@@ -924,7 +953,11 @@ class HostedCopilot:
                         "category": category,
                         "source_mode": "NOT_REQUESTED",
                         "status": "NOT_EVALUATED",
-                        "reason_code": "OPTIONAL_EVIDENCE_QUOTA_GUARD",
+                        "reason_code": catalog_skip_reasons.get(
+                            decision_id, "OPTIONAL_EVIDENCE_QUOTA_GUARD"
+                        ),
+                        "requested_locality": place_city_scopes.get(decision_id),
+                        "locality_independently_verified": False,
                         "ranked_candidates": [],
                         "policy_qualified": False,
                         "external_action_authorized": False,
@@ -945,6 +978,7 @@ class HostedCopilot:
                             run_id=run_id, decision_id=decision_id, category=category,
                             subject_id=artist.entity_id,
                             candidate_ids=tuple(item.entity_id for item in entities),
+                            location=place_city_scopes.get(decision_id),
                         )
                     )
                     name_map = {item.entity_id: item.name for item in entities}
@@ -959,6 +993,8 @@ class HostedCopilot:
                             "reason_code", "POLICY_SCOPE_NOT_LIVE_QUALIFIED"
                         ),
                         "query_fingerprint": observation.get("query_fingerprint"),
+                        "requested_locality": observation.get("requested_locality"),
+                        "locality_independently_verified": False,
                         "ranked_candidates": [
                             name_map[item] for item in observation.get("ranking", [])
                         ],
