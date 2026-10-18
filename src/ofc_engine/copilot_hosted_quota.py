@@ -22,7 +22,7 @@ def reserve_model_call(
     store: PostgresRevisionStore, *, daily_limit: int,
     run_id: str | None = None,
 ) -> None:
-    if type(daily_limit) is not int or not 1 <= daily_limit <= 64:
+    if type(daily_limit) is not int or not 1 <= daily_limit <= 128:
         raise ValueError("invalid model budget")
     with store._connect() as db:
         row = db.execute(
@@ -52,7 +52,7 @@ def reserve_model_call(
 
 
 def reserve_qloo_request(store: PostgresRevisionStore, *, daily_limit: int) -> bool:
-    if type(daily_limit) is not int or not 1 <= daily_limit <= 64:
+    if type(daily_limit) is not int or not 1 <= daily_limit <= 256:
         raise ValueError("invalid Qloo budget")
     with store._connect() as db:
         row = db.execute(
