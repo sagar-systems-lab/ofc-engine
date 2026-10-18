@@ -710,6 +710,11 @@ class HostedCopilot:
         )
         if cached is not None:
             return cached
+        # A qualified artist/brand review needs artist + two brand lookups
+        # and two independent rank observations. Do not spend a model call
+        # or consume a visitor slot when the shared Qloo gate cannot fit it.
+        # Exact plan cost is checked again after model extraction.
+        self._capacity(required_llm=3, required_qloo=5)
         self._require_credentials()
         model = self._model()
         prior_plan = self._parent_context(session_id, parent_run_id)
