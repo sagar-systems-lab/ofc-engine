@@ -7,7 +7,7 @@
   const storageKey = "ofc.copilot.visitor.session.v1";
   const state = {
     sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
-    pendingPrompt: "", sidebarOpen: window.innerWidth > 1180, search: "",
+    pendingPrompt: "", localNotice: null, sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, sessionMessageLimit: 4, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
     attachment: null, attachmentVersion: 0,
   };
@@ -216,6 +216,7 @@
       button.append(node("time", "", String(run.status || "SAVED").replaceAll("_", " ")));
       button.addEventListener("click", () => {
         state.selected = run.run_id;
+        state.localNotice = null;
         render();
         if (window.innerWidth <= 768) setSidebar(false);
       });
@@ -295,10 +296,15 @@
       (state.runs.length >= state.sessionMessageLimit ? " Limit reached; no new provider requests will be started." : "");
     resizeComposer();
     const run = selectedRun();
-    const visible = run || (state.busy && state.pendingPrompt);
+    const visible = state.localNotice || run || (state.busy && state.pendingPrompt);
     el("chat-empty").hidden = Boolean(visible);
     el("chat-transcript").hidden = !visible;
-    if (run) renderRun(run);
+    if (state.localNotice) {
+      el("chat-transcript").replaceChildren(
+        message("user", state.localNotice.prompt),
+        message("assistant", state.localNotice.detail)
+      );
+    } else if (run) renderRun(run);
     else if (state.busy && state.pendingPrompt) {
       const box = el("chat-transcript");
       box.replaceChildren(message("user", state.pendingPrompt),
@@ -307,8 +313,8 @@
       el("chat-transcript").replaceChildren();
     }
     const proof = el("proof-entry");
-    window.OFCResults?.syncProof(run);
-    window.OFCActivity?.render(run || (state.busy && state.pendingPrompt
+    window.OFCResults?.syncProof(state.localNotice ? null : run);
+    window.OFCActivity?.render((state.localNotice ? null : run) || (state.busy && state.pendingPrompt
       ? {local_pending: true} : null));
   };
 
@@ -427,6 +433,7 @@
     if (!prompt || state.busy) return;
     const draftInput = el("chat-input").value;
     state.pendingBaselineIds = new Set(state.runs.map(run => run.run_id));
+    state.localNotice = null;
     setBusy(true);
     state.selected = null;
     el("chat-input").value = "";
@@ -449,6 +456,7 @@
       state.selected = reply.run_id || state.runs.at(-1)?.run_id || null;
       render();
       monitor();
+      await loadCapabilities(); // Read-only refresh after durable provider admission.
       statusText(reply.status === "PROCESSING" ? safeStatus("PROCESSING") :
         "Saved response. Switching modes and opening history do not use provider quota.");
     } catch (err) {
@@ -457,6 +465,19 @@
       if (!state.runs.some(run => run.prompt === prompt)) {
         el("chat-input").value = draftInput;
       }
+      const code = String(err.message || "");
+      if (code.includes("QLOO_DAILY_QUOTA_EXHAUSTED") ||
+          code.includes("DAILY_QLOO_BUDGET_EXHAUSTED")) {
+        state.selected = null;
+        state.localNotice = {
+          prompt,
+          detail: "NOT SUBMITTED — Qloo daily capacity is insufficient. " +
+            "No new decision was saved. The previous result remains in Saved conversations. " +
+            "Do not retry until sufficient quota is available.",
+        };
+        render();
+      }
+      await loadCapabilities(); // No new provider calls; never replay POST.
     } finally {
       state.pendingPrompt = "";
       state.activeRequestId = null;
@@ -481,9 +502,14 @@
     }
     const available = state.capability?.capacity?.qloo_requests_remaining;
     if (Number.isInteger(available) && available < 5) {
-      statusText("Live cultural review unavailable: " + available +
-        " Qloo calls remain; a qualifying artist/brand review needs at least 5. " +
-        "No provider request made. Existing history and synthetic tests remain available.");
+      const detail = "NOT SUBMITTED — only " + available +
+        " Qloo calls remain; a qualified artist/brand review requires at least 5. " +
+        "No Gemini or Qloo request was made. The last saved review is still available " +
+        "in the conversation list. Wait for verified quota before submitting."; 
+      state.selected = null;
+      state.localNotice = {prompt, detail};
+      render();
+      statusText("Not submitted: insufficient Qloo quota. No provider call made.");
       return;
     }
     state.pendingPrompt = prompt;
@@ -530,6 +556,7 @@
   el("new-chat").addEventListener("click", () => {
     if (state.busy) return;
     state.selected = null;
+    state.localNotice = null;
     el("chat-input").value = "";
     clearAttachment();
     render();
