@@ -8,7 +8,7 @@
   const state = {
     sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
     pendingPrompt: "", sidebarOpen: window.innerWidth > 1180, search: "",
-    capability: null, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
+    capability: null, sessionMessageLimit: 4, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
     attachment: null, attachmentVersion: 0,
   };
 
@@ -84,7 +84,7 @@
       COPILOT_NOT_CONFIGURED: "Copilot is not configured for live requests.",
       ACCESS_DENIED: "Your private session expired or is no longer accessible.",
       COPILOT_STORAGE_UNAVAILABLE: "Saved-result storage is currently unavailable.",
-      COPILOT_SESSION_MESSAGE_LIMIT: "This private session allows four submitted requests. Create a new visitor session after saving any proof you need.",
+      COPILOT_SESSION_MESSAGE_LIMIT: "This visitor session reached its submitted-request limit. Save any proof before creating a new session.",
       INVALID_COPILOT_MESSAGE: "The request is outside supported bounds. Please shorten your prompt or attached notes.",
     };
     return labels[code] || "This review is unavailable (" + String(code || "UNKNOWN").slice(0, 64) + ").";
@@ -99,7 +99,7 @@
     el("chat-input").readOnly = busy;
     el("attachment-add").disabled = busy;
     el("attachment-remove").disabled = busy;
-    el("chat-send").disabled = busy || state.runs.length >= 4 ||
+    el("chat-send").disabled = busy || state.runs.length >= state.sessionMessageLimit ||
       !composedPrompt() || composedPrompt().length > 4000;
     if (!busy) resizeComposer();
   };
@@ -119,7 +119,7 @@
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 138) + "px";
     const prompt = composedPrompt();
-    if (!state.busy) el("chat-send").disabled = state.runs.length >= 4 ||
+    if (!state.busy) el("chat-send").disabled = state.runs.length >= state.sessionMessageLimit ||
       !prompt || prompt.length > 4000;
     if (state.attachment && prompt && prompt.length > 4000)
       statusText("Combined prompt exceeds 4,000 characters. Shorten your question or remove notes; no upload occurred.");
@@ -291,8 +291,8 @@
   const render = () => {
     renderHistory();
     el("composer-session-info").textContent = state.runs.length +
-      " of 4 submitted requests in this private visitor session." +
-      (state.runs.length >= 4 ? " Limit reached; no new provider requests will be started." : "");
+      " of " + state.sessionMessageLimit + " submitted requests in this private visitor session." +
+      (state.runs.length >= state.sessionMessageLimit ? " Limit reached; no new provider requests will be started." : "");
     resizeComposer();
     const run = selectedRun();
     const visible = run || (state.busy && state.pendingPrompt);
@@ -322,6 +322,10 @@
     try {
       const caps = await jsonRequest("/api/capabilities");
       state.capability = caps;
+      if (Number.isInteger(caps.session_message_limit) &&
+          caps.session_message_limit >= 1 && caps.session_message_limit <= 12)
+        state.sessionMessageLimit = caps.session_message_limit;
+      render();
       const raw = String(caps.product || "UNKNOWN");
       const dot = el("status-dot");
       dot.className = "status-dot " +
@@ -363,6 +367,9 @@
     if (!state.sessionId) return;
     try {
       const saved = await jsonRequest("/api/copilot/sessions/" + state.sessionId);
+      if (Number.isInteger(saved.session_message_limit) &&
+          saved.session_message_limit >= 1 && saved.session_message_limit <= 12)
+        state.sessionMessageLimit = saved.session_message_limit;
       state.runs = Array.isArray(saved.messages)
         ? saved.messages.map(item => ({...item, _sessionReadConfirmed: true})) : [];
       if (!state.selected && state.busy && state.pendingPrompt) {
@@ -461,7 +468,7 @@
 
   const requestSend = () => {
     if (state.busy) return;
-    if (state.runs.length >= 4) {
+    if (state.runs.length >= state.sessionMessageLimit) {
       statusText("This private visitor session has reached its four-request limit. No provider call made.");
       return;
     }
@@ -519,8 +526,8 @@
     clearAttachment();
     render();
     resizeComposer();
-    statusText(state.runs.length >= 4
-      ? "Four-request visitor-session limit reached. New chat only resets the draft; it does not reset quota."
+    statusText(state.runs.length >= state.sessionMessageLimit
+      ? "Visitor-session limit reached. New chat only resets the draft; it does not reset quota."
       : "New draft. No provider request made; the private session retains its remaining allowance.");
     el("chat-input").focus();
     if (window.innerWidth <= 768) setSidebar(false);
