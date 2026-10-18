@@ -2355,3 +2355,54 @@ def test_judge_volume_ceiling_is_configurable_but_preserves_low_defaults(pg_url)
         HostedCopilot(store, vault, qloo_daily_limit=257, llm_daily_limit=75)
     with pytest.raises(ValueError, match="model daily budget"):
         HostedCopilot(store, vault, qloo_daily_limit=150, llm_daily_limit=129)
+
+
+def test_visitor_session_limit_is_configurable_and_replay_safe(pg_url):
+    from cryptography.fernet import Fernet
+    from ofc_engine.copilot_credentials import CredentialVault
+    from ofc_engine.copilot_hosted import HostedCopilot, SessionLimitReached
+
+    with psycopg.connect(pg_url, sslmode="disable") as db:
+        db.execute((Path(__file__).resolve().parents[1] / "sql/003_dynamic_qloo.sql").read_text())
+        db.execute((Path(__file__).resolve().parents[1] / "sql/004_copilot_hosted.sql").read_text())
+        db.execute("update ofc_private.copilot_browser_budget set utc_day=current_date,sessions=0")
+    store = PostgresRevisionStore(pg_url, insecure_local_test=True)
+    vault = CredentialVault(
+        store, master_key=Fernet.generate_key().decode(),
+        owner_secret="session-limit-owner-" + "x" * 48,
+    )
+    owner = vault.login("session-limit-owner-" + "x" * 48)
+    vault.configure(owner, "qloo", "fake-test-qloo-key")
+    vault.configure(owner, "gemini", "fake-test-gemini-key")
+    runtime = HostedCopilot(
+        store, vault, qloo_daily_limit=12, llm_daily_limit=9,
+        session_message_limit=6,
+    )
+    session = runtime.session()
+    assert session["session_message_limit"] == 6
+    assert runtime.capabilities()["session_message_limit"] == 6
+    for n in range(6):
+        run_id, prior = runtime._admit_message(
+            session["session_id"], f"test-{n:02}",
+            "d" * 64, "model-test", f"Prompt {n}", None,
+        )
+        assert run_id.startswith("cp-run-") and prior is None
+    saved = runtime.messages(session["session_id"], session["ticket"])
+    assert saved["session_message_limit"] == 6
+    assert len(saved["messages"]) == 6
+    same_id, replay = runtime._admit_message(
+        session["session_id"], "test-00", "d" * 64,
+        "model-test", "Prompt 0", None,
+    )
+    assert same_id == saved["messages"][0]["run_id"]
+    assert replay["status"] == "PROCESSING"
+    with pytest.raises(SessionLimitReached, match="COPILOT_SESSION_MESSAGE_LIMIT"):
+        runtime._admit_message(
+            session["session_id"], "test-06", "d" * 64,
+            "model-test", "Prompt 6", None,
+        )
+    with pytest.raises(ValueError, match="visitor message limit"):
+        HostedCopilot(
+            store, vault, qloo_daily_limit=12, llm_daily_limit=9,
+            session_message_limit=13,
+        )

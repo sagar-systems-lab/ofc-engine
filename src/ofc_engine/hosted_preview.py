@@ -631,6 +631,9 @@ def main(argv: list[str] | None = None) -> None:
             qloo_limit = int(os.environ.get("OFC_COPILOT_QLOO_DAILY_LIMIT", "0"))
             llm_limit = int(os.environ.get("OFC_COPILOT_LLM_DAILY_LIMIT", "0"))
             browser_limit = int(os.environ.get("OFC_COPILOT_BROWSER_DAILY_LIMIT", "20"))
+            session_message_limit = int(os.environ.get(
+                "OFC_COPILOT_SESSION_MESSAGE_LIMIT", "4"
+            ))
             vault = CredentialVault(
                 registry.store,
                 master_key=os.environ.get("OFC_COPILOT_MASTER_KEY", ""),
@@ -640,6 +643,7 @@ def main(argv: list[str] | None = None) -> None:
                 registry.store, vault,
                 qloo_daily_limit=qloo_limit, llm_daily_limit=llm_limit,
                 browser_daily_limit=browser_limit,
+                session_message_limit=session_message_limit,
             )
         except (ValueError, TypeError, RuntimeError, psycopg.Error):
             parser.error("private Copilot configuration or migrations unavailable")

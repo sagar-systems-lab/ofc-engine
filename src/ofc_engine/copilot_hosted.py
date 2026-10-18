@@ -75,7 +75,7 @@ class HostedCopilot:
     def __init__(
         self, store: PostgresRevisionStore, vault: CredentialVault, *,
         qloo_daily_limit: int, llm_daily_limit: int,
-        browser_daily_limit: int = 20,
+        browser_daily_limit: int = 20, session_message_limit: int = 4,
         model_transport=None, qloo_transport=None,
     ):
         if not isinstance(store, PostgresRevisionStore) or vault.store is not store:
@@ -86,11 +86,14 @@ class HostedCopilot:
             raise ValueError("model daily budget must be 1–128 requests")
         if type(browser_daily_limit) is not int or not 1 <= browser_daily_limit <= 80:
             raise ValueError("invalid session budget")
+        if type(session_message_limit) is not int or not 1 <= session_message_limit <= 12:
+            raise ValueError("invalid visitor message limit")
         self.store = store
         self.vault = vault
         self.qloo_daily_limit = qloo_daily_limit
         self.llm_daily_limit = llm_daily_limit
         self.browser_daily_limit = browser_daily_limit
+        self.session_message_limit = session_message_limit
         self.model_transport = model_transport
         self.qloo_transport = qloo_transport
         with store._connect() as db:
@@ -169,7 +172,8 @@ class HostedCopilot:
                 "values(%s,%s,now()+interval '24 hours')",
                 (session_id, self._digest(token)),
             )
-        return {"session_id": session_id, "ticket": token, "expires_in_hours": 24}
+        return {"session_id": session_id, "ticket": token, "expires_in_hours": 24,
+                "session_message_limit": self.session_message_limit}
 
     def _check_session(self, session_id: str, ticket: str) -> None:
         if (
@@ -313,7 +317,8 @@ class HostedCopilot:
             with self.store._connect() as db:
                 activity = activity_projection(db, run_id, result)
             outputs.append({"prompt": prompt, **result, "activity": activity})
-        return {"session_id": session_id, "messages": outputs}
+        return {"session_id": session_id, "messages": outputs,
+                "session_message_limit": self.session_message_limit}
 
     def _validate_entity_selection(
         self, session_id: str, parent_run_id: str | None,
@@ -427,7 +432,7 @@ class HostedCopilot:
                 if saved.get("run_id") != existing[0]:
                     raise StorageIntegrityError("saved message digest mismatch")
                 return existing[0], saved
-            if row[0] >= 4:
+            if row[0] >= self.session_message_limit:
                 raise SessionLimitReached("COPILOT_SESSION_MESSAGE_LIMIT")
             run_id = "cp-run-" + secrets.token_hex(16)
             db.execute(
@@ -1170,6 +1175,7 @@ class HostedCopilot:
             "product": product_state,
             "selected_llm_provider": chosen,
             "capacity": self._capacity(),
+            "session_message_limit": self.session_message_limit,
             "qloo_catalog": capability_registry(),
             "release_authorized": False,
         }

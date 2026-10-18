@@ -152,3 +152,13 @@ revoke all on
     ofc_private.copilot_owner_login_budget,
     ofc_private.copilot_connection_attempts
 from public, anon, authenticated;
+
+
+-- Existing installations initially limited sessions to four requests. Keep
+-- the database hard ceiling in sync with the bounded 1–12 runtime setting.
+-- Idempotent under repeated private migration application.
+alter table ofc_private.copilot_sessions
+    drop constraint if exists copilot_sessions_prompt_count_check;
+alter table ofc_private.copilot_sessions
+    add constraint copilot_sessions_prompt_count_check
+    check(prompt_count between 0 and 12);
