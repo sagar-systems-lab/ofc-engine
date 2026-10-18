@@ -287,6 +287,26 @@ def optimize(
             else plan
         )
         failures = [c for c in constraints(candidate) if c["status"] != "PASS"]
+        if evaluation is not None and patches:
+            joint = evaluate(candidate, evidence, **evaluation)
+            for patch in patches:
+                node = next(n for n in candidate.nodes if n.id == patch.node_id)
+                needed = joint[node.id]["claims"]
+                if node.domain == "brand" and not plan.budgets:
+                    needed = [c for c in needed if c["claim"] == "cultural_brand_rank"]
+                if (
+                    not needed
+                    or any(c["status"] != "QUALIFIED" for c in needed)
+                    or joint[node.id]["upstream_blockers"]
+                ):
+                    failures.append(
+                        {
+                            "type": "JOINT_EVIDENCE_ELIGIBILITY",
+                            "node_id": node.id,
+                            "status": "UNCERTAIN",
+                            "reason": "COMBINED_PATCH_INPUTS_UNQUALIFIED",
+                        }
+                    )
         if failures:
             if len(rejected) < 8:
                 rejected.append(

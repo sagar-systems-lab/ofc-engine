@@ -106,6 +106,22 @@ def _verify_repair_objective(
             if patches
             else baseline
         )
+        if patches:
+            joint = evaluate(candidate, evidence, **evaluation)
+            admissible = True
+            for patch in patches:
+                node = next(n for n in candidate.nodes if n.id == patch.node_id)
+                claims = joint[node.id]["claims"]
+                if node.domain == "brand" and not baseline.budgets:
+                    claims = [c for c in claims if c["claim"] == "cultural_brand_rank"]
+                if (
+                    not claims
+                    or any(c["status"] != "QUALIFIED" for c in claims)
+                    or joint[node.id]["upstream_blockers"]
+                ):
+                    admissible = False
+            if not admissible:
+                continue
         value = score(candidate)
         if value[0]:
             continue
