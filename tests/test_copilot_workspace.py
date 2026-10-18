@@ -114,7 +114,9 @@ def test_readiness_controls_are_bounded_without_new_endpoints():
     assert "Server availability is separate" in script
     assert 'limits.qloo_requests_remaining' in script
     assert 'state.capability?.capacity?.qloo_requests_remaining' in script
-    assert 'Live cultural review unavailable:' in script
+    assert 'NOT SUBMITTED — only ' in script
+    assert 'state.localNotice = {prompt, detail};' in script
+    assert 'await loadCapabilities(); // Read-only refresh after durable provider admission.' in script
     assert 'No provider request made. Existing history and synthetic tests remain available.' in script
     assert 'state.runs.length >= state.sessionMessageLimit' in script
     assert 'caps.session_message_limit' in script
