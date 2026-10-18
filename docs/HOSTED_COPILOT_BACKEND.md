@@ -16,6 +16,7 @@ Set the following **server-side environment variables** in OFC's deployment dash
 - `OFC_COPILOT_QLOO_DAILY_LIMIT`: 1–64 total search **and** insights requests
 - `OFC_COPILOT_LLM_DAILY_LIMIT`: 1–64 total extraction, explanation and model tests
 - `OFC_COPILOT_BROWSER_DAILY_LIMIT`: 1–80 new visitor sessions
+- `OFC_COPILOT_SESSION_MESSAGE_LIMIT`: 1–12 messages per private session; defaults to 4
 - Existing `OFC_DURABLE_RUNS_MODE=ENABLED` and `OFC_DATABASE_URL` remain required.
 
 Unknown modes, missing migrations, invalid owner/master secrets and absent budgets fail at startup. The current service remains unaffected until this mode is explicitly set.
@@ -47,7 +48,7 @@ The owner secret is not a Qloo/LLM key and must not be shared with public visito
 
 The OFF and ON answers share the same language-model identity, frozen baseline and original Qloo observations. **OFF = LLM + Qloo. ON = LLM + Qloo + OFC.** The OFF/ON toggle only reads stored output and cannot consume inference quota.
 
-Each new session requires Qloo plus a configured LLM key, is rate-limited by a private global UTC-day budget, and supports at most four independent prompts. Original user prompts are encrypted in the private database and restored only to the matching visitor session. A completed response reports Qloo search requests, insights/rank requests and their combined total, plus LLM request count. Typically one artist search, two brand searches, two rank observations and three model requests (one extraction plus independent OFF and ON narration) are needed; actual counts depend on the eligible scope. Quotas count calls, not sessions. Missing keys, exhausted quotas, unavailable external services and unsupported cultural decision categories return explicit blocked/uncertain states. No client can authorize bookings, payments, contracts or external actions through this API.
+Each new session requires Qloo plus a configured LLM key, is rate-limited by a private global UTC-day budget, and supports at most four independent prompts by default (configurable to 1–12). Original user prompts are encrypted in the private database and restored only to the matching visitor session. A completed response reports Qloo search requests, insights/rank requests and their combined total, plus LLM request count. Typically one artist search, two brand searches, two rank observations and three model requests (one extraction plus independent OFF and ON narration) are needed; actual counts depend on the eligible scope. Quotas count calls, not sessions. Missing keys, exhausted quotas, unavailable external services and unsupported cultural decision categories return explicit blocked/uncertain states. No client can authorize bookings, payments, contracts or external actions through this API.
 
 The browser receives the original/reviewed choice **names** and redacted evidence summaries, not raw Qloo captures or private Qloo ID lists. Internally all decisions remain tied to scoped provider IDs, checksums, revisions and the journal.
 
@@ -108,7 +109,7 @@ A subsequent message may include an optional `parent_run_id` pointing to an exis
 
 The OFF natural-language response is generated in a separate inference request **before** ON, using the original baseline plus the shared Qloo rank only. The OFF model never receives OFC changes, verdicts, repair reasons or reviewed decisions. ON receives the identical Qloo evidence plus OFC's scoped findings. Both arms keep the same model identity; inference totals are 3 per complete task (extraction + separate OFF + ON). UI toggles and saved-message reads are provider-free. These are controlled, evidence-blinded inference arms, not an independent randomized clinical-style causal experiment.
 
-The initial anonymous session limit remains 4 prompts for quota safety. This can be raised only together with explicit aggregate model/Qloo budgets and abuse controls.
+The anonymous session limit defaults to 4 prompts for quota safety. The supported 1–12 setting does not create additional upstream allowance: raise it only after verifying global free-tier request capacity and abuse controls.
 
 
 ## Entity disambiguation
