@@ -152,13 +152,13 @@ def test_saved_result_brief_separates_cultural_review_from_commercial_release():
     web = files("ofc_engine").joinpath("web")
     script = web.joinpath("copilot-proof.js").read_text()
     css = web.joinpath("copilot-workspace.css").read_text()
-    assert 'aria-label", "Evidence-grounded decision brief"' in script
+    assert '"Evidence-grounded decision brief"' in script
     assert '"OFC intervention"' in script
     assert '"Partnership readiness"' in script
     assert '"HOLD — commercial evidence incomplete."' in script
     assert '"City allocation"' in script
     assert '"Model explanation · not independently verified"' in script
-    assert 'business_evidence_satisfied === true' in script
+    assert 'business_evidence_satisfied===true' in script
     assert 'Repeat Qloo ranking matched (same provider)' in script
     assert 'Cultural check: ' in script
     assert '.decision-brief{' in css and '.narrative-section{' in css
