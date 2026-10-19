@@ -233,14 +233,15 @@
         make("strong","",name(revised.candidate_id)),
         make("small",changed?"comparison-delta":"comparison-preserved",
           changed?"Selection revised; further checks required":"Original selection preserved"),
-        make("small","","Verdict: "+id(revised.ofc_verdict||"UNCERTAIN")));
+        make("small","","Cultural check: "+id(revised.ofc_verdict||"UNCERTAIN")+
+          " (not commercial approval)"));
       if(revised.ofc_reason)on.append(make("small","","Reason: "+id(revised.ofc_reason)));
       const rank=rankedEvidence(pair).find(x=>x.decision_id===key);
       if(rank){
         off.append(make("small","","Qloo pool rank: "+rank.ranked_candidates.join(" → ")));
         on.append(make("small","",rank.rank_recheck_matched
-          ? "Independent ranking recheck matched"
-          : "Ranking replay recorded; independent match not verified"));
+          ? "Repeat Qloo ranking matched (same provider)"
+          : "Repeat ranking was not qualified as matching"));
       }
       row.append(title,off,on);
       rows.append(row);
@@ -248,7 +249,8 @@
     $("comparison-footer").textContent=pair.changed.length
       ? pair.changed.length+" revised · "+(pair.before.size-pair.changed.length)+
           " preserved. Business verification and external action remain withheld."
-      : "No qualified change demonstrated. Commercial verification and external action remain withheld.";
+      : "Original selection preserved. "+rankedEvidence(pair).filter(x=>x.rank_recheck_matched).length+
+        " repeated Qloo ranking check(s) matched. Commercial verification and external action remain withheld.";
     openDialog($("comparison-dialog"),invoker);
   };
   const action = (caption,fn,disabled=false) => {

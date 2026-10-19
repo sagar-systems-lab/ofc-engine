@@ -409,6 +409,14 @@ def qualify(origin: str) -> dict:
                 page.get_by_text("LLM + Qloo + OFC: a decision still requires review.").wait_for(
                     state="visible",
                 )
+                page.locator(".decision-brief").wait_for(state="visible")
+                decision_brief = page.locator(".decision-brief").inner_text()
+                assert "Qloo observation" in decision_brief
+                assert "OFC intervention" in decision_brief
+                assert "Partnership readiness" in decision_brief
+                assert "HOLD" in decision_brief
+                assert "Model explanation · not independently verified" in page.locator(".narrative-section").inner_text()
+
                 page.locator("#mode-toggle").click()
                 baseline = page.locator(".result-caveat").inner_text()
                 assert "2 original choices. OFC controls not applied." in baseline
