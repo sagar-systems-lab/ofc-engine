@@ -681,23 +681,78 @@ class HostedCopilot:
         self._complete(run_id, result)
         return result
 
+    @staticmethod
+    def _evidence_only_answer(view: dict, *, mode: str, cities: tuple[str, ...]) -> str:
+        if mode not in ("off", "on"):
+            raise ValueError("invalid evidence view")
+        lines = ["Model explanation unavailable. Saved evidence-only review:"]
+        observations = view.get("qloo", {}).get("observations", [])
+        rankings = [
+            tuple(item["ranked_candidate_ids"])
+            for item in observations
+            if isinstance(item, dict) and item.get("ranked_candidate_ids")
+        ]
+        if len(rankings) >= 2 and all(r == rankings[0] for r in rankings):
+            names = " > ".join(str(name)[:160] for name in rankings[0][:5])
+            lines.append("Repeated Qloo cultural ranking: " + names + ".")
+        elif rankings:
+            lines.append("Saved Qloo ranks do not establish a consistent ordering.")
+        else:
+            lines.append("No verified Qloo ranking is available in this view.")
+        for decision in view["decisions"][:6]:
+            label = str(decision.get("decision_id", "decision"))[:48]
+            choice = str(decision.get("candidate_id", "unresolved"))[:160]
+            if mode == "off":
+                lines.append(f"Original choice ({label}): {choice}. No OFC control applied.")
+            else:
+                verdict = str(decision.get("ofc_verdict", "UNCERTAIN"))[:48]
+                reason = str(decision.get("ofc_reason", "NOT_VERIFIED"))[:80]
+                lines.append(
+                    f"OFC choice ({label}): {choice}. Verdict: {verdict}; reason: {reason}."
+                )
+        if cities:
+            lines.append(
+                "City order, local audiences, venues and tour budget feasibility "
+                "were not independently verified."
+            )
+        lines.append(
+            "Cultural ranks do not establish contracts, rights or business fitness. "
+            "No booking, partnership or other external action was authorized."
+        )
+        return "\n".join(lines)[:4096]
+
     def _narrate_arms(self, *, model: CopilotLLM, pair, prompt: str,
                       run_id: str) -> tuple[str, str]:
-        # Reserve both calls before launching either independent model arm.
-        reserve_model_call(
-            self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
-        )
-        reserve_model_call(
-            self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
-        )
+        preflight = getattr(model, "preflight_narration", None)
+        if callable(preflight):
+            for mode in ("off", "on"):
+                preflight(pair, prompt=prompt, mode=mode)
+        reserve_model_call(self.store, daily_limit=self.llm_daily_limit, run_id=run_id)
+        reserve_model_call(self.store, daily_limit=self.llm_daily_limit, run_id=run_id)
         started = monotonic()
+        answers, failures = {}, {}
         with ThreadPoolExecutor(max_workers=2) as pool:
-            off = pool.submit(model.narrate_arm, pair, prompt=prompt, mode="off")
-            on = pool.submit(model.narrate_arm, pair, prompt=prompt, mode="on")
-            off_answer, on_answer = off.result(), on.result()
+            futures = {
+                mode: pool.submit(model.narrate_arm, pair, prompt=prompt, mode=mode)
+                for mode in ("off", "on")
+            }
+            for mode, future in futures.items():
+                try:
+                    answers[mode] = future.result()
+                except LLMUnavailable as exc:
+                    code = str(exc)
+                    if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", code):
+                        code = "MODEL_UNAVAILABLE"
+                    failures[mode] = code
+                    _log.warning(
+                        "COPILOT_NARRATION_FAILURE run_id=%s arm=%s reason=%s",
+                        run_id, mode, code,
+                    )
+        if failures:
+            raise LLMUnavailable(next(iter(failures.values())))
         _log.info("COPILOT_STAGE stage=two_narrations duration_ms=%d",
                   round((monotonic() - started) * 1000))
-        return off_answer, on_answer
+        return answers["off"], answers["on"]
 
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
@@ -737,6 +792,7 @@ class HostedCopilot:
             source_trace=Trace(run_id,simulation=self.model_transport is not None and getattr(self.model_transport,"offline",False))
             if hasattr(model,"trace"): model.trace=source_trace
         try:
+            stage = "plan_extraction"
             started = monotonic()
             self._capacity(required_llm=3)
             reserve_model_call(
@@ -747,6 +803,7 @@ class HostedCopilot:
             )
             _log.info("COPILOT_STAGE stage=plan_extraction duration_ms=%d",
                       round((monotonic() - started) * 1000))
+            stage = "qloo_evidence_review"
             reviewed_at = monotonic()
             native_discovery = None
             discovered_ids = {}
@@ -1081,9 +1138,25 @@ class HostedCopilot:
             narrated_pair = replace_dataclass(
                 pair, off=projection["off"], on=projection["on"],
             )
-            off_answer, on_answer = self._narrate_arms(
-                model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
-            )
+            stage = "model_narration"
+            narration_status = "MODEL_COMPLETE"
+            try:
+                off_answer, on_answer = self._narrate_arms(
+                    model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
+                )
+            except LLMUnavailable as exc:
+                narration_status = "EVIDENCE_ONLY_FALLBACK"
+                code = str(exc)
+                if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", code):
+                    code = "MODEL_UNAVAILABLE"
+                _log.warning("COPILOT_NARRATION_DEGRADED run_id=%s reason=%s", run_id, code)
+                off_answer = self._evidence_only_answer(
+                    projection["off"], mode="off", cities=draft.cities,
+                )
+                on_answer = self._evidence_only_answer(
+                    projection["on"], mode="on", cities=draft.cities,
+                )
+            stage = "receipt_and_save"
             receipt = decision_receipt(
                 projection, business_review=business_review,
             )
@@ -1091,7 +1164,12 @@ class HostedCopilot:
                 **projection,
                 "value_receipt": receipt,
                 "grounded_explanations": grounded_explanations(receipt),
-                "narrative_trust": "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED",
+                "narration_status": narration_status,
+                "narrative_trust": (
+                    "DETERMINISTIC_SAVED_EVIDENCE_ONLY"
+                    if narration_status == "EVIDENCE_ONLY_FALLBACK"
+                    else "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED"
+                ),
                 "schema_version": "copilot.v1",
                 "session_id": session_id,
                 "request_id": request_id,
@@ -1152,8 +1230,13 @@ class HostedCopilot:
             return result
         except (LLMUnavailable, QlooProbeError, EntityResolutionRequired,
                 CopilotQuotaReached, ValueError) as exc:
-            # Provider bodies and secrets must never be presented in public errors.
             code = str(exc)
+            diagnostic = code if re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", code) else "UNCLASSIFIED"
+            _log.warning(
+                "COPILOT_REVIEW_BLOCKED run_id=%s stage=%s exception=%s reason=%s",
+                run_id, stage, type(exc).__name__, diagnostic,
+            )
+            # Provider bodies and secrets must never be presented in public errors.
             known = {
                 "QLOO_SEARCH_UNAVAILABLE", "DAILY_QLOO_BUDGET_EXHAUSTED",
                 "QLOO_DAILY_QUOTA_EXHAUSTED", "LLM_DAILY_QUOTA_EXHAUSTED",
