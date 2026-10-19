@@ -16,10 +16,12 @@ class EntityResolutionRequired(ValueError):
 
 
 class QlooSelectionRequired(EntityResolutionRequired):
-    def __init__(self, reason_code: str, suggestions: list[dict]):
+    def __init__(self, reason_code: str, suggestions: list[dict], *, requested_name=None, category=None):
         super().__init__(reason_code)
         self.reason_code = reason_code
         self.suggestions = suggestions
+        self.requested_name = requested_name
+        self.category = category
 
 
 @dataclass(frozen=True)

@@ -578,8 +578,124 @@ def qualify(origin: str) -> dict:
     return {"result": "PASS", "cases": cases, "real_provider_requests": 0}
 
 
+
+def qualify_selection(origin: str) -> dict:
+    # Mocked session and provider budgets; exercising the actual browser controls.
+    results = []
+    for width, height in ((1440, 900), (390, 844)):
+        with sync_playwright() as engine:
+            browser = engine.chromium.launch(
+                headless=True, executable_path=os.environ.get("OFC_CHROMIUM_PATH"),
+            )
+            context = browser.new_context(viewport={"width": width, "height": height})
+            page = context.new_page()
+            posted = []
+            provider_calls = []
+            saved = []
+            candidate = {"name": "Levi Strauss & Co.", "category": "brand",
+                         "is_exact": False, "option_ref": "a" * 16}
+            first = {
+                "run_id": FAKE_RUN, "status": "CLARIFICATION_REQUIRED",
+                "reason_code": "SEARCH_SELECTION_REQUIRED",
+                "question": "Please select a matching Qloo entity or enter its exact name.",
+                "entity_request": {"name": "Levi's", "category": "brand"},
+                "suggestions": [candidate],
+                "release_authorized": False, "external_action_executed": False,
+                "plan": {"objective": PROMPT, "artist_name": "Example Artist",
+                         "cities": [], "choices": []},
+            }
+
+            def mock(route):
+                path = route.request.url.split("/api/", 1)[-1]
+                method = route.request.method
+                if path == "capabilities":
+                    return route.fulfill(
+                        status=200, content_type="application/json",
+                        body=json.dumps({
+                            "product": "CHECK_REQUIRED", "ofc": "ACTIVE",
+                            "storage": "ACTIVE", "qloo": "CHECK_REQUIRED",
+                            "llm": "CONNECTED", "session_message_limit": 8,
+                            "capacity": {"qloo_requests_remaining": 12,
+                                         "llm_requests_remaining": 9},
+                        }),
+                    )
+                if path == "copilot/sessions" and method == "POST":
+                    return route.fulfill(
+                        status=201, content_type="application/json",
+                        body=json.dumps({"session_id": FAKE_SESSION,
+                                         "expires_in_hours": 24}),
+                    )
+                if path == "copilot/sessions/" + FAKE_SESSION and method == "GET":
+                    return route.fulfill(
+                        status=200, content_type="application/json",
+                        body=json.dumps({"session_id": FAKE_SESSION,
+                                         "session_message_limit": 8,
+                                         "messages": saved}),
+                    )
+                if path == "copilot/sessions/" + FAKE_SESSION + "/messages" and method == "POST":
+                    req = route.request.post_data_json
+                    posted.append(req)
+                    if len(posted) == 1:
+                        assert set(req) == {"request_id", "prompt"}
+                        output = {**first, "prompt": req["prompt"]}
+                    else:
+                        assert req["parent_run_id"] == FAKE_RUN
+                        assert req["entity_selection_ref"] == candidate["option_ref"]
+                        assert req["prompt"] == PROMPT
+                        output = {
+                            "run_id": "cp-run-" + "c" * 32,
+                            "status": "CAPABILITY_UNAVAILABLE",
+                            "question": "Offline selection boundary accepted.",
+                            "prompt": req["prompt"], "release_authorized": False,
+                        }
+                    saved.append({**output, "_sessionReadConfirmed": True})
+                    return route.fulfill(
+                        status=200, content_type="application/json",
+                        body=json.dumps(output),
+                    )
+                provider_calls.append(path)
+                return route.fulfill(status=404, body="{}")
+
+            try:
+                page.route("**/api/**", mock)
+                page.goto(origin + "/workspace", wait_until="domcontentloaded")
+                page.locator("#ofc-intro-understand").click()
+                page.locator("#ofc-intro").wait_for(state="detached")
+                if page.locator("#scope-guide").is_visible():
+                    page.locator("#scope-example").click()
+                page.locator("#chat-input").fill(PROMPT)
+                page.locator("#chat-send").click()
+                page.locator("#run-confirm").wait_for(state="visible")
+                page.locator("#run-approve").click()
+                page.locator(".qloo-option").wait_for(state="visible", timeout=8000)
+                assert "Levi's" in page.locator(".qloo-selection-title").inner_text()
+                assert "Levi Strauss & Co." in page.locator(".qloo-option").inner_text()
+                assert len(posted) == 1
+                page.locator(".qloo-option").click()
+                page.locator("#run-confirm").wait_for(state="visible")
+                assert "new review" in page.locator("#run-confirm-budget").inner_text()
+                assert len(posted) == 1
+                page.locator("#run-cancel").click()
+                assert len(posted) == 1
+                page.locator(".qloo-option").click()
+                page.locator("#run-approve").click()
+                page.get_by_text("Offline selection boundary accepted.").wait_for(
+                    state="visible", timeout=8000,
+                )
+                assert len(posted) == 2 and not provider_calls
+                results.append({"viewport": width, "selection_requires_confirm": True,
+                                "server_bound_option": True})
+            finally:
+                context.close()
+                browser.close()
+    return {"result": "PASS", "cases": results, "real_provider_requests": 0}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18080")
     args = parser.parse_args()
-    print(json.dumps(qualify(args.base_url.rstrip("/")), sort_keys=True))
+    base = args.base_url.rstrip("/")
+    report = qualify(base)
+    report["entity_selection"] = qualify_selection(base)
+    print(json.dumps(report, sort_keys=True))

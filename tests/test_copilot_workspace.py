@@ -131,3 +131,16 @@ def test_readiness_controls_are_bounded_without_new_endpoints():
     assert 'FileReader' not in script
     assert 'FormData(' not in script
     assert '/api/attachments' not in script
+
+
+def test_qloo_entity_suggestions_are_actionable_and_explicitly_confirmed():
+    from importlib.resources import files
+    js = files("ofc_engine").joinpath("web", "copilot-workspace.js").read_text()
+    css = files("ofc_engine").joinpath("web", "copilot-workspace.css").read_text()
+    for token in ("qloo-selection", "requestSelection", "entity_selection_ref",
+                  "parent_run_id", "run.suggestions", "state.pendingSelection",
+                  'if (state.pendingSelection) Object.assign(payload, state.pendingSelection)'):
+        assert token in js
+    assert ".qloo-option" in css
+    assert 'option.option_ref' in js and 'option.name' in js
+    assert 'No provider request occurs until you confirm.' in js

@@ -153,6 +153,16 @@ a{text-decoration:none;color:inherit}
 .message-state{display:inline-flex;font-size:11px;color:#9d710c;background:#fff6e6;
   border-radius:999px;padding:4px 8px;margin:8px 0}
 .message-state.blocked{background:#fff0f2;color:#ba4556}
+.qloo-selection{margin-top:14px;border:1px solid #d9e8fb;background:#f8fbff;border-radius:14px;
+  padding:14px;display:grid;gap:9px}
+.qloo-selection-title{font-size:13px;color:#193962}
+.qloo-selection-help{font-size:12px;line-height:1.65;color:#637b98;margin:0}
+.qloo-option{width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:7px;padding:11px 12px;background:white;color:#193d70;text-align:left;
+  border:1px solid #d4e4f7;border-radius:10px;font-size:12px}
+.qloo-option:hover:not(:disabled){background:#edf5ff;border-color:#84b8fb}
+.qloo-option:disabled{opacity:.48}
+.qloo-option span{font-size:11px;color:#7285a1}
 .composer-dock{width:min(100%,840px);padding:0 24px 14px;flex:none;margin-top:auto}
 .composer{background:#fff;border:1px solid #d8e5f7;box-shadow:0 10px 28px rgba(45,92,161,.11);
   border-radius:19px;padding:12px 14px 10px;transition:border-color .18s ease,box-shadow .18s ease}

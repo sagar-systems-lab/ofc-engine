@@ -10,6 +10,7 @@
     pendingPrompt: "", localNotice: null, sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, sessionMessageLimit: 4, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
     attachment: null, attachmentVersion: 0, pendingStartedAt: null, elapsedTimer: null,
+    pendingSelection: null,
   };
 
   const icon = (id, size = 17) => {
@@ -321,6 +322,35 @@
     }
   };
 
+  const requestSelection = (run, option) => {
+    if (state.busy || state.runs.length >= state.sessionMessageLimit) {
+      statusText("Session limit reached. No provider request was made.");
+      return;
+    }
+    const remaining = state.capability?.capacity?.qloo_requests_remaining;
+    if (Number.isInteger(remaining) && remaining < 5) {
+      statusText("Not submitted: fewer than 5 Qloo requests remain. Wait for quota reset.");
+      return;
+    }
+    if (!/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
+        !/^[a-f0-9]{16}$/.test(option.option_ref || "") ||
+        !run.suggestions?.some(candidate => candidate.option_ref === option.option_ref) ||
+        !run.prompt || run.prompt.length > 4000) return;
+    state.pendingPrompt = run.prompt;
+    state.pendingSelection = {
+      parent_run_id: run.run_id, entity_selection_ref: option.option_ref,
+    };
+    const caps = state.capability?.capacity;
+    el("run-confirm-budget").textContent =
+      "Selected Qloo search suggestion: " + String(option.name).slice(0, 160) +
+      ". This starts a new review (not a free retry). It may spend up to " +
+      "5 Qloo requests and 3 model requests. Current remaining: Qloo " +
+      (Number.isInteger(caps?.qloo_requests_remaining) ? caps.qloo_requests_remaining : "unknown") +
+      ", model " + (Number.isInteger(caps?.llm_requests_remaining) ? caps.llm_requests_remaining : "unknown") +
+      ". No provider request occurs until you confirm.";
+    if (!el("run-confirm").open) el("run-confirm").showModal();
+  };
+
   const renderRun = (run) => {
     const box = el("chat-transcript");
     box.replaceChildren();
@@ -341,6 +371,30 @@
       const tag = node("span", "message-state" + (run.status === "BLOCKED" ? " blocked" : ""),
         String(run.status || "UNKNOWN").replaceAll("_", " "));
       assistant.append(tag);
+      if (run.status === "CLARIFICATION_REQUIRED" &&
+          Array.isArray(run.suggestions) && run.suggestions.length) {
+        const panel = node("div", "qloo-selection");
+        const searched = run.entity_request?.name;
+        panel.append(node("strong", "qloo-selection-title",
+          "Select the intended Qloo match for " +
+          (typeof searched === "string" ? searched.slice(0, 160) : "this name")));
+        panel.append(node("p", "qloo-selection-help",
+          "Search suggestions are not independently verified. Select the correct entity to prepare " +
+          "a new review. Confirmation is required before any provider quota is used."));
+        for (const option of run.suggestions.slice(0, 8)) {
+          if (!option || typeof option.name !== "string" ||
+              !option.name.trim() || option.name.length > 160 ||
+              !/^[a-f0-9]{16}$/.test(option.option_ref || "")) continue;
+          const action = node("button", "qloo-option");
+          action.type = "button";
+          action.append(node("strong", "", option.name));
+          action.append(node("span", "", String(option.category || "entity").slice(0, 32)));
+          action.disabled = state.runs.length >= state.sessionMessageLimit;
+          action.addEventListener("click", () => requestSelection(run, option));
+          panel.append(action);
+        }
+        assistant.append(panel);
+      }
       if (run._sessionReadConfirmed && run.run_id &&
           run.status !== "PROCESSING") {
         const actions = node("div", "result-actions");
@@ -513,8 +567,9 @@
     try {
       const id = await ensureSession();
       monitor(); // Read-only GETs while the admitted POST is in flight.
-      const reply = await jsonRequest("/api/copilot/sessions/" + id + "/messages",
-        {request_id: requestId, prompt});
+      const payload = {request_id: requestId, prompt};
+      if (state.pendingSelection) Object.assign(payload, state.pendingSelection);
+      const reply = await jsonRequest("/api/copilot/sessions/" + id + "/messages", payload);
       state.pendingPrompt = "";
       el("chat-input").value = "";
       clearAttachment();
@@ -550,6 +605,7 @@
     } finally {
       state.pendingPrompt = "";
       state.pendingStartedAt = null;
+      state.pendingSelection = null;
       state.activeRequestId = null;
       state.pendingBaselineIds = null;
       setBusy(false);
@@ -559,6 +615,7 @@
 
   const requestSend = () => {
     if (state.busy) return;
+    state.pendingSelection = null;
     if (state.runs.length >= state.sessionMessageLimit) {
       statusText("This private visitor session has reached its " +
         state.sessionMessageLimit + "-request limit. No provider call made.");
@@ -612,6 +669,7 @@
   el("chat-send").addEventListener("click", requestSend);
   el("run-cancel").addEventListener("click", () => {
     state.pendingPrompt = "";
+    state.pendingSelection = null;
     el("run-confirm").close();
     el("chat-input").focus();
   });
@@ -621,6 +679,7 @@
   });
   el("run-confirm").addEventListener("cancel", () => {
     state.pendingPrompt = "";
+    state.pendingSelection = null;
   });
 
   el("new-chat").addEventListener("click", () => {
