@@ -1136,9 +1136,25 @@ class HostedCopilot:
             narrated_pair = replace_dataclass(
                 pair, off=projection["off"], on=projection["on"],
             )
-            off_answer, on_answer = self._narrate_arms(
-                model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
-            )
+            stage = "model_narration"
+            narration_status = "MODEL_COMPLETE"
+            try:
+                off_answer, on_answer = self._narrate_arms(
+                    model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
+                )
+            except LLMUnavailable as exc:
+                narration_status = "EVIDENCE_ONLY_FALLBACK"
+                code = str(exc)
+                if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", code):
+                    code = "MODEL_UNAVAILABLE"
+                _log.warning("COPILOT_NARRATION_DEGRADED run_id=%s reason=%s", run_id, code)
+                off_answer = self._evidence_only_answer(
+                    projection["off"], mode="off", cities=draft.cities,
+                )
+                on_answer = self._evidence_only_answer(
+                    projection["on"], mode="on", cities=draft.cities,
+                )
+            stage = "receipt_and_save"
             receipt = decision_receipt(
                 projection, business_review=business_review,
             )
@@ -1146,7 +1162,12 @@ class HostedCopilot:
                 **projection,
                 "value_receipt": receipt,
                 "grounded_explanations": grounded_explanations(receipt),
-                "narrative_trust": "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED",
+                "narration_status": narration_status,
+                "narrative_trust": (
+                    "DETERMINISTIC_SAVED_EVIDENCE_ONLY"
+                    if narration_status == "EVIDENCE_ONLY_FALLBACK"
+                    else "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED"
+                ),
                 "schema_version": "copilot.v1",
                 "session_id": session_id,
                 "request_id": request_id,
