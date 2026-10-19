@@ -749,7 +749,7 @@ class HostedCopilot:
                         run_id, mode, code,
                     )
         if failures:
-            raise LLMUnavailable("MODEL_NARRATION_UNAVAILABLE")
+            raise LLMUnavailable(next(iter(failures.values())))
         _log.info("COPILOT_STAGE stage=two_narrations duration_ms=%d",
                   round((monotonic() - started) * 1000))
         return answers["off"], answers["on"]
