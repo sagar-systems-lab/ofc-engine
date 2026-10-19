@@ -311,6 +311,20 @@ a{text-decoration:none;color:inherit}
 @media(max-width:768px){.shell.activity-overlay-open .activity-rail{top:59px;width:min(320px,95vw);max-height:calc(100dvh - 59px)}}
 
 
+
+.decision-brief{margin:3px 0 14px;padding:16px;border:1px solid #d4e4f7;
+  border-radius:15px;background:#f8fbff;white-space:normal}
+.brief-heading{font-size:15px;color:#173657;letter-spacing:-.02em;margin:0 0 11px}
+.brief-row{display:grid;grid-template-columns:minmax(116px,27%) minmax(0,1fr);
+  gap:12px;padding:10px 0;border-top:1px solid #e1eaf6;align-items:start}
+.brief-key{font-size:11px;line-height:1.5;color:#47709b}
+.brief-detail{font-size:12px;line-height:1.62;color:#233e61;margin:0;overflow-wrap:anywhere}
+.narrative-section{border-top:1px solid #e4edf7;padding:13px 3px 0;margin:16px 0 20px}
+.narrative-section h3{font-size:12px;font-weight:700;color:#516f90;margin:0 0 9px}
+.narrative-section p{font-size:13px;line-height:1.65;white-space:pre-wrap;
+  color:#36516d;overflow-wrap:anywhere;margin:0}
+@media(max-width:520px){.brief-row{grid-template-columns:1fr;gap:2px}}
+
 .result-summary{margin-top:15px;border:1px solid #dce9fa;border-radius:17px;padding:15px;
   box-shadow:0 8px 28px rgba(24,84,165,.06);background:linear-gradient(180deg,#f9fbff,#fff 38%)}
 .result-heading{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px}

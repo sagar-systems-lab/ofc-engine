@@ -144,3 +144,21 @@ def test_qloo_entity_suggestions_are_actionable_and_explicitly_confirmed():
     assert ".qloo-option" in css
     assert 'option.option_ref' in js and 'option.name' in js
     assert 'No provider request occurs until you confirm.' in js
+
+
+
+def test_saved_result_brief_separates_cultural_review_from_commercial_release():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    script = web.joinpath("copilot-proof.js").read_text()
+    css = web.joinpath("copilot-workspace.css").read_text()
+    assert '"Evidence-grounded decision brief"' in script
+    assert '"OFC intervention"' in script
+    assert '"Partnership readiness"' in script
+    assert '"HOLD — commercial evidence incomplete."' in script
+    assert '"City allocation"' in script
+    assert '"Model explanation · not independently verified"' in script
+    assert 'business_evidence_satisfied===true' in script
+    assert 'Repeat Qloo ranking matched (same provider)' in script
+    assert 'Cultural check: ' in script
+    assert '.decision-brief{' in css and '.narrative-section{' in css

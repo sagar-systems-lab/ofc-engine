@@ -233,14 +233,15 @@
         make("strong","",name(revised.candidate_id)),
         make("small",changed?"comparison-delta":"comparison-preserved",
           changed?"Selection revised; further checks required":"Original selection preserved"),
-        make("small","","Verdict: "+id(revised.ofc_verdict||"UNCERTAIN")));
+        make("small","","Cultural check: "+id(revised.ofc_verdict||"UNCERTAIN")+
+          " (not commercial approval)"));
       if(revised.ofc_reason)on.append(make("small","","Reason: "+id(revised.ofc_reason)));
       const rank=rankedEvidence(pair).find(x=>x.decision_id===key);
       if(rank){
         off.append(make("small","","Qloo pool rank: "+rank.ranked_candidates.join(" → ")));
         on.append(make("small","",rank.rank_recheck_matched
-          ? "Independent ranking recheck matched"
-          : "Ranking replay recorded; independent match not verified"));
+          ? "Repeat Qloo ranking matched (same provider)"
+          : "Repeat ranking was not qualified as matching"));
       }
       row.append(title,off,on);
       rows.append(row);
@@ -248,7 +249,8 @@
     $("comparison-footer").textContent=pair.changed.length
       ? pair.changed.length+" revised · "+(pair.before.size-pair.changed.length)+
           " preserved. Business verification and external action remain withheld."
-      : "No qualified change demonstrated. Commercial verification and external action remain withheld.";
+      : "Original selection preserved. "+rankedEvidence(pair).filter(x=>x.rank_recheck_matched).length+
+        " repeated Qloo ranking check(s) matched. Commercial verification and external action remain withheld.";
     openDialog($("comparison-dialog"),invoker);
   };
   const action = (caption,fn,disabled=false) => {
@@ -263,6 +265,61 @@
     if($("map-content").hidden)$("map-expand").click();
     $("map-detail").scrollIntoView({block:"nearest"});
   };
+  const decisionBrief=(run,pair,mode)=>{
+    const panel=make("section","decision-brief");
+    panel.setAttribute("aria-label","Evidence-grounded decision brief");
+    panel.append(make("h2","brief-heading","Decision brief"));
+    const row=(key,value)=>{
+      const item=make("div","brief-row");
+      item.append(make("strong","brief-key",key),make("p","brief-detail",value));
+      panel.append(item);
+    };
+    if(!pair){
+      row("Evidence","No complete paired comparison is saved.");
+      row("Release","Not authorized. Evidence review must complete first.");
+      return panel;
+    }
+    const ranked=rankedEvidence(pair);
+    const match=ranked.find(item=>item.rank_recheck_matched);
+    row("Qloo observation",match
+      ? match.ranked_candidates.join(" > ")+" — repeat Qloo rank matched. Cultural evidence only."
+      : "No matching repeated Qloo rank established.");
+    if(mode==="OFF"){
+      row("Decision","Original plan. No OFC control review applied to this view.");
+    }else{
+      const changed=pair.changed.length, preserved=pair.before.size-changed;
+      row("OFC intervention",changed
+        ? changed+" revised · "+preserved+" preserved after control review."
+        : preserved+" original choice(s) preserved after control review. No selection revision.");
+    }
+    const available=new Map([
+      ["budget_feasibility","budget feasibility"],
+      ["contract_rights","partnership/contract rights"],
+      ["local_audience","local audience evidence"],
+      ["venue_availability","venue availability"],
+    ]);
+    const missing=[];
+    const items=run.business_verification?.missing_requirements;
+    if(items && typeof items==="object" && !Array.isArray(items))
+      for(const needs of Object.values(items))
+        if(Array.isArray(needs))
+          for(const requirement of needs)
+            if(available.has(requirement) && !missing.includes(available.get(requirement)))
+              missing.push(available.get(requirement));
+    const complete=run.business_verification?.business_evidence_satisfied===true &&
+      run.value_receipt?.business_evidence_satisfied===true;
+    row("Partnership readiness",complete
+      ? "Business evidence gate satisfied. External action remains unauthorized."
+      : "HOLD — commercial evidence incomplete."+
+        (missing.length ? " Missing: "+missing.join(", ")+"." :
+          " Independent business approval was not established."));
+    if((Array.isArray(run.plan?.cities) && run.plan.cities.length) ||
+       (Array.isArray(run.unapplied_constraints) &&
+        run.unapplied_constraints.includes("LOCATION_NOT_IN_RANK_QUERY")))
+      row("City allocation","Not verified by this artist-brand Qloo ranking. No geographic or budget priority is established.");
+    return panel;
+  };
+
   const renderRun=(run,mode,makeMessage)=>{
     if(run.status!=="REVIEW_REQUIRED")return false;
     const answer=mode==="ON"?run.ofc_answer:run.original_answer;
@@ -270,14 +327,15 @@
     const readable=typeof answer==="string" ? answer.replace(
       /\s*\([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)/gi, ""
     ) : "";
-    const assistant=makeMessage("assistant",readable.trim()?readable:
-      "A saved cultural review is available. Further verification is required.");
+    const assistant=makeMessage("assistant","");
     const section=make("section","result-summary");
     const heading=make("div","result-heading");
     heading.append(make("h2","",mode==="ON"?"Reviewed choices · OFC ON":"Original choices · OFC OFF"),
       make("span","review-state","REVIEW REQUIRED"));
     section.append(heading);
     const pair=pairing(run);
+    const body=assistant.querySelector(".message-copy") || assistant;
+    body.append(decisionBrief(run,pair,mode));
     if(pair){
       const grid=make("div","result-grid");
       for(const [key,before] of pair.before){
@@ -314,6 +372,11 @@
     section.append(footer,make("p","result-legal",
       "Saved cultural review · further checks required · external action withheld"));
     assistant.append(section);
+    const narrative=make("section","narrative-section");
+    narrative.append(make("h3","","Model explanation · not independently verified"),
+      make("p","",readable.trim()?readable:
+        "The saved model explanation is unavailable. Use the evidence and controls above."));
+    assistant.append(narrative);
     return assistant;
   };
   const syncProof=run=>{
