@@ -389,7 +389,7 @@
           action.type = "button";
           action.append(node("strong", "", option.name));
           action.append(node("span", "", String(option.category || "entity").slice(0, 32)));
-          action.disabled = state.busy || state.runs.length >= state.sessionMessageLimit;
+          action.disabled = state.runs.length >= state.sessionMessageLimit;
           action.addEventListener("click", () => requestSelection(run, option));
           panel.append(action);
         }
