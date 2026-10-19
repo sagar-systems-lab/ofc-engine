@@ -681,6 +681,46 @@ class HostedCopilot:
         self._complete(run_id, result)
         return result
 
+    @staticmethod
+    def _evidence_only_answer(view: dict, *, mode: str, cities: tuple[str, ...]) -> str:
+        if mode not in ("off", "on"):
+            raise ValueError("invalid evidence view")
+        lines = ["Model explanation unavailable. Saved evidence-only review:"]
+        observations = view.get("qloo", {}).get("observations", [])
+        rankings = [
+            tuple(item["ranked_candidate_ids"])
+            for item in observations
+            if isinstance(item, dict) and item.get("ranked_candidate_ids")
+        ]
+        if len(rankings) >= 2 and all(r == rankings[0] for r in rankings):
+            names = " > ".join(str(name)[:160] for name in rankings[0][:5])
+            lines.append("Repeated Qloo cultural ranking: " + names + ".")
+        elif rankings:
+            lines.append("Saved Qloo ranks do not establish a consistent ordering.")
+        else:
+            lines.append("No verified Qloo ranking is available in this view.")
+        for decision in view["decisions"][:6]:
+            label = str(decision.get("decision_id", "decision"))[:48]
+            choice = str(decision.get("candidate_id", "unresolved"))[:160]
+            if mode == "off":
+                lines.append(f"Original choice ({label}): {choice}. No OFC control applied.")
+            else:
+                verdict = str(decision.get("ofc_verdict", "UNCERTAIN"))[:48]
+                reason = str(decision.get("ofc_reason", "NOT_VERIFIED"))[:80]
+                lines.append(
+                    f"OFC choice ({label}): {choice}. Verdict: {verdict}; reason: {reason}."
+                )
+        if cities:
+            lines.append(
+                "City order, local audiences, venues and tour budget feasibility "
+                "were not independently verified."
+            )
+        lines.append(
+            "Cultural ranks do not establish contracts, rights or business fitness. "
+            "No booking, partnership or other external action was authorized."
+        )
+        return "\n".join(lines)[:4096]
+
     def _narrate_arms(self, *, model: CopilotLLM, pair, prompt: str,
                       run_id: str) -> tuple[str, str]:
         preflight = getattr(model, "preflight_narration", None)
