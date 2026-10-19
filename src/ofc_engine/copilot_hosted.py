@@ -683,21 +683,36 @@ class HostedCopilot:
 
     def _narrate_arms(self, *, model: CopilotLLM, pair, prompt: str,
                       run_id: str) -> tuple[str, str]:
-        # Reserve both calls before launching either independent model arm.
-        reserve_model_call(
-            self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
-        )
-        reserve_model_call(
-            self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
-        )
+        preflight = getattr(model, "preflight_narration", None)
+        if callable(preflight):
+            for mode in ("off", "on"):
+                preflight(pair, prompt=prompt, mode=mode)
+        reserve_model_call(self.store, daily_limit=self.llm_daily_limit, run_id=run_id)
+        reserve_model_call(self.store, daily_limit=self.llm_daily_limit, run_id=run_id)
         started = monotonic()
+        answers, failures = {}, {}
         with ThreadPoolExecutor(max_workers=2) as pool:
-            off = pool.submit(model.narrate_arm, pair, prompt=prompt, mode="off")
-            on = pool.submit(model.narrate_arm, pair, prompt=prompt, mode="on")
-            off_answer, on_answer = off.result(), on.result()
+            futures = {
+                mode: pool.submit(model.narrate_arm, pair, prompt=prompt, mode=mode)
+                for mode in ("off", "on")
+            }
+            for mode, future in futures.items():
+                try:
+                    answers[mode] = future.result()
+                except LLMUnavailable as exc:
+                    code = str(exc)
+                    if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", code):
+                        code = "MODEL_UNAVAILABLE"
+                    failures[mode] = code
+                    _log.warning(
+                        "COPILOT_NARRATION_FAILURE run_id=%s arm=%s reason=%s",
+                        run_id, mode, code,
+                    )
+        if failures:
+            raise LLMUnavailable("MODEL_NARRATION_UNAVAILABLE")
         _log.info("COPILOT_STAGE stage=two_narrations duration_ms=%d",
                   round((monotonic() - started) * 1000))
-        return off_answer, on_answer
+        return answers["off"], answers["on"]
 
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
