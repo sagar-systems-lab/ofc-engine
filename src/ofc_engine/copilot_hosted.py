@@ -721,6 +721,25 @@ class HostedCopilot:
         )
         return "\n".join(lines)[:4096]
 
+    @staticmethod
+    def _parallel_brand_searches(names, *, run_id: str, selection_ref: str | None,
+                                 resolver_factory):
+        """Resolve brands independently while retaining scoped selection provenance."""
+        def lookup(name):
+            local = resolver_factory()
+            entity = local.resolve(
+                run_id=run_id, name=name, kind="brand",
+                selection_ref=selection_ref,
+            )
+            return entity, local.selection_consumed
+
+        with ThreadPoolExecutor(max_workers=min(4, len(names))) as pool:
+            results = list(pool.map(lookup, names))
+        consumed = sum(flag is True for _, flag in results)
+        if consumed > 1:
+            raise EntityResolutionRequired("QLOO_SELECTION_SCOPE_MISMATCH")
+        return dict(zip(names, (entity for entity, _ in results))), consumed == 1
+
     def _narrate_arms(self, *, model: CopilotLLM, pair, prompt: str,
                       run_id: str) -> tuple[str, str]:
         preflight = getattr(model, "preflight_narration", None)
@@ -952,19 +971,22 @@ class HostedCopilot:
                 for name in choice.candidate_names
             ))
             brands = {}
-            if native_discovery is None and entity_selection_ref is None and len(brand_names) > 1:
+            if native_discovery is None and len(brand_names) > 1:
                 search_started = monotonic()
-
-                def lookup_brand(name: str) -> ResolvedEntity:
-                    # Each worker owns an independent reviewer; all admissions
-                    # still serialize through the durable shared quota row.
-                    return HostedQlooResolver(self._reviewer(trace=source_trace) if source_trace is not None else self._reviewer()).resolve(
-                        run_id=run_id, name=name, kind="brand",
+                # Selection refs are bound to the saved parent; all parallel
+                # workers still admit Qloo attempts through one durable quota row.
+                def resolver_factory():
+                    return HostedQlooResolver(
+                        self._reviewer(trace=source_trace)
+                        if source_trace is not None else self._reviewer()
                     )
 
-                with ThreadPoolExecutor(max_workers=min(4, len(brand_names))) as pool:
-                    results = list(pool.map(lookup_brand, brand_names))
-                brands = dict(zip(brand_names, results))
+                brands, selection_used = self._parallel_brand_searches(
+                    brand_names, run_id=run_id,
+                    selection_ref=entity_selection_ref,
+                    resolver_factory=resolver_factory,
+                )
+                resolver.selection_consumed |= selection_used
                 _log.info("COPILOT_STAGE stage=brand_searches duration_ms=%d count=%d",
                           round((monotonic() - search_started) * 1000), len(brands))
             else:
