@@ -575,9 +575,7 @@ class CopilotLLM:
         except (KeyError, IndexError, TypeError, ValueError):
             raise LLMUnavailable("MODEL_NARRATION_INVALID") from None
 
-    @instrument("narration")
-    def narrate_arm(self, pair, *, prompt: str, mode: str) -> str:
-        """One inference arm; OFF never receives OFC's reviewed decisions."""
+    def preflight_narration(self, pair, *, prompt: str, mode: str) -> str:
         from hashlib import sha256
         from .copilot_compare import CopilotPair
 
@@ -591,18 +589,22 @@ class CopilotLLM:
         ):
             raise ValueError("comparison prompt provenance mismatch")
 
-        projection = pair.off if mode == "off" else pair.on
-        # No reviewed decision, repair, reason code or verdict can leak into OFF.
         context = {
             "prompt": prompt.strip(),
             "model_id": self.model,
             "baseline_digest": pair.baseline_digest,
             "qloo_evidence_digest": pair.qloo_evidence_digest,
-            "view": projection,
+            "view": pair.off if mode == "off" else pair.on,
         }
-        payload_text = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
-        if len(payload_text.encode()) > _MAX_REQUEST_BYTES - 4096:
-            raise ValueError("comparison data exceeds model limit")
+        payload = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
+        if len(payload.encode()) > _MAX_REQUEST_BYTES - 4096:
+            raise LLMUnavailable("MODEL_NARRATION_CONTEXT_TOO_LARGE")
+        return payload
+
+    @instrument("narration")
+    def narrate_arm(self, pair, *, prompt: str, mode: str) -> str:
+        """One inference arm; OFF never receives OFC's reviewed decisions."""
+        payload_text = self.preflight_narration(pair, prompt=prompt, mode=mode)
         rules = (
             "Explain only the supplied user task and Qloo cultural observations. "
             "Do not invent scores, causal confidence, inventory or contracts. "
@@ -633,7 +635,8 @@ class CopilotLLM:
                 "generationConfig": {
                     "responseMimeType": "application/json",
                     "responseJsonSchema": schema,
-                    "temperature": 0, "maxOutputTokens": 1024,
+                    "thinkingConfig": {"thinkingLevel": "minimal"},
+                    "temperature": 0, "maxOutputTokens": 2048,
                 },
             }
             url = _GEMINI_URL
@@ -645,7 +648,7 @@ class CopilotLLM:
                     {"role": "system", "content": rules},
                     {"role": "user", "content": payload_text},
                 ],
-                "temperature": 0, "max_completion_tokens": 1024,
+                "temperature": 0, "max_completion_tokens": 2048,
                 "response_format": {
                     "type": "json_schema",
                     "json_schema": {
@@ -674,23 +677,37 @@ class CopilotLLM:
         try:
             if self.provider == "gemini":
                 candidates = envelope["candidates"]
-                if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
-                    raise ValueError("incomplete response")
+                if not isinstance(candidates, list) or len(candidates) != 1:
+                    raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+                candidate = candidates[0]
+                finish = candidate.get("finishReason")
+                if finish == "MAX_TOKENS":
+                    raise LLMUnavailable("MODEL_OUTPUT_TRUNCATED")
+                if finish != "STOP":
+                    raise LLMUnavailable("MODEL_FINISH_REJECTED")
                 raw = "".join(
-                    part.get("text", "") for part in candidates[0]["content"]["parts"]
+                    part.get("text", "") for part in candidate["content"]["parts"]
+                    if isinstance(part, dict) and part.get("thought") is not True
                 )
             else:
                 choices = envelope["choices"]
-                if len(choices) != 1 or choices[0].get("finish_reason") != "stop":
-                    raise ValueError("incomplete response")
-                raw = choices[0]["message"]["content"]
+                if not isinstance(choices, list) or len(choices) != 1:
+                    raise LLMUnavailable("MODEL_RESPONSE_MISSING")
+                choice = choices[0]
+                if choice["finish_reason"] == "length":
+                    raise LLMUnavailable("MODEL_OUTPUT_TRUNCATED")
+                if choice["finish_reason"] != "stop":
+                    raise LLMUnavailable("MODEL_FINISH_REJECTED")
+                raw = choice["message"]["content"]
             output = json.loads(raw)
             if (
                 not isinstance(output, dict) or set(output) != {"answer"}
                 or not isinstance(output["answer"], str)
                 or not 1 <= len(output["answer"].strip()) <= 4096
             ):
-                raise ValueError("invalid answer schema")
+                raise LLMUnavailable("MODEL_NARRATION_INVALID")
             return output["answer"].strip()
+        except LLMUnavailable:
+            raise
         except (KeyError, IndexError, TypeError, ValueError):
             raise LLMUnavailable("MODEL_NARRATION_INVALID") from None
