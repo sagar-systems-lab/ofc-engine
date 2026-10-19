@@ -792,6 +792,7 @@ class HostedCopilot:
             source_trace=Trace(run_id,simulation=self.model_transport is not None and getattr(self.model_transport,"offline",False))
             if hasattr(model,"trace"): model.trace=source_trace
         try:
+            stage = "plan_extraction"
             started = monotonic()
             self._capacity(required_llm=3)
             reserve_model_call(
@@ -802,6 +803,7 @@ class HostedCopilot:
             )
             _log.info("COPILOT_STAGE stage=plan_extraction duration_ms=%d",
                       round((monotonic() - started) * 1000))
+            stage = "qloo_evidence_review"
             reviewed_at = monotonic()
             native_discovery = None
             discovered_ids = {}
@@ -1228,8 +1230,13 @@ class HostedCopilot:
             return result
         except (LLMUnavailable, QlooProbeError, EntityResolutionRequired,
                 CopilotQuotaReached, ValueError) as exc:
-            # Provider bodies and secrets must never be presented in public errors.
             code = str(exc)
+            diagnostic = code if re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}", code) else "UNCLASSIFIED"
+            _log.warning(
+                "COPILOT_REVIEW_BLOCKED run_id=%s stage=%s exception=%s reason=%s",
+                run_id, stage, type(exc).__name__, diagnostic,
+            )
+            # Provider bodies and secrets must never be presented in public errors.
             known = {
                 "QLOO_SEARCH_UNAVAILABLE", "DAILY_QLOO_BUDGET_EXHAUSTED",
                 "QLOO_DAILY_QUOTA_EXHAUSTED", "LLM_DAILY_QUOTA_EXHAUSTED",
