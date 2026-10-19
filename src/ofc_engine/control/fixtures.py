@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from .graph import claim_fingerprint
-from .models import Actor, Candidate, Edge, Evidence, Node, Plan, ReviewRequest, instant
+from .models import Actor, Candidate, Edge, Evidence, Limits, Node, Plan, ReviewRequest, instant
 
 FIXTURE_TIME = "2026-10-18T12:00:00Z"
 
@@ -106,6 +106,7 @@ def campaign(
         objective="Review a hypothetical three-city campaign before any commitment.",
         nodes=tuple(nodes),
         edges=tuple(edges),
+        limits=Limits(deadline_ms=2000),
     )
     ranks = (
         ("nike", "adidas", "puma") if case == "preserve" else ("adidas", "puma", "nike")
