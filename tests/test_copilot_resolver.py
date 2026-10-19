@@ -141,3 +141,22 @@ def test_fuzzy_mismatch_provides_selection_hints_not_provider_guesses():
     assert hints[0]["name"] == "Taylor Swift"
     assert len(hints[0]["option_ref"]) == 16
     assert "entity_id" not in hints[0]
+
+
+def test_non_exact_artist_brand_search_retains_specific_user_query():
+    from ofc_engine.copilot_intake import QlooSelectionRequired
+    spec = search_probe("Levi's", entity_type="urn:entity:brand")
+    result = ProbeObservation(
+        path="/search", query_fingerprint=spec.fingerprint,
+        utc_collected_at=datetime.now(timezone.utc).isoformat(), duration_ms=1.0,
+        http_status=200, top_level_fields=("results",),
+        payload={"results": {"entities": [{
+            "name": "Levi Strauss & Co.", "entity_id": _A,
+            "type": "urn:entity", "subtype": "urn:entity:brand",
+        }]}},
+    )
+    with pytest.raises(QlooSelectionRequired, match="SEARCH_SELECTION_REQUIRED") as error:
+        normalize_qloo_search("Levi's", entity_type="brand", spec=spec, observation=result)
+    assert error.value.requested_name == "Levi's"
+    assert error.value.category == "brand"
+    assert error.value.suggestions and "entity_id" not in error.value.suggestions[0]

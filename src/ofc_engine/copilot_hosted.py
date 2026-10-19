@@ -1219,6 +1219,7 @@ class HostedCopilot:
                 "reason_code": exc.reason_code,
                 "question": "Please select a matching Qloo entity or enter its exact name.",
                 "suggestions": exc.suggestions,
+                "entity_request": {"name": exc.requested_name, "category": exc.category},
                 "plan": self._draft_plan_projection(draft),
                 "qloo_status": "ENTITY_RESOLUTION_PENDING",
                 "model_id": model.model,

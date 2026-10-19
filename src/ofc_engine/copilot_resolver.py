@@ -48,12 +48,14 @@ def normalize_qloo_search(
         raise QlooSelectionRequired(
             "SEARCH_AMBIGUOUS_ENTITY",
             [item.safe_label() for item in matches],
+            requested_name=requested_name, category=category,
         )
     if not exact:
         if matches:
             raise QlooSelectionRequired(
                 "SEARCH_SELECTION_REQUIRED",
                 [item.safe_label() for item in matches],
+                requested_name=requested_name, category=category,
             )
         raise EntityResolutionRequired("SEARCH_EXACT_NAME_NOT_FOUND")
     found = exact[0]
