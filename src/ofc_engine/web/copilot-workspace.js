@@ -9,7 +9,7 @@
     sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
     pendingPrompt: "", localNotice: null, sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, sessionMessageLimit: 4, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
-    attachment: null, attachmentVersion: 0,
+    attachment: null, attachmentVersion: 0, pendingStartedAt: null, elapsedTimer: null,
   };
 
   const icon = (id, size = 17) => {
@@ -243,27 +243,93 @@
     return safeStatus(status) + reason;
   };
 
+
+  // This clock measures waiting time; saved attempt states alone establish progress.
+  const pendingDetail = run => {
+    const activity = run?.activity;
+    if (!run) return "Waiting for a saved server result. No automatic retry will be made.";
+    if (activity?.source !== "PERSISTED_ATTEMPTS")
+      return "Request admitted. Saved stage evidence is not yet available.";
+    const evidence = activity.qloo_evidence;
+    if (evidence === "SEARCH_ONLY")
+      return "Qloo entity search saved. Ranking evidence not yet observed.";
+    if (evidence === "RANK_PENDING_OR_INTERRUPTED")
+      return "Qloo search completed; ranking request reserved, result not yet validated.";
+    if (evidence === "RANK_OBSERVED")
+      return "Qloo rank saved. Waiting for the final review and saved explanations.";
+    if (evidence === "PARTIAL")
+      return "Some Qloo observations saved; unresolved provider attempts remain.";
+    if (evidence === "SEARCH_PENDING_OR_INTERRUPTED")
+      return "Qloo entity search reserved; awaiting a verified response.";
+    return "Request admitted. No verified Qloo stage is saved yet.";
+  };
+
+  const pendingPanel = run => {
+    const panel = node("section", "processing-panel");
+    panel.setAttribute("aria-label", "Review progress");
+    const header = node("div", "processing-heading");
+    const pulse = node("span", "processing-pulse");
+    pulse.setAttribute("aria-hidden", "true");
+    const label = node("strong", "", run ? "Review in progress" : "Submitting your review");
+    const clock = node("time", "processing-elapsed", "00:00 elapsed");
+    // The timer is visual-only to avoid repeating announcements each second.
+    clock.setAttribute("aria-hidden", "true");
+    const serverTime = Date.parse(run?.admitted_at_utc || "");
+    const fallback = state.pendingStartedAt || Date.now();
+    clock.dataset.startedAt = String(
+      Number.isFinite(serverTime) ? Math.min(serverTime, fallback) : fallback
+    );
+    header.append(pulse, label, clock);
+    panel.append(header, node("p", "processing-stage", pendingDetail(run)));
+    const note = node("p", "processing-proof",
+      run ? "Stage details are based on saved server evidence. Reserved requests are not completed evidence." :
+        "Waiting for server admission. No provider stage is claimed yet.");
+    panel.append(note);
+    const warning = node("p", "processing-longwait");
+    warning.hidden = true;
+    panel.append(warning);
+    return panel;
+  };
+
+  const updateElapsed = () => {
+    const transcript = el("chat-transcript");
+    const clock = transcript.querySelector(".processing-elapsed");
+    if (!clock) return;
+    const start = Number(clock.dataset.startedAt);
+    if (!Number.isFinite(start) || start <= 0) return;
+    const seconds = Math.max(0, Math.floor((Date.now() - start) / 1000));
+    const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+    const ss = String(seconds % 60).padStart(2, "0");
+    clock.textContent = mm + ":" + ss + " elapsed";
+    const warning = transcript.querySelector(".processing-longwait");
+    if (!warning) return;
+    warning.hidden = seconds < 60;
+    if (seconds >= 120)
+      warning.textContent = "Longer than usual. We are checking the saved request; a timeout may leave it blocked. Do not resend or refresh to retry.";
+    else if (seconds >= 60)
+      warning.textContent = "Still waiting for a confirmed result. Some provider reviews take longer; no retry has been sent.";
+  };
+
+  const syncElapsedTimer = () => {
+    if (el("chat-transcript").querySelector(".processing-elapsed")) {
+      if (state.elapsedTimer === null)
+        state.elapsedTimer = window.setInterval(updateElapsed, 1000);
+      updateElapsed();
+    } else if (state.elapsedTimer !== null) {
+      clearInterval(state.elapsedTimer);
+      state.elapsedTimer = null;
+    }
+  };
+
   const renderRun = (run) => {
     const box = el("chat-transcript");
     box.replaceChildren();
     const text = String(run.prompt || state.pendingPrompt || "");
     if (text) box.append(message("user", text));
     if (run.status === "PROCESSING") {
-      const activity = run.activity;
-      let detail = "Request admitted. Checking saved provider attempt states; no automatic inference retry.";
-      if (activity?.source === "PERSISTED_ATTEMPTS") {
-        const evidence = activity.qloo_evidence;
-        if (evidence === "SEARCH_ONLY") detail = "Qloo entity search saved. Ranking evidence not yet observed.";
-        else if (evidence === "RANK_PENDING_OR_INTERRUPTED")
-          detail = "Qloo search completed; ranking request reserved, result not yet validated.";
-        else if (evidence === "RANK_OBSERVED")
-          detail = "Qloo rank saved. Preparing independent OFF and ON explanations.";
-        else if (evidence === "PARTIAL")
-          detail = "Some Qloo observations saved; unresolved provider attempts remain.";
-        else if (evidence === "SEARCH_PENDING_OR_INTERRUPTED")
-          detail = "Qloo entity search reserved; awaiting a verified response.";
-      }
-      box.append(message("assistant", detail));
+      const waiting = message("assistant", "");
+      waiting.querySelector(".message-copy").replaceWith(pendingPanel(run));
+      box.append(waiting);
     } else if (run.status === "REVIEW_REQUIRED") {
       const rendered = window.OFCResults?.renderRun(run, state.mode, message);
       if (rendered) box.append(rendered);
@@ -307,8 +373,9 @@
     } else if (run) renderRun(run);
     else if (state.busy && state.pendingPrompt) {
       const box = el("chat-transcript");
-      box.replaceChildren(message("user", state.pendingPrompt),
-        message("assistant", "Waiting for a saved server result. No automatic retry will be made."));
+      const waiting = message("assistant", "");
+      waiting.querySelector(".message-copy").replaceWith(pendingPanel(null));
+      box.replaceChildren(message("user", state.pendingPrompt), waiting);
     } else {
       el("chat-transcript").replaceChildren();
     }
@@ -316,6 +383,7 @@
     window.OFCResults?.syncProof(state.localNotice ? null : run);
     window.OFCActivity?.render((state.localNotice ? null : run) || (state.busy && state.pendingPrompt
       ? {local_pending: true} : null));
+    syncElapsedTimer();
   };
 
   const updateModeExplanation = () => {
@@ -434,6 +502,7 @@
     const draftInput = el("chat-input").value;
     state.pendingBaselineIds = new Set(state.runs.map(run => run.run_id));
     state.localNotice = null;
+    state.pendingStartedAt = Date.now();
     setBusy(true);
     state.selected = null;
     el("chat-input").value = "";
@@ -480,6 +549,7 @@
       await loadCapabilities(); // No new provider calls; never replay POST.
     } finally {
       state.pendingPrompt = "";
+      state.pendingStartedAt = null;
       state.activeRequestId = null;
       state.pendingBaselineIds = null;
       setBusy(false);

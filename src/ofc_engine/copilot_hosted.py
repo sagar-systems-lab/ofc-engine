@@ -64,7 +64,8 @@ class HostedCopilot:
     @classmethod
     def _pending_status(cls, run_id: str, created_at: datetime) -> dict:
         if datetime.now(timezone.utc) - created_at < cls._MAX_PENDING_AGE:
-            return {"run_id": run_id, "status": "PROCESSING"}
+            return {"run_id": run_id, "status": "PROCESSING",
+                    "admitted_at_utc": created_at.isoformat()}
         return {
             "run_id": run_id,
             "status": "BLOCKED",

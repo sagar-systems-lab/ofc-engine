@@ -370,6 +370,16 @@ def qualify(origin: str) -> dict:
                 page.locator("#run-approve").click()
                 page.get_by_text("Waiting for a saved server result. No automatic retry will be made.").wait_for(
                     state="visible", timeout=8_000)
+                page.locator(".processing-elapsed").wait_for(state="visible")
+                assert "Submitting your review" in page.locator(".processing-heading").inner_text()
+                page.evaluate("""() => {
+                  document.querySelector(".processing-elapsed").dataset.startedAt =
+                    String(Date.now() - 125000);
+                }""")
+                page.wait_for_function("""() =>
+                  document.querySelector(".processing-elapsed")?.textContent.startsWith("02:") &&
+                  !document.querySelector(".processing-longwait")?.hidden""")
+                assert "Do not resend" in page.locator(".processing-longwait").inner_text()
                 assert page.locator(".message.user").count() == 1
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert input_box.input_value() == ""
@@ -379,6 +389,8 @@ def qualify(origin: str) -> dict:
                 assert "Previous saved comparison" not in page.locator("#chat-transcript").inner_text()
                 page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
                     state="visible", timeout=15_000)
+                assert "Stage details are based on saved server evidence" in page.locator(".processing-proof").inner_text()
+                assert page.locator(".processing-elapsed").is_visible()
                 assert page.locator("#activity-steps").inner_text().count("Qloo evidence") == 1
                 assert "entity search" in page.locator("#activity-steps").inner_text()
                 assert calls["message"] == 0 and calls["provider"] == 0
