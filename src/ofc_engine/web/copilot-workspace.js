@@ -286,6 +286,22 @@
       run ? "Stage details are based on saved server evidence. Reserved requests are not completed evidence." :
         "Waiting for server admission. No provider stage is claimed yet.");
     panel.append(note);
+    const hosting = node("p", "processing-host-note");
+    hosting.append(document.createTextNode(
+      "Free Render hosting and Qloo/model processing can make a live review take 2–3 minutes or longer. " +
+      "Keep this tab open; meanwhile explore "
+    ));
+    for (const [label, path] of [["Plan Review", "/plans"], ["Lab", "/proof"]]) {
+      if (path === "/proof") hosting.append(document.createTextNode(" or "));
+      const link = node("a", "", label);
+      link.href = path;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.setAttribute("aria-label", "Open " + label + " in a new tab");
+      hosting.append(link);
+    }
+    hosting.append(document.createTextNode(" in another tab."));
+    panel.append(hosting);
     const warning = node("p", "processing-longwait");
     warning.hidden = true;
     panel.append(warning);
