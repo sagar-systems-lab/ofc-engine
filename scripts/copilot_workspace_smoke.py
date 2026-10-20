@@ -372,6 +372,23 @@ def qualify(origin: str) -> dict:
                     state="visible", timeout=8_000)
                 page.locator(".processing-elapsed").wait_for(state="visible")
                 assert "Submitting your review" in page.locator(".processing-heading").inner_text()
+                hosting_note = page.locator(".processing-host-note")
+                assert "Free Render hosting" in hosting_note.inner_text()
+                assert "2–3 minutes or longer" in hosting_note.inner_text()
+                assert "Keep this tab open" in hosting_note.inner_text()
+                assert hosting_note.locator("a").count() == 2
+                for label, expected_path in (("Plan Review", "/plans"), ("Lab", "/proof")):
+                    link = hosting_note.get_by_role("link", name="Open " + label + " in a new tab")
+                    assert link.get_attribute("href") == expected_path
+                    assert link.get_attribute("target") == "_blank"
+                    assert "noopener" in link.get_attribute("rel")
+                with page.expect_popup() as explore:
+                    hosting_note.get_by_role(
+                        "link", name="Open Plan Review in a new tab"
+                    ).click()
+                explore.value.close()
+                assert page.locator(".processing-panel").is_visible()
+                assert calls["message"] == 0 and calls["provider"] == 0
                 page.evaluate("""() => {
                   document.querySelector(".processing-elapsed").dataset.startedAt =
                     String(Date.now() - 125000);
