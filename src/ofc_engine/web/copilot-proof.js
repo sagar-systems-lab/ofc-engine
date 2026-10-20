@@ -265,6 +265,66 @@
     if($("map-content").hidden)$("map-expand").click();
     $("map-detail").scrollIntoView({block:"nearest"});
   };
+  const decisionFlow=(run,pair,mode)=>{
+    if(!pair) return null;
+    const section=make("section","live-decision-graph");
+    section.setAttribute("aria-label","Saved evidence decision flow");
+    section.append(make("h2","graph-title","How the decision was reviewed"),
+      make("p","graph-scope",
+        "Saved evidence flow · only recorded decisions, not a synthetic dependency graph."));
+    const rankChecks=rankedEvidence(pair);
+    const labels=new Map([
+      ["budget_feasibility","budget"],
+      ["contract_rights","contract rights"],
+      ["local_audience","local audience"],
+      ["venue_availability","venue"],
+    ]);
+    const stages=(steps)=>{
+      const track=make("div","graph-track");
+      for(const [heading,value,kind] of steps){
+        const stage=make("div","graph-stage graph-"+kind);
+        stage.append(make("span","graph-stage-label",heading),
+          make("strong","graph-stage-value",value));
+        track.append(stage);
+      }
+      return track;
+    };
+    for(const [decisionId,original] of [...pair.before].slice(0,4)){
+      const revised=pair.after.get(decisionId);
+      const rank=rankChecks.find(x=>x.decision_id===decisionId);
+      const required=run.business_verification?.missing_requirements?.[decisionId];
+      const missing=Array.isArray(required)
+        ? [...new Set(required.filter(x=>labels.has(x)).map(x=>labels.get(x)))].slice(0,4) : [];
+      const complete=run.business_verification?.business_evidence_satisfied===true &&
+        run.value_receipt?.business_evidence_satisfied===true;
+      const artist=typeof run.plan?.artist_name==="string" &&
+        run.plan.artist_name.trim() ? name(run.plan.artist_name) : "Artist not recorded";
+      const ranked=rank ? rank.ranked_candidates.join(" → ") : "Repeatable rank unavailable";
+      const choice=mode==="OFF"
+        ? "Original: "+name(original.candidate_id)+" · OFC not applied"
+        : name(revised.candidate_id)+(revised.changed
+          ? " · revised from "+name(original.candidate_id)
+          : " · original preserved");
+      const gate=complete ? "Evidence gate complete · action withheld"
+        : "HOLD · "+(missing.length ? missing.join(", ")+" pending" : "business proof pending");
+      const item=make("div","graph-decision");
+      item.append(make("p","graph-decision-name",name(original.domain)+" · "+id(decisionId)));
+      item.append(stages([
+        ["Artist / scope",artist,"source"],
+        ["Qloo cultural rank",ranked,rank?"observed":"unverified"],
+        [mode==="ON"?"OFC review":"Original choice",choice,"choice"],
+        ["Business gate",gate,complete?"withheld":"hold"],
+      ]));
+      section.append(item);
+    }
+    if(pair.before.size>4)
+      section.append(make("p","graph-scope",
+        "Showing 4 of "+pair.before.size+" saved decisions; see decision map for the complete scope."));
+    section.append(make("p","graph-disclaimer",
+      "Arrows show review stages, not causal or contractual relationships. Qloo ranking is cultural evidence, not permission to act."));
+    return section;
+  };
+
   const decisionBrief=(run,pair,mode)=>{
     const panel=make("section","decision-brief");
     panel.setAttribute("aria-label","Evidence-grounded decision brief");
@@ -336,6 +396,8 @@
     const pair=pairing(run);
     const body=assistant.querySelector(".message-copy") || assistant;
     body.append(decisionBrief(run,pair,mode));
+    const flow=decisionFlow(run,pair,mode);
+    if(flow)body.append(flow);
     if(pair){
       const grid=make("div","result-grid");
       for(const [key,before] of pair.before){
