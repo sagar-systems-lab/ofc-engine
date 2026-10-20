@@ -416,8 +416,18 @@ def qualify(origin: str) -> dict:
                 assert "Partnership readiness" in decision_brief
                 assert "HOLD" in decision_brief
                 assert "Model explanation · not independently verified" in page.locator(".narrative-section").inner_text()
+                flow = page.locator(".live-decision-graph")
+                flow.wait_for(state="visible")
+                assert flow.locator(".graph-decision").count() == 2
+                assert flow.locator(".graph-stage").count() == 8
+                assert "Arrows show review stages" in flow.inner_text()
+                assert "Qloo cultural rank" in flow.inner_text()
+                assert "Business gate" in flow.inner_text()
+                assert "HOLD" in flow.inner_text()
+                assert "30 decisions" not in flow.inner_text()
 
                 page.locator("#mode-toggle").click()
+                assert "OFC not applied" in page.locator(".live-decision-graph").inner_text()
                 baseline = page.locator(".result-caveat").inner_text()
                 assert "2 original choices. OFC controls not applied." in baseline
                 assert "revised" not in baseline
