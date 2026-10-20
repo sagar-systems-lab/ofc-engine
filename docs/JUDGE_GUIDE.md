@@ -4,6 +4,16 @@
 
 OFC Engine is a pre-execution **cultural decision reviewer**, not a replacement for a general-purpose conversational model. It grounds one bounded proposed action in Qloo observations, selectively revises the supported mutable choice and records what remained unverified.
 
+## First look (no provider spend)
+
+1. Open the [hosted application](https://ofc-fixture-preview.onrender.com/) and read its supported-scope notice.
+2. Open the flask icon's explicitly **synthetic** scenarios to see how OFC handles a repair, preservation or withheld decision. These scenarios are fixtures, not live Qloo responses.
+3. For a real historical Qloo observation, visit the [recorded Studio tour](https://ofc-fixture-preview.onrender.com/studio.html#plan). Its one saved ranking is distinct from the live Copilot's two-observation check.
+
+To evaluate a **new live request**, supply a named artist, two to five named brand candidates and your original choice. Confirm the provider usage before Send; ambiguous entity names may require selection. The Copilot's live result includes a decision brief, a graph of the **saved review stages** (not synthetic plan dependencies), OFF/ON comparison and downloadable proof. Neither OFF/ON switching nor viewing saved history calls Qloo again.
+
+The application runs on a free Render instance. Hosting and external model/Qloo calls can take 2–3 minutes or longer; that is **not a completion-time guarantee**. Keep the request tab open while exploring Plan Review or Lab in a separate tab. Global provider quotas are shared across visitors. If capacity is exhausted, use the synthetic exploration path rather than resubmitting the same request.
+
 ## Test with your own request
 
 After completing the introductory scope notice, write your own prompt. The presently qualified real-data decision is **a named artist selecting between two to five named brand candidates**. Supply the original candidate selection so the system has a fair baseline. Names and wording are up to the evaluator; results are not limited to a particular artist or pair of brands.

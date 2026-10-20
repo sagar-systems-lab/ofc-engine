@@ -4,6 +4,8 @@
 
 **Live Copilot:** https://ofc-fixture-preview.onrender.com/
 
+**Start here:** [Self-service evaluation guide](docs/JUDGE_GUIDE.md) — zero-provider-cost first look, live testing scope, and saved decision proof.
+
 The hosted Copilot accepts the visitor's own natural-language cultural decision proposal. The **live-qualified scope** is an artist comparing two to five named brand candidates, including an original choice. Gemini/Groq extracts the proposed plan; Qloo resolves exact entities, ranks the bounded candidate pool and supplies a second scoped rank observation; OFC may revise the brand choice. The saved OFF/ON comparison uses the same Qloo evidence and shows what the control layer changed. Live requests consume finite provider quotas and require confirmation.
 
 The Copilot also retains structured multi-city and dependent choices. Non-brand or locality evidence is **not policy-qualified**: such decisions remain unverified, never receive a fabricated PASS, and may be skipped when conserving daily provider capacity. Business readiness, bookings and other external actions remain withheld. Use the on-screen scope guide and synthetic scenarios to explore without spending provider quota.
