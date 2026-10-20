@@ -162,3 +162,21 @@ def test_saved_result_brief_separates_cultural_review_from_commercial_release():
     assert 'Repeat Qloo ranking matched (same provider)' in script
     assert 'Cultural check: ' in script
     assert '.decision-brief{' in css and '.narrative-section{' in css
+
+
+
+def test_live_graph_is_evidence_only_and_bounded():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    graph = web.joinpath("copilot-proof.js").read_text()
+    styles = web.joinpath("copilot-workspace.css").read_text()
+    assert 'const decisionFlow=(run,pair,mode)=>' in graph
+    assert 'if(!pair) return null' in graph
+    assert '[...pair.before].slice(0,4)' in graph
+    assert 'rankedEvidence(pair)' in graph
+    assert 'run.business_verification?.missing_requirements' in graph
+    assert 'OFC not applied' in graph
+    assert 'not a synthetic dependency graph' in graph
+    assert 'Arrows show review stages' in graph
+    assert '.live-decision-graph{' in styles
+    assert '.graph-track{' in styles
