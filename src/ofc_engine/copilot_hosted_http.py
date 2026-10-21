@@ -222,6 +222,7 @@ class CopilotHTTPMixin:
                     {"request_id", "prompt"},
                     {"request_id", "prompt", "parent_run_id"},
                     {"request_id", "prompt", "parent_run_id", "entity_selection_ref"},
+                    {"request_id", "prompt", "parent_run_id", "confirmed_plan"},
                 ):
                     raise ValueError("INVALID_COPILOT_MESSAGE")
                 result = runtime.submit(
@@ -231,6 +232,7 @@ class CopilotHTTPMixin:
                     prompt=data["prompt"],
                     parent_run_id=data.get("parent_run_id"),
                     entity_selection_ref=data.get("entity_selection_ref"),
+                    confirmed_plan=data.get("confirmed_plan"),
                 )
                 self._copilot_reply(
                     202 if result.get("status") == "PROCESSING" else 200,
