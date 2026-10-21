@@ -180,3 +180,12 @@ def test_live_graph_is_evidence_only_and_bounded():
     assert 'Arrows show review stages' in graph
     assert '.live-decision-graph{' in styles
     assert '.graph-track{' in styles
+
+
+def test_network_failure_has_manual_recovery_without_automatic_submit():
+    from importlib.resources import files
+    js = files('ofc_engine').joinpath('web', 'copilot-workspace.js').read_text()
+    assert 'MODEL_NETWORK_UNAVAILABLE' in js
+    assert 'MODEL_TIMEOUT' in js
+    assert 'Prepare a new attempt' in js
+    assert 'el("chat-input").value = run.prompt' in js
