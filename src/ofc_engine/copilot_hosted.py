@@ -376,12 +376,12 @@ class HostedCopilot:
             "objective": "Review the user's confirmed artist-brand choice using scoped cultural evidence.",
             "artist_name": artist, "taste_seed_name": artist,
             "taste_seed_category": "artist", "discovery_category": None,
-            "taste_location": None, "budget_usd": None, "cities": [],
-            "choices": [{
-                "decision_id": "brand_partnership_choice", "domain": "brand",
-                "selected_name": selected, "candidate_names": brands,
-                "mutable": True, "depends_on": [],
-            }],
+            "taste_location": None, "budget_usd": None, "cities": (),
+            "choices": (DraftChoice(
+                decision_id="brand_partnership_choice", domain="brand",
+                selected_name=selected, candidate_names=tuple(brands),
+                mutable=True, depends_on=(),
+            ),),
             "baseline_answer": (
                 "User-confirmed initial choice: " + selected +
                 ". No cultural or commercial claims were verified at intake."
