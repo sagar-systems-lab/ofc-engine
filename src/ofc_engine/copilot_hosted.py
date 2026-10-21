@@ -665,7 +665,7 @@ class HostedCopilot:
         return data
 
     @staticmethod
-    def _draft_plan_projection(draft) -> dict:
+    def _draft_plan_projection(draft, *, source: str = "UNVERIFIED_LLM_PROPOSAL") -> dict:
         return {
             "objective": draft.objective,
             "artist_name": draft.artist_name,
@@ -678,7 +678,7 @@ class HostedCopilot:
                     "selected_name": choice.selected_name,
                     "candidate_names": list(choice.candidate_names),
                     "depends_on": list(choice.depends_on),
-                    "source": "UNVERIFIED_LLM_PROPOSAL",
+                    "source": source,
                 }
                 for choice in draft.choices
             ],
@@ -1275,7 +1275,12 @@ class HostedCopilot:
                 "rank_evidence_rechecked": evaluated["rank_evidence_rechecked"],
                 "full_plan_independently_verified": False,
                 "business_verification": business_review,
-                "plan": self._draft_plan_projection(draft),
+                "plan": self._draft_plan_projection(
+                    draft, source=(
+                        "USER_CONFIRMED_UNVERIFIED"
+                        if typed_confirmation is not None else "UNVERIFIED_LLM_PROPOSAL"
+                    ),
+                ),
                 "intake_source": (
                     "USER_CONFIRMED_UNVERIFIED"
                     if typed_confirmation is not None else "MODEL_EXTRACTED"
