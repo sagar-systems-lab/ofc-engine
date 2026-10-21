@@ -579,6 +579,14 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
+    # Startup steps are logged without configuration values or secrets.
+    from time import monotonic
+    started = monotonic()
+    def boot(stage: str) -> None:
+        print(f"OFC_BOOT stage={stage} elapsed_ms={int((monotonic()-started)*1000)}",
+              flush=True)
+
+    boot("begin")
     sha = _source_revision(os.environ)
     approved = os.environ.get("OFC_PUBLISH_RECORDED_PROOF", "")
     packed = os.environ.get("OFC_PUBLIC_RECORDED_PACK_B64", "")
@@ -592,6 +600,7 @@ def main(argv: list[str] | None = None) -> None:
             read_public_recorded_excerpt(document)
         except (binascii.Error, UnicodeError, ValueError, TypeError):
             parser.error("invalid recorded proof pack")
+    boot("live_configuration")
     try:
         live = configured_live_review(os.environ)
     except (ValueError, psycopg.Error):
@@ -605,12 +614,14 @@ def main(argv: list[str] | None = None) -> None:
     if durable_mode:
         if durable_mode != "ENABLED" or not os.environ.get("OFC_DATABASE_URL"):
             parser.error("durable runs require an explicitly configured PostgreSQL URL")
+        boot("postgres_start")
         try:
             registry = HostedRunRegistry(
                 PostgresRevisionStore(os.environ["OFC_DATABASE_URL"])
             )
         except (ValueError, psycopg.Error):
             parser.error("durable runs unavailable")
+        boot("postgres_ready")
     showcase = None
     published_mode = os.environ.get("OFC_PUBLIC_QLOO_SHOWCASE", "")
     published_id = os.environ.get("OFC_PUBLIC_QLOO_RUN_ID", "")
@@ -638,12 +649,14 @@ def main(argv: list[str] | None = None) -> None:
         dynamic_token = os.environ.get("OFC_DYNAMIC_AGENT_TOKEN", "")
         if not 1 <= limit <= 64 or not os.environ.get("QLOO_API_KEY"):
             parser.error("dynamic Qloo requires API key and a bounded daily budget")
+        boot("dynamic_start")
         try:
             dynamic_review = PostgresDynamicQlooReview(
                 registry.store, QlooProbeClient.from_environment(), daily_limit=limit
             )
         except (ValueError, RuntimeError, psycopg.Error):
             parser.error("dynamic PostgreSQL Qloo review is unavailable")
+        boot("dynamic_ready")
     elif os.environ.get("OFC_DYNAMIC_QLOO_DAILY_LIMIT"):
         parser.error("dynamic request budget requires an explicit mode")
     copilot = None
@@ -651,6 +664,7 @@ def main(argv: list[str] | None = None) -> None:
     if copilot_mode:
         if copilot_mode != "PRIVATE_BETA" or registry is None:
             parser.error("Copilot requires PRIVATE_BETA and private PostgreSQL")
+        boot("copilot_start")
         try:
             qloo_limit = int(os.environ.get("OFC_COPILOT_QLOO_DAILY_LIMIT", "0"))
             llm_limit = int(os.environ.get("OFC_COPILOT_LLM_DAILY_LIMIT", "0"))
@@ -671,16 +685,20 @@ def main(argv: list[str] | None = None) -> None:
             )
         except (ValueError, TypeError, RuntimeError, psycopg.Error):
             parser.error("private Copilot configuration or migrations unavailable")
+        boot("copilot_ready")
     from .control.config import configured_control
+    boot("control_start")
     try:
         control_enabled, control, control_access = configured_control(os.environ)
     except (ValueError, TypeError, KeyError, psycopg.Error):
         parser.error("control configuration or migrations unavailable")
+    boot("control_ready")
     graph_intake = os.environ.get("OFC_COPILOT_GRAPH_INTAKE", "")
     if graph_intake:
         if graph_intake != "ENABLED" or copilot is None or control is None:
             parser.error("graph intake requires explicit private Copilot and control runtimes")
         copilot.graph_intake = True
+    boot("port_bind_start")
     with HostedFixtureServer(
         (args.bind, args.port), build_sha=sha,
         public_recorded_document=document, hosted_live=live,
@@ -689,6 +707,7 @@ def main(argv: list[str] | None = None) -> None:
         copilot=copilot,
         control=control, control_enabled=control_enabled, control_access=control_access,
     ) as server:
+        boot("port_bound")
         print(f"Fixture preview listening on {args.bind}:{server.server_port}", flush=True)
         server.serve_forever()
 
