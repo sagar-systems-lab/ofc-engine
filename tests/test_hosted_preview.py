@@ -205,3 +205,17 @@ def test_example_route_matches_synthetic_plan_and_denies_mutations():
         assert plan_digest(plan) == example["baseline_digest"]
         assert error_code(base + "/api/example?anything=1") == 400
         assert error_code(base + "/api/example", method="POST", body=b"{}") == 405
+
+
+def test_bootstrap_emits_non_secret_stage_markers_before_port_bind():
+    from pathlib import Path
+    source = Path(hosted_preview.__file__).read_text()
+    assert 'boot("begin")' in source
+    assert 'boot("postgres_start")' in source
+    assert 'boot("copilot_start")' in source
+    assert 'boot("control_start")' in source
+    assert 'boot("port_bind_start")' in source
+    assert 'boot("port_bound")' in source
+    assert source.index('boot("begin")') < source.index('boot("port_bind_start")')
+    assert source.index('boot("port_bind_start")') < source.index('boot("port_bound")')
+    assert 'OFC_BOOT stage={stage} elapsed_ms=' in source
