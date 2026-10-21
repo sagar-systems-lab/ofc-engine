@@ -357,6 +357,61 @@ class HostedCopilot:
         ):
             raise SessionDenied("QLOO_SELECTION_SCOPE_MISMATCH")
 
+    @staticmethod
+    def _confirmed_intake_plan(data: dict) -> CopilotDraft:
+        # Explicit identity labels are unverified until scoped Qloo lookup.
+        if not isinstance(data, dict) or set(data) != {"artist", "brands", "selected"}:
+            raise ValueError("INVALID_CONFIRMED_PLAN")
+        artist, brands, selected = data["artist"], data["brands"], data["selected"]
+        if not isinstance(artist, str) or not isinstance(brands, list) or len(brands) != 2:
+            raise ValueError("INVALID_CONFIRMED_PLAN")
+        if not all(isinstance(v, str) for v in [artist, *brands, selected]):
+            raise ValueError("INVALID_CONFIRMED_PLAN")
+        artist, brands, selected = (artist.strip(), [x.strip() for x in brands], selected.strip())
+        names = [artist, *brands]
+        if (any(not x or len(x) > 160 or any(ord(c) < 32 for c in x) for x in names)
+                or brands[0] == brands[1] or selected not in brands):
+            raise ValueError("INVALID_CONFIRMED_PLAN")
+        return CopilotDraft.model_validate({
+            "objective": "Review the user's confirmed artist-brand choice using scoped cultural evidence.",
+            "artist_name": artist, "taste_seed_name": artist,
+            "taste_seed_category": "artist", "discovery_category": None,
+            "taste_location": None, "budget_usd": None, "cities": [],
+            "choices": [{
+                "decision_id": "brand_partnership_choice", "domain": "brand",
+                "selected_name": selected, "candidate_names": brands,
+                "mutable": True, "depends_on": [],
+            }],
+            "baseline_answer": (
+                "User-confirmed initial choice: " + selected +
+                ". No cultural or commercial claims were verified at intake."
+            ),
+            "clarification_question": None,
+        })
+
+    def _validate_confirmed_parent(self, session_id: str, parent_run_id: str | None,
+                                   prompt: str) -> None:
+        if (not isinstance(parent_run_id, str)
+                or not re.fullmatch(r"cp-run-[a-f0-9]{32}", parent_run_id)):
+            raise SessionDenied("INVALID_RECOVERY_PARENT")
+        with self.store._connect() as db:
+            row = db.execute(
+                "select status,result,result_digest,result_ciphertext,prompt_digest "
+                "from ofc_private.copilot_messages where run_id=%s and session_id=%s",
+                (parent_run_id, session_id),
+            ).fetchone()
+        if row is None or row[0] != "BLOCKED":
+            raise SessionDenied("RECOVERY_PARENT_NOT_BLOCKED")
+        record = self._decode_result(row[1], row[3], row[2])
+        if (record.get("run_id") != parent_run_id
+                or record.get("status") != "BLOCKED"
+                or record.get("reason_code") not in (
+                    "MODEL_TIMEOUT", "MODEL_NETWORK_UNAVAILABLE",
+                )
+                or row[4] != sha256(prompt.strip().encode()).hexdigest()
+                or record.get("qloo_requests_this_run", 0) != 0):
+            raise SessionDenied("RECOVERY_PARENT_SCOPE_MISMATCH")
+
     def _parent_context(self, session_id: str, parent_run_id: str | None):
         if parent_run_id is None:
             return None
@@ -776,10 +831,21 @@ class HostedCopilot:
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
                parent_run_id: str | None = None,
-               entity_selection_ref: str | None = None) -> dict:
+               entity_selection_ref: str | None = None,
+               confirmed_plan: dict | None = None) -> dict:
         self._check_session(session_id, ticket)
         digest = self._validate_message(request_id, prompt)
-        if entity_selection_ref is not None:
+        if confirmed_plan is not None and entity_selection_ref is not None:
+            raise ValueError("INVALID_CONFIRMED_PLAN")
+        typed_confirmation = (
+            self._confirmed_intake_plan(confirmed_plan)
+            if confirmed_plan is not None else None
+        )
+        if typed_confirmation is not None:
+            digest = digest_obj({
+                "prompt": prompt.strip(), "confirmed_plan": typed_confirmation.model_dump(),
+            })
+        elif entity_selection_ref is not None:
             digest = digest_obj({
                 "prompt": prompt.strip(),
                 "entity_selection_ref": entity_selection_ref,
@@ -791,15 +857,20 @@ class HostedCopilot:
             return cached
         self._require_credentials()
         model = self._model()
-        prior_plan = self._parent_context(session_id, parent_run_id)
-        self._validate_entity_selection(
-            session_id, parent_run_id, entity_selection_ref,
-        )
+        if typed_confirmation is not None:
+            self._validate_confirmed_parent(session_id, parent_run_id, prompt)
+            prior_plan = None
+        else:
+            prior_plan = self._parent_context(session_id, parent_run_id)
+            self._validate_entity_selection(
+                session_id, parent_run_id, entity_selection_ref,
+            )
         # A qualified artist/brand review needs artist + two brand lookups
         # and two independent rank observations. Do not spend a model call
         # or consume a visitor slot when the shared Qloo gate cannot fit it.
         # Exact plan cost is checked again after model extraction.
-        self._capacity(required_llm=3, required_qloo=5)
+        self._capacity(required_llm=2 if typed_confirmation is not None else 3,
+                       required_qloo=5)
         run_id, cached = self._admit_message(
             session_id, request_id, digest, model.model, prompt, parent_run_id,
         )
@@ -813,13 +884,16 @@ class HostedCopilot:
         try:
             stage = "plan_extraction"
             started = monotonic()
-            self._capacity(required_llm=3)
-            reserve_model_call(
-                self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
-            )
-            draft = self._explicit_brand_scope(
-                model.extract(prompt, prior_plan=prior_plan), prompt,
-            )
+            if typed_confirmation is not None:
+                draft = typed_confirmation
+            else:
+                self._capacity(required_llm=3)
+                reserve_model_call(
+                    self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
+                )
+                draft = self._explicit_brand_scope(
+                    model.extract(prompt, prior_plan=prior_plan), prompt,
+                )
             _log.info("COPILOT_STAGE stage=plan_extraction duration_ms=%d",
                       round((monotonic() - started) * 1000))
             stage = "qloo_evidence_review"
@@ -1202,6 +1276,10 @@ class HostedCopilot:
                 "full_plan_independently_verified": False,
                 "business_verification": business_review,
                 "plan": self._draft_plan_projection(draft),
+                "intake_source": (
+                    "USER_CONFIRMED_UNVERIFIED"
+                    if typed_confirmation is not None else "MODEL_EXTRACTED"
+                ),
                 "taste_policy": policy_for(
                     context.target_category if context is not None
                     else "brand" if supported else list(catalog_domains.values())[0]
