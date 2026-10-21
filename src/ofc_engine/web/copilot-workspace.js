@@ -240,7 +240,19 @@
 
   const safeReason = value => {
     const status = String(value?.status || "BLOCKED");
-    const reason = value?.reason_code ? " Reason: " + String(value.reason_code).slice(0, 80) + "." : "";
+    const code = String(value?.reason_code || "");
+    if (status === "BLOCKED" &&
+        (code === "MODEL_NETWORK_UNAVAILABLE" || code === "MODEL_TIMEOUT")) {
+      const connection = code === "MODEL_TIMEOUT"
+        ? "The model timed out during initial plan understanding."
+        : "The model connection failed during initial plan understanding.";
+      const qloo = value?.qloo_requests_this_run === 0
+        ? " No Qloo request was recorded." : "";
+      return connection + qloo +
+        " The review was saved as blocked, and no automatic retry was attempted. " +
+        "You can prepare a new attempt after checking quota; a new model request may consume capacity.";
+    }
+    const reason = code ? " Reason: " + code.slice(0, 80) + "." : "";
     return safeStatus(status) + reason;
   };
 
@@ -387,6 +399,21 @@
       const tag = node("span", "message-state" + (run.status === "BLOCKED" ? " blocked" : ""),
         String(run.status || "UNKNOWN").replaceAll("_", " "));
       assistant.append(tag);
+      if (run.status === "BLOCKED" &&
+          ["MODEL_TIMEOUT", "MODEL_NETWORK_UNAVAILABLE"].includes(run.reason_code) &&
+          typeof run.prompt === "string" && run.prompt.length <= 4000) {
+        const prepare = node("button", "result-action", "Prepare a new attempt");
+        prepare.type = "button";
+        prepare.disabled = state.busy || state.runs.length >= state.sessionMessageLimit;
+        prepare.addEventListener("click", () => {
+          if (state.busy || state.runs.length >= state.sessionMessageLimit) return;
+          el("chat-input").value = run.prompt;
+          resizeComposer();
+          el("chat-input").focus();
+          statusText("Prompt restored only. No provider call was sent. Press Send and confirm quota to start a new review.");
+        });
+        assistant.append(prepare);
+      }
       if (run.status === "CLARIFICATION_REQUIRED" &&
           Array.isArray(run.suggestions) && run.suggestions.length) {
         const panel = node("div", "qloo-selection");
