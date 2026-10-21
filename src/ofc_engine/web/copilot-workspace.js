@@ -413,6 +413,76 @@
           statusText("Prompt restored only. No provider call was sent. Press Send and confirm quota to start a new review.");
         });
         assistant.append(prepare);
+        const recovery = node("section", "intake-recovery");
+        recovery.append(
+          node("strong", "qloo-selection-title", "Continue with confirmed details"),
+          node("p", "qloo-selection-help",
+            "If the planning model was unavailable, enter the artist, two brands and your original choice. " +
+            "These names are not verified until Qloo checks them. No provider request is sent until confirmation.")
+        );
+        const addField = (label, placeholder) => {
+          const field = node("label", "intake-recovery-field");
+          field.append(node("span", "", label));
+          const input = node("input");
+          input.type = "text";
+          input.maxLength = 160;
+          input.autocomplete = "off";
+          input.placeholder = placeholder;
+          field.append(input);
+          recovery.append(field);
+          return input;
+        };
+        const artist = addField("Artist", "Exact artist name");
+        const first = addField("First brand", "First candidate");
+        const second = addField("Second brand", "Second candidate");
+        const choiceLabel = node("label", "intake-recovery-field");
+        choiceLabel.append(node("span", "", "My original choice"));
+        const choice = node("select");
+        for (const [value, title] of [["0", "First brand"], ["1", "Second brand"]]) {
+          const option = node("option", "", title);
+          option.value = value;
+          choice.append(option);
+        }
+        choiceLabel.append(choice);
+        recovery.append(choiceLabel);
+        const continueButton = node("button", "result-action", "Review confirmed details");
+        continueButton.type = "button";
+        continueButton.addEventListener("click", () => {
+          if (state.busy || state.runs.length >= state.sessionMessageLimit ||
+              !/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
+              typeof run.prompt !== "string" || run.prompt.length > 4000) return;
+          const names = [artist.value.trim(), first.value.trim(), second.value.trim()];
+          if (names.some(x => !x || x.length > 160) || names[1] === names[2]) {
+            statusText("Enter one artist and two different brand names. No request submitted.");
+            return;
+          }
+          const remaining = state.capability?.capacity;
+          if (Number.isInteger(remaining?.qloo_requests_remaining) &&
+              remaining.qloo_requests_remaining < 5) {
+            statusText("At least 5 Qloo requests are required. No request submitted.");
+            return;
+          }
+          if (Number.isInteger(remaining?.llm_requests_remaining) &&
+              remaining.llm_requests_remaining < 2) {
+            statusText("At least 2 model requests are required. No request submitted.");
+            return;
+          }
+          state.pendingPrompt = run.prompt;
+          state.pendingSelection = {
+            parent_run_id: run.run_id,
+            confirmed_plan: {
+              artist: names[0], brands: names.slice(1),
+              selected: names[Number(choice.value) + 1],
+            },
+          };
+          el("run-confirm-budget").textContent =
+            "User-confirmed intake (not model extracted). This new linked review may use " +
+            "5 Qloo and 2 narration model calls; verification or clarification may still be required. " +
+            "No request is made until you confirm.";
+          if (!el("run-confirm").open) el("run-confirm").showModal();
+        });
+        recovery.append(continueButton);
+        assistant.append(recovery);
       }
       if (run.status === "CLARIFICATION_REQUIRED" &&
           Array.isArray(run.suggestions) && run.suggestions.length) {
