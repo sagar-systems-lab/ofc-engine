@@ -210,7 +210,13 @@ class HTTPSJSON:
             code = exc.code
             exc.close()
             raise LLMUnavailable("PROVIDER_HTTP_" + str(code)) from None
-        except (OSError, URLError, TimeoutError, socket.timeout):
+        except (TimeoutError, socket.timeout):
+            raise LLMUnavailable("MODEL_TIMEOUT") from None
+        except URLError as exc:
+            if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+                raise LLMUnavailable("MODEL_TIMEOUT") from None
+            raise LLMUnavailable("MODEL_NETWORK_UNAVAILABLE") from None
+        except OSError:
             raise LLMUnavailable("MODEL_NETWORK_UNAVAILABLE") from None
         if len(body) > max_bytes:
             raise LLMUnavailable("MODEL_RESPONSE_TOO_LARGE")
@@ -436,7 +442,9 @@ class CopilotLLM:
         headers["Content-Type"] = "application/json"
         try:
             reply = self._transport.post(
-                url, headers, data, timeout=self.timeout,
+                url, headers, data,
+                timeout=20.0 if self.provider == "gemini" and self.intake_profile == "standard"
+                else self.timeout,
                 max_bytes=_MAX_RESPONSE_BYTES,
             )
         except LLMUnavailable:

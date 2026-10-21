@@ -76,7 +76,7 @@ def test_real_provider_request_shape_but_fake_transport(provider):
     assert output.clarification_question is None
     assert len(fake.calls) == 1
     url, headers, body, timeout, max_bytes = fake.calls[0]
-    assert timeout == 15
+    assert timeout == (20 if provider == "gemini" else 15)
     assert max_bytes <= 96 * 1024
     assert "test-key-not-public" not in json.dumps(body)
     if provider == "gemini":
@@ -464,3 +464,47 @@ def test_multicity_place_scope_requires_one_unambiguous_city():
         choice("venue", ["Generic Venue A", "Generic Venue B"]), cities) is None
     assert HostedCopilot._place_city_scope(
         choice("venue_chicago", ["Venue A", "Venue B"]), ()) is None
+
+
+
+@pytest.mark.parametrize(("failure", "expected"), [
+    (TimeoutError("timeout"), "MODEL_TIMEOUT"),
+    (ConnectionError("connection refused"), "MODEL_NETWORK_UNAVAILABLE"),
+    (None, "MODEL_TIMEOUT"),
+])
+def test_https_model_transport_failure_is_sanitized(monkeypatch, failure, expected):
+    from urllib.error import URLError
+    from ofc_engine import copilot_llm
+
+    problem = URLError(TimeoutError("timeout")) if failure is None else failure
+
+    class FailingOpener:
+        def open(self, request, timeout):
+            raise problem
+
+    monkeypatch.setattr(copilot_llm, "build_opener", lambda *args: FailingOpener())
+    with pytest.raises(LLMUnavailable, match="^" + expected + "$"):
+        HTTPSJSON().post(
+            copilot_llm._GEMINI_URL,
+            {"Content-Type": "application/json"}, b"{}",
+            timeout=20.0, max_bytes=4096,
+        )
+
+
+def test_gemini_intake_timeout_does_not_retry_or_spend_on_qloo():
+    class DroppedModel:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, *args, **kwargs):
+            self.calls += 1
+            raise LLMUnavailable("MODEL_NETWORK_UNAVAILABLE")
+
+    fake = DroppedModel()
+    model = CopilotLLM(provider="gemini", api_key="offline-only", transport=fake)
+    with pytest.raises(LLMUnavailable, match="MODEL_NETWORK_UNAVAILABLE"):
+        model.extract(
+            "Compare Nike and Adidas as partners for Billie Eilish; "
+            "my original choice is Nike."
+        )
+    assert fake.calls == 1
