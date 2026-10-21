@@ -1270,7 +1270,8 @@ class HostedCopilot:
                 "MODEL_NARRATION_INVALID", "PROVIDER_HTTP_429",
                 "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
                 "MODEL_FINISH_REJECTED", "MODEL_DRAFT_JSON_INVALID",
-                "MODEL_DRAFT_SCHEMA_INVALID",
+                "MODEL_DRAFT_SCHEMA_INVALID", "MODEL_NETWORK_UNAVAILABLE",
+                "MODEL_TIMEOUT",
             }
             safe = code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
             result = {
