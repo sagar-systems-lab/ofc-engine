@@ -166,6 +166,15 @@ a{text-decoration:none;color:inherit}
 .qloo-option:hover:not(:disabled){background:#edf5ff;border-color:#84b8fb}
 .qloo-option:disabled{opacity:.48}
 .qloo-option span{font-size:11px;color:#7285a1}
+.intake-recovery{margin:12px 0;padding:14px;border:1px solid #d9e8fb;
+  border-radius:14px;background:#f8fbff;display:grid;gap:10px}
+.intake-recovery-field{display:grid;gap:5px;color:#315275;font-size:11px;font-weight:650}
+.intake-recovery-field input,.intake-recovery-field select{
+  width:100%;min-width:0;padding:10px 11px;border:1px solid #cfdfef;
+  border-radius:9px;background:#fff;color:#193d70;font-size:12px}
+.intake-recovery-field input:focus-visible,.intake-recovery-field select:focus-visible{
+  outline:2px solid #6ba8f5;outline-offset:2px}
+
 .composer-dock{width:min(100%,840px);padding:0 24px 14px;flex:none;margin-top:auto}
 .composer{background:#fff;border:1px solid #d8e5f7;box-shadow:0 10px 28px rgba(45,92,161,.11);
   border-radius:19px;padding:12px 14px 10px;transition:border-color .18s ease,box-shadow .18s ease}

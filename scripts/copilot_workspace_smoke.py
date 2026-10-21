@@ -726,6 +726,106 @@ def qualify_selection(origin: str) -> dict:
     return {"result": "PASS", "cases": results, "real_provider_requests": 0}
 
 
+def qualify_confirmed_intake(origin: str) -> dict:
+    results = []
+    for width, height in ((1440, 900), (390, 844)):
+        with sync_playwright() as engine:
+            browser = engine.chromium.launch(
+                headless=True, executable_path=os.environ.get("OFC_CHROMIUM_PATH"),
+            )
+            context = browser.new_context(viewport={"width": width, "height": height})
+            page = context.new_page()
+            posted = []
+            provider_calls = []
+            saved = []
+            failed = {
+                "run_id": FAKE_RUN, "status": "BLOCKED",
+                "reason_code": "MODEL_NETWORK_UNAVAILABLE",
+                "qloo_requests_this_run": 0, "llm_requests_this_run": 1,
+                "release_authorized": False, "external_action_executed": False,
+            }
+
+            def mock(route):
+                path = route.request.url.split("/api/", 1)[-1]
+                method = route.request.method
+                if path == "capabilities":
+                    return route.fulfill(status=200, content_type="application/json",
+                        body=json.dumps({
+                            "product": "CHECK_REQUIRED", "ofc": "ACTIVE",
+                            "storage": "ACTIVE", "qloo": "CHECK_REQUIRED",
+                            "llm": "CONNECTED", "session_message_limit": 8,
+                            "capacity": {"qloo_requests_remaining": 12,
+                                         "llm_requests_remaining": 9},
+                        }))
+                if path == "copilot/sessions" and method == "POST":
+                    return route.fulfill(status=201, content_type="application/json",
+                        body=json.dumps({"session_id": FAKE_SESSION,
+                                         "expires_in_hours": 24}))
+                if path == "copilot/sessions/" + FAKE_SESSION and method == "GET":
+                    return route.fulfill(status=200, content_type="application/json",
+                        body=json.dumps({"session_id": FAKE_SESSION,
+                                         "session_message_limit": 8, "messages": saved}))
+                if path == "copilot/sessions/" + FAKE_SESSION + "/messages" and method == "POST":
+                    req = route.request.post_data_json
+                    posted.append(req)
+                    if len(posted) == 1:
+                        assert set(req) == {"request_id", "prompt"}
+                        output = {**failed, "prompt": req["prompt"]}
+                    else:
+                        assert req["parent_run_id"] == FAKE_RUN
+                        assert req["prompt"] == PROMPT
+                        assert req["confirmed_plan"] == {
+                            "artist": "Billie Eilish",
+                            "brands": ["Nike", "Adidas"], "selected": "Nike",
+                        }
+                        assert "entity_selection_ref" not in req
+                        output = {
+                            "run_id": "cp-run-" + "d" * 32,
+                            "status": "CAPABILITY_UNAVAILABLE",
+                            "question": "Manual intake boundary accepted.",
+                            "prompt": req["prompt"], "release_authorized": False,
+                        }
+                    saved.append({**output, "_sessionReadConfirmed": True})
+                    return route.fulfill(status=200, content_type="application/json",
+                        body=json.dumps(output))
+                provider_calls.append(path)
+                return route.fulfill(status=404, body="{}")
+
+            try:
+                page.route("**/api/**", mock)
+                page.goto(origin + "/workspace", wait_until="domcontentloaded")
+                page.locator("#ofc-intro-understand").click()
+                page.locator("#ofc-intro").wait_for(state="detached")
+                if page.locator("#scope-guide").is_visible():
+                    page.locator("#scope-example").click()
+                page.locator("#chat-input").fill(PROMPT)
+                page.locator("#chat-send").click()
+                page.locator("#run-approve").click()
+                page.locator(".intake-recovery").wait_for(state="visible", timeout=8000)
+                assert len(posted) == 1 and not provider_calls
+                page.locator(".intake-recovery-field input").nth(0).fill("Billie Eilish")
+                page.locator(".intake-recovery-field input").nth(1).fill("Nike")
+                page.locator(".intake-recovery-field input").nth(2).fill("Adidas")
+                page.locator(".intake-recovery-field select").select_option("0")
+                page.get_by_role("button", name="Review confirmed details").click()
+                page.locator("#run-confirm").wait_for(state="visible")
+                assert "not model extracted" in page.locator("#run-confirm-budget").inner_text()
+                assert len(posted) == 1
+                page.locator("#run-cancel").click()
+                assert len(posted) == 1
+                page.get_by_role("button", name="Review confirmed details").click()
+                page.locator("#run-approve").click()
+                page.get_by_text("Manual intake boundary accepted.").wait_for(
+                    state="visible", timeout=8000)
+                assert len(posted) == 2 and not provider_calls
+                results.append({"viewport": width, "confirmed_plan_scoped": True,
+                                "cancel_has_no_spend": True})
+            finally:
+                context.close()
+                browser.close()
+    return {"result": "PASS", "cases": results, "real_provider_requests": 0}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18080")
@@ -733,4 +833,5 @@ if __name__ == "__main__":
     base = args.base_url.rstrip("/")
     report = qualify(base)
     report["entity_selection"] = qualify_selection(base)
+    report["confirmed_intake"] = qualify_confirmed_intake(base)
     print(json.dumps(report, sort_keys=True))

@@ -339,6 +339,8 @@
       row("Release","Not authorized. Evidence review must complete first.");
       return panel;
     }
+    if(run.intake_source==="USER_CONFIRMED_UNVERIFIED")
+      row("Plan source","Artist and brands entered by the user after a model outage; identities required Qloo verification.");
     const ranked=rankedEvidence(pair);
     const match=ranked.find(item=>item.rank_recheck_matched);
     row("Qloo observation",match
