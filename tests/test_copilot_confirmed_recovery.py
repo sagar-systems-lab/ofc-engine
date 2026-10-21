@@ -35,7 +35,7 @@ def test_typed_manual_plan_requires_explicit_unambiguous_names():
     lambda x: x.update(brands=["Nike"]),
     lambda x: x.update(selected="Puma"),
     lambda x: x.update(brand_id="forged"),
-    lambda x: x.update(artist="A\\x00B"),
+    lambda x: x.update(artist="A" + chr(0) + "B"),
     lambda x: x.update(brands=["Nike", 123]),
 ])
 def test_manual_plan_fails_closed_on_invalid_identity(mutate):
