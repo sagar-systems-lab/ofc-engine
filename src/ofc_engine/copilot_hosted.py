@@ -389,6 +389,12 @@ class HostedCopilot:
             "clarification_question": None,
         })
 
+    @staticmethod
+    def _provider_outage_reason(code: str) -> str | None:
+        if re.fullmatch(r"PROVIDER_HTTP_5[0-9]{2}", code):
+            return "MODEL_PROVIDER_UNAVAILABLE"
+        return None
+
     def _validate_confirmed_parent(self, session_id: str, parent_run_id: str | None,
                                    prompt: str) -> None:
         if (not isinstance(parent_run_id, str)
@@ -1403,10 +1409,8 @@ class HostedCopilot:
                 "MODEL_TIMEOUT", "PROVIDER_HTTP_502", "PROVIDER_HTTP_503",
                 "PROVIDER_HTTP_504",
             }
-            safe = (
-                "MODEL_PROVIDER_UNAVAILABLE"
-                if re.fullmatch(r"PROVIDER_HTTP_5[0-9]{2}", code)
-                else code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
+            safe = self._provider_outage_reason(code) or (
+                code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
             )
             result = {
                 "schema_version": "copilot.v1",
