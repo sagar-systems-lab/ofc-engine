@@ -740,39 +740,72 @@ class HostedCopilot:
     def _evidence_only_answer(view: dict, *, mode: str, cities: tuple[str, ...]) -> str:
         if mode not in ("off", "on"):
             raise ValueError("invalid evidence view")
-        lines = ["Model explanation unavailable. Saved evidence-only review:"]
+        lines = ["Evidence-based decision summary (model wording unavailable):"]
         observations = view.get("qloo", {}).get("observations", [])
-        rankings = [
-            tuple(item["ranked_candidate_ids"])
-            for item in observations
-            if isinstance(item, dict) and item.get("ranked_candidate_ids")
-        ]
-        if len(rankings) >= 2 and all(r == rankings[0] for r in rankings):
-            names = " > ".join(str(name)[:160] for name in rankings[0][:5])
-            lines.append("Repeated Qloo cultural ranking: " + names + ".")
-        elif rankings:
-            lines.append("Saved Qloo ranks do not establish a consistent ordering.")
-        else:
-            lines.append("No verified Qloo ranking is available in this view.")
+        seen_ranks = False
         for decision in view["decisions"][:6]:
             label = str(decision.get("decision_id", "decision"))[:48]
             choice = str(decision.get("candidate_id", "unresolved"))[:160]
+            observation = decision.get("qloo_observation")
+            if not isinstance(observation, dict):
+                observation = next((
+                    item for item in observations
+                    if isinstance(item, dict) and item.get("decision_id") == label
+                ), None)
+            if isinstance(observation, dict):
+                order = observation.get("ranked_candidate_ids")
+                if isinstance(order, list) and len(order) >= 2 and all(
+                    isinstance(name, str) and name for name in order
+                ):
+                    seen_ranks = True
+                    ranks = " > ".join(name[:160] for name in order[:5])
+                    lines.append(f"Recorded Qloo cultural ranking ({label}): {ranks}.")
+                    if (mode == "on" and decision.get("rank_recheck_completed") is True
+                            and decision.get("ofc_reason") == "QLOO_RANK_RECHECK_MATCHED"):
+                        lines.append(f"Independent Qloo rank recheck matched ({label}).")
             if mode == "off":
                 lines.append(f"Original choice ({label}): {choice}. No OFC control applied.")
+                if isinstance(observation, dict) and isinstance(order, list) and order:
+                    top = str(order[0])[:160]
+                    if choice == top:
+                        lines.append(
+                            f"Your original choice matches the top recorded Qloo cultural "
+                            f"rank for these candidates; it is not a commercial approval."
+                        )
+                    else:
+                        lines.append(
+                            f"The observed Qloo cultural ranking favors {top}, not "
+                            f"your original choice of {choice}. This alone is not "
+                            f"a business recommendation."
+                        )
             else:
                 verdict = str(decision.get("ofc_verdict", "UNCERTAIN"))[:48]
                 reason = str(decision.get("ofc_reason", "NOT_VERIFIED"))[:80]
                 lines.append(
                     f"OFC choice ({label}): {choice}. Verdict: {verdict}; reason: {reason}."
                 )
+                if decision.get("changed") is True:
+                    lines.append(
+                        "OFC revised the choice within the submitted candidate pool; "
+                        "commercial approval remains withheld."
+                    )
+                else:
+                    lines.append(
+                        "OFC preserved this choice after review; commercial approval "
+                        "remains withheld."
+                    )
+        if not seen_ranks:
+            lines.append("No scoped Qloo cultural ranking is saved in this view.")
         if cities:
             lines.append(
                 "City order, local audiences, venues and tour budget feasibility "
                 "were not independently verified."
             )
         lines.append(
-            "Cultural ranks do not establish contracts, rights or business fitness. "
-            "No booking, partnership or other external action was authorized."
+            "Before moving ahead, independently check sponsorship rights and contract "
+            "terms, budget feasibility and local audience fit. Cultural ranks do not "
+            "establish business suitability. No booking, partnership or other external "
+            "action was authorized."
         )
         return "\n".join(lines)[:4096]
 
@@ -822,11 +855,11 @@ class HostedCopilot:
                         "COPILOT_NARRATION_FAILURE run_id=%s arm=%s reason=%s",
                         run_id, mode, code,
                     )
-        if failures:
+        if len(failures) == 2:
             raise LLMUnavailable(next(iter(failures.values())))
         _log.info("COPILOT_STAGE stage=two_narrations duration_ms=%d",
                   round((monotonic() - started) * 1000))
-        return answers["off"], answers["on"]
+        return answers.get("off"), answers.get("on")
 
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
@@ -1240,6 +1273,16 @@ class HostedCopilot:
                 off_answer, on_answer = self._narrate_arms(
                     model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
                 )
+                if off_answer is None or on_answer is None:
+                    narration_status = "PARTIAL_EVIDENCE_ONLY_FALLBACK"
+                    if off_answer is None:
+                        off_answer = self._evidence_only_answer(
+                            projection["off"], mode="off", cities=draft.cities,
+                        )
+                    if on_answer is None:
+                        on_answer = self._evidence_only_answer(
+                            projection["on"], mode="on", cities=draft.cities,
+                        )
             except LLMUnavailable as exc:
                 narration_status = "EVIDENCE_ONLY_FALLBACK"
                 code = str(exc)
@@ -1264,6 +1307,8 @@ class HostedCopilot:
                 "narrative_trust": (
                     "DETERMINISTIC_SAVED_EVIDENCE_ONLY"
                     if narration_status == "EVIDENCE_ONLY_FALLBACK"
+                    else "MIXED_MODEL_AND_DETERMINISTIC_EVIDENCE"
+                    if narration_status == "PARTIAL_EVIDENCE_ONLY_FALLBACK"
                     else "MODEL_NARRATIVE_NOT_INDEPENDENTLY_VERIFIED"
                 ),
                 "schema_version": "copilot.v1",

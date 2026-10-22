@@ -84,8 +84,27 @@ def test_failure_does_not_trigger_provider_retry(monkeypatch):
             return "original"
 
     monkeypatch.setattr(copilot_hosted, "reserve_model_call", reserve)
-    with pytest.raises(LLMUnavailable, match="MODEL_NARRATION_INVALID"):
+    result = runtime()._narrate_arms(
+        model=FakeModel(), pair="sealed", prompt="brand", run_id="test-run",
+    )
+    assert result == ("original", None)
+    assert counts == {"reserve": 2, "off": 1, "on": 1}
+
+
+def test_both_failed_arms_remain_fail_closed_without_retry(monkeypatch):
+    counts = {"reserve": 0, "off": 0, "on": 0}
+
+    def reserve(*args, **kwargs):
+        counts["reserve"] += 1
+
+    class FailingModel:
+        def narrate_arm(self, pair, *, prompt, mode):
+            counts[mode] += 1
+            raise LLMUnavailable("MODEL_TIMEOUT")
+
+    monkeypatch.setattr(copilot_hosted, "reserve_model_call", reserve)
+    with pytest.raises(LLMUnavailable, match="MODEL_TIMEOUT"):
         runtime()._narrate_arms(
-            model=FakeModel(), pair="sealed", prompt="brand", run_id="test-run",
+            model=FailingModel(), pair="saved", prompt="brand", run_id="test-run",
         )
     assert counts == {"reserve": 2, "off": 1, "on": 1}
