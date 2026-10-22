@@ -20,6 +20,7 @@ _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 _MAX_REQUEST_BYTES = 24 * 1024
 _MAX_RESPONSE_BYTES = 96 * 1024
 _MAX_PROMPT = 4000
+_GEMINI_NARRATION_SOCKET_TIMEOUT = 45.0
 _INSTRUCTIONS = (
     "Extract the user's request as an agent PROPOSAL, not a verified recommendation. "
     "Return only the supplied JSON schema. Do not invent cities, budgets, "
@@ -673,7 +674,8 @@ class CopilotLLM:
         try:
             reply = self._transport.post(
                 url, headers, data,
-                timeout=20.0 if self.provider == "gemini" else self.timeout,
+                timeout=_GEMINI_NARRATION_SOCKET_TIMEOUT if self.provider == "gemini"
+                else self.timeout,
                 max_bytes=_MAX_RESPONSE_BYTES,
             )
         except LLMUnavailable:
