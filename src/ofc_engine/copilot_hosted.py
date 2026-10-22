@@ -407,7 +407,7 @@ class HostedCopilot:
                 or record.get("status") != "BLOCKED"
                 or record.get("reason_code") not in (
                     "MODEL_TIMEOUT", "MODEL_NETWORK_UNAVAILABLE",
-                    "PROVIDER_HTTP_502", "PROVIDER_HTTP_503", "PROVIDER_HTTP_504",
+                    "MODEL_PROVIDER_UNAVAILABLE",
                 )
                 or row[4] != sha256(prompt.strip().encode()).hexdigest()
                 or record.get("qloo_requests_this_run", 0) != 0):
@@ -1403,7 +1403,11 @@ class HostedCopilot:
                 "MODEL_TIMEOUT", "PROVIDER_HTTP_502", "PROVIDER_HTTP_503",
                 "PROVIDER_HTTP_504",
             }
-            safe = code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
+            safe = (
+                "MODEL_PROVIDER_UNAVAILABLE"
+                if re.fullmatch(r"PROVIDER_HTTP_5[0-9]{2}", code)
+                else code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
+            )
             result = {
                 "schema_version": "copilot.v1",
                 "run_id": run_id, "status": "BLOCKED", "reason_code": safe,
