@@ -672,7 +672,8 @@ class CopilotLLM:
         headers["Content-Type"] = "application/json"
         try:
             reply = self._transport.post(
-                url, headers, data, timeout=self.timeout,
+                url, headers, data,
+                timeout=20.0 if self.provider == "gemini" else self.timeout,
                 max_bytes=_MAX_RESPONSE_BYTES,
             )
         except LLMUnavailable:
