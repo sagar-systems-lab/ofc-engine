@@ -742,21 +742,27 @@ class HostedCopilot:
             raise ValueError("invalid evidence view")
         lines = ["Model explanation unavailable. Saved evidence-only review:"]
         observations = view.get("qloo", {}).get("observations", [])
-        rankings = [
-            tuple(item["ranked_candidate_ids"])
-            for item in observations
-            if isinstance(item, dict) and item.get("ranked_candidate_ids")
-        ]
-        if len(rankings) >= 2 and all(r == rankings[0] for r in rankings):
-            names = " > ".join(str(name)[:160] for name in rankings[0][:5])
-            lines.append("Repeated Qloo cultural ranking: " + names + ".")
-        elif rankings:
-            lines.append("Saved Qloo ranks do not establish a consistent ordering.")
-        else:
-            lines.append("No verified Qloo ranking is available in this view.")
+        seen_ranks = False
         for decision in view["decisions"][:6]:
             label = str(decision.get("decision_id", "decision"))[:48]
             choice = str(decision.get("candidate_id", "unresolved"))[:160]
+            observation = decision.get("qloo_observation")
+            if not isinstance(observation, dict):
+                observation = next((
+                    item for item in observations
+                    if isinstance(item, dict) and item.get("decision_id") == label
+                ), None)
+            if isinstance(observation, dict):
+                order = observation.get("ranked_candidate_ids")
+                if isinstance(order, list) and len(order) >= 2 and all(
+                    isinstance(name, str) and name for name in order
+                ):
+                    seen_ranks = True
+                    ranks = " > ".join(name[:160] for name in order[:5])
+                    lines.append(f"Recorded Qloo cultural ranking ({label}): {ranks}.")
+                    if (mode == "on" and decision.get("rank_recheck_completed") is True
+                            and decision.get("ofc_reason") == "QLOO_RANK_RECHECK_MATCHED"):
+                        lines.append(f"Independent Qloo rank recheck matched ({label}).")
             if mode == "off":
                 lines.append(f"Original choice ({label}): {choice}. No OFC control applied.")
             else:
@@ -765,6 +771,8 @@ class HostedCopilot:
                 lines.append(
                     f"OFC choice ({label}): {choice}. Verdict: {verdict}; reason: {reason}."
                 )
+        if not seen_ranks:
+            lines.append("No scoped Qloo cultural ranking is saved in this view.")
         if cities:
             lines.append(
                 "City order, local audiences, venues and tour budget feasibility "
@@ -822,11 +830,11 @@ class HostedCopilot:
                         "COPILOT_NARRATION_FAILURE run_id=%s arm=%s reason=%s",
                         run_id, mode, code,
                     )
-        if failures:
+        if len(failures) == 2:
             raise LLMUnavailable(next(iter(failures.values())))
         _log.info("COPILOT_STAGE stage=two_narrations duration_ms=%d",
                   round((monotonic() - started) * 1000))
-        return answers["off"], answers["on"]
+        return answers.get("off"), answers.get("on")
 
     def submit(self, *, session_id: str, ticket: str,
                request_id: str, prompt: str,
@@ -1240,6 +1248,16 @@ class HostedCopilot:
                 off_answer, on_answer = self._narrate_arms(
                     model=model, pair=narrated_pair, prompt=prompt, run_id=run_id,
                 )
+                if off_answer is None or on_answer is None:
+                    narration_status = "PARTIAL_EVIDENCE_ONLY_FALLBACK"
+                    if off_answer is None:
+                        off_answer = self._evidence_only_answer(
+                            projection["off"], mode="off", cities=draft.cities,
+                        )
+                    if on_answer is None:
+                        on_answer = self._evidence_only_answer(
+                            projection["on"], mode="on", cities=draft.cities,
+                        )
             except LLMUnavailable as exc:
                 narration_status = "EVIDENCE_ONLY_FALLBACK"
                 code = str(exc)
