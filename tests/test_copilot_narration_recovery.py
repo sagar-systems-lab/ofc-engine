@@ -94,6 +94,58 @@ def test_two_arm_failure_is_single_attempt_per_arm(monkeypatch):
     hosted = object.__new__(HostedCopilot)
     hosted.store = object()
     hosted.llm_daily_limit = 9
-    with pytest.raises(LLMUnavailable, match="MODEL_NETWORK_UNAVAILABLE"):
-        hosted._narrate_arms(model=Model(), pair="saved", prompt="test", run_id="offline")
+    result = hosted._narrate_arms(
+        model=Model(), pair="saved", prompt="test", run_id="offline",
+    )
+    assert result == ("original", None)
     assert calls == {"off": 1, "on": 1, "reserve": 2}
+
+
+def test_fallback_single_saved_rank_not_misreported_as_inconsistent():
+    observation = {
+        "decision_id": "brand_selection",
+        "ranked_candidate_ids": ["Puma", "Adidas"],
+    }
+    shared = {"observations": [observation]}
+    original = {
+        "qloo": shared,
+        "decisions": [{
+            "decision_id": "brand_selection", "candidate_id": "Puma",
+            "qloo_observation": observation,
+        }],
+    }
+    reviewed = {
+        "qloo": shared,
+        "decisions": [{
+            "decision_id": "brand_selection", "candidate_id": "Puma",
+            "qloo_observation": observation, "ofc_verdict": "PASS",
+            "ofc_reason": "QLOO_RANK_RECHECK_MATCHED",
+            "rank_recheck_completed": True,
+        }],
+    }
+    off = HostedCopilot._evidence_only_answer(original, mode="off", cities=())
+    on = HostedCopilot._evidence_only_answer(reviewed, mode="on", cities=())
+    assert "Puma > Adidas" in off and "Puma > Adidas" in on
+    assert "Independent Qloo rank recheck matched" in on
+    assert "Independent Qloo rank recheck matched" not in off
+    assert "consistent ordering" not in off + on
+    assert "Original choice (brand_selection): Puma" in off
+    assert "OFC choice (brand_selection): Puma" in on
+    assert "No booking, partnership or other external action" in on
+
+
+def test_fallback_never_combines_distinct_decision_rankings():
+    first = {"decision_id": "brand", "ranked_candidate_ids": ["Nike", "Adidas"]}
+    second = {"decision_id": "venue", "ranked_candidate_ids": ["A", "B"]}
+    output = HostedCopilot._evidence_only_answer({
+        "qloo": {"observations": [first, second]},
+        "decisions": [
+            {"decision_id": "brand", "candidate_id": "Nike",
+             "qloo_observation": first},
+            {"decision_id": "venue", "candidate_id": "A",
+             "qloo_observation": second},
+        ],
+    }, mode="off", cities=())
+    assert "Recorded Qloo cultural ranking (brand): Nike > Adidas" in output
+    assert "Recorded Qloo cultural ranking (venue): A > B" in output
+    assert "consistent ordering" not in output
