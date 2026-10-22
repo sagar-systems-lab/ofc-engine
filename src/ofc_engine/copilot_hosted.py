@@ -1406,8 +1406,7 @@ class HostedCopilot:
                 "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
                 "MODEL_FINISH_REJECTED", "MODEL_DRAFT_JSON_INVALID",
                 "MODEL_DRAFT_SCHEMA_INVALID", "MODEL_NETWORK_UNAVAILABLE",
-                "MODEL_TIMEOUT", "PROVIDER_HTTP_502", "PROVIDER_HTTP_503",
-                "PROVIDER_HTTP_504",
+                "MODEL_TIMEOUT",
             }
             safe = self._provider_outage_reason(code) or (
                 code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
