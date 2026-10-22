@@ -74,7 +74,7 @@ def test_gemini_narration_marks_output_truncation_without_retry():
     with pytest.raises(LLMUnavailable, match="MODEL_OUTPUT_TRUNCATED"):
         model.narrate_arm(pair, prompt=prompt, mode="off")
     assert len(fake.calls) == 1
-    assert fake.timeouts == [20.0]
+    assert fake.timeouts == [45.0]
     config = fake.calls[0]["generationConfig"]
     assert config["thinkingConfig"]["thinkingLevel"] == "minimal"
     assert config["maxOutputTokens"] == 2048
@@ -131,6 +131,9 @@ def test_fallback_single_saved_rank_not_misreported_as_inconsistent():
     assert "Puma > Adidas" in off and "Puma > Adidas" in on
     assert "Independent Qloo rank recheck matched" in on
     assert "Independent Qloo rank recheck matched" not in off
+    assert "Your original choice matches the top recorded Qloo cultural rank" in off
+    assert "OFC preserved this choice after review" in on
+    assert "independently check sponsorship rights" in off
     assert "consistent ordering" not in off + on
     assert "Original choice (brand_selection): Puma" in off
     assert "OFC choice (brand_selection): Puma" in on
