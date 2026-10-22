@@ -243,10 +243,10 @@
     const code = String(value?.reason_code || "");
     if (status === "BLOCKED" &&
         ["MODEL_NETWORK_UNAVAILABLE", "MODEL_TIMEOUT",
-         "PROVIDER_HTTP_502", "PROVIDER_HTTP_503", "PROVIDER_HTTP_504"].includes(code)) {
+         "MODEL_PROVIDER_UNAVAILABLE"].includes(code)) {
       const connection = code === "MODEL_TIMEOUT"
         ? "The model timed out during initial plan understanding."
-        : code.startsWith("PROVIDER_HTTP_")
+        : code === "MODEL_PROVIDER_UNAVAILABLE"
         ? "The AI provider was temporarily unavailable during initial plan understanding."
         : "The model connection failed during initial plan understanding.";
       const qloo = value?.qloo_requests_this_run === 0
@@ -404,7 +404,7 @@
       assistant.append(tag);
       if (run.status === "BLOCKED" &&
           ["MODEL_TIMEOUT", "MODEL_NETWORK_UNAVAILABLE",
-           "PROVIDER_HTTP_502", "PROVIDER_HTTP_503", "PROVIDER_HTTP_504"].includes(run.reason_code) &&
+           "MODEL_PROVIDER_UNAVAILABLE"].includes(run.reason_code) &&
           typeof run.prompt === "string" && run.prompt.length <= 4000) {
         const prepare = node("button", "result-action", "Prepare a new attempt");
         prepare.type = "button";
