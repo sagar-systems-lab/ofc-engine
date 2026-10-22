@@ -101,6 +101,7 @@ def test_manual_parent_requires_same_session_prompt_and_network_failure():
     for kwargs in [
         {"reason": "PROVIDER_HTTP_429"},
         {"reason": "PROVIDER_HTTP_503"},
+        {"reason": "COPILOT_EVIDENCE_UNAVAILABLE"},
         {"status": "COMPLETE"},
         {"prompt_digest": "f" * 64},
         {"attempts": 1},
