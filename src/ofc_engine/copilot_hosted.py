@@ -389,6 +389,12 @@ class HostedCopilot:
             "clarification_question": None,
         })
 
+    @staticmethod
+    def _provider_outage_reason(code: str) -> str | None:
+        if re.fullmatch(r"PROVIDER_HTTP_5[0-9]{2}", code):
+            return "MODEL_PROVIDER_UNAVAILABLE"
+        return None
+
     def _validate_confirmed_parent(self, session_id: str, parent_run_id: str | None,
                                    prompt: str) -> None:
         if (not isinstance(parent_run_id, str)
@@ -407,6 +413,7 @@ class HostedCopilot:
                 or record.get("status") != "BLOCKED"
                 or record.get("reason_code") not in (
                     "MODEL_TIMEOUT", "MODEL_NETWORK_UNAVAILABLE",
+                    "MODEL_PROVIDER_UNAVAILABLE",
                 )
                 or row[4] != sha256(prompt.strip().encode()).hexdigest()
                 or record.get("qloo_requests_this_run", 0) != 0):
@@ -1401,7 +1408,9 @@ class HostedCopilot:
                 "MODEL_DRAFT_SCHEMA_INVALID", "MODEL_NETWORK_UNAVAILABLE",
                 "MODEL_TIMEOUT",
             }
-            safe = code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
+            safe = self._provider_outage_reason(code) or (
+                code if code in known else "COPILOT_EVIDENCE_UNAVAILABLE"
+            )
             result = {
                 "schema_version": "copilot.v1",
                 "run_id": run_id, "status": "BLOCKED", "reason_code": safe,

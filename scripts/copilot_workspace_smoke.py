@@ -728,7 +728,12 @@ def qualify_selection(origin: str) -> dict:
 
 def qualify_confirmed_intake(origin: str) -> dict:
     results = []
-    for width, height in ((1440, 900), (390, 844)):
+    for width, height, outage in (
+        (1440, 900, "MODEL_PROVIDER_UNAVAILABLE"),
+        (390, 844, "MODEL_PROVIDER_UNAVAILABLE"),
+        (1440, 900, "MODEL_NETWORK_UNAVAILABLE"),
+        (390, 844, "MODEL_TIMEOUT"),
+    ):
         with sync_playwright() as engine:
             browser = engine.chromium.launch(
                 headless=True, executable_path=os.environ.get("OFC_CHROMIUM_PATH"),
@@ -740,7 +745,7 @@ def qualify_confirmed_intake(origin: str) -> dict:
             saved = []
             failed = {
                 "run_id": FAKE_RUN, "status": "BLOCKED",
-                "reason_code": "MODEL_NETWORK_UNAVAILABLE",
+                "reason_code": outage,
                 "qloo_requests_this_run": 0, "llm_requests_this_run": 1,
                 "release_authorized": False, "external_action_executed": False,
             }
@@ -818,7 +823,8 @@ def qualify_confirmed_intake(origin: str) -> dict:
                 page.get_by_text("Manual intake boundary accepted.").wait_for(
                     state="visible", timeout=8000)
                 assert len(posted) == 2 and not provider_calls
-                results.append({"viewport": width, "confirmed_plan_scoped": True,
+                results.append({"viewport": width, "outage": outage,
+                                "confirmed_plan_scoped": True,
                                 "cancel_has_no_spend": True})
             finally:
                 context.close()

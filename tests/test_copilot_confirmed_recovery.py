@@ -45,6 +45,23 @@ def test_manual_plan_fails_closed_on_invalid_identity(mutate):
         HostedCopilot._confirmed_intake_plan(value)
 
 
+@pytest.mark.parametrize("code", [
+    "PROVIDER_HTTP_500", "PROVIDER_HTTP_502", "PROVIDER_HTTP_503",
+    "PROVIDER_HTTP_504", "PROVIDER_HTTP_529",
+])
+def test_model_5xx_maps_to_scoped_recoverable_reason(code):
+    assert HostedCopilot._provider_outage_reason(code) == "MODEL_PROVIDER_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("code", [
+    "PROVIDER_HTTP_429", "PROVIDER_HTTP_401", "PROVIDER_HTTP_403",
+    "MODEL_NETWORK_UNAVAILABLE", "MODEL_TIMEOUT", "COPILOT_EVIDENCE_UNAVAILABLE",
+    "PROVIDER_HTTP_5XX",
+])
+def test_non_provider_5xx_not_misclassified_as_outage(code):
+    assert HostedCopilot._provider_outage_reason(code) is None
+
+
 def test_manual_parent_requires_same_session_prompt_and_network_failure():
     run_id = "cp-run-" + "1" * 32
     prompt = "Which brand fits Billie Eilish: Nike or Adidas? I prefer Nike."
@@ -80,8 +97,11 @@ def test_manual_parent_requires_same_session_prompt_and_network_failure():
 
     check()
     check(reason="MODEL_TIMEOUT")
+    check(reason="MODEL_PROVIDER_UNAVAILABLE")
     for kwargs in [
         {"reason": "PROVIDER_HTTP_429"},
+        {"reason": "PROVIDER_HTTP_503"},
+        {"reason": "COPILOT_EVIDENCE_UNAVAILABLE"},
         {"status": "COMPLETE"},
         {"prompt_digest": "f" * 64},
         {"attempts": 1},
