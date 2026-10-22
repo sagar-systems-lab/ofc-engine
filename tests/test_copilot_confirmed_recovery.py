@@ -80,6 +80,8 @@ def test_manual_parent_requires_same_session_prompt_and_network_failure():
 
     check()
     check(reason="MODEL_TIMEOUT")
+    for reason in ("PROVIDER_HTTP_502", "PROVIDER_HTTP_503", "PROVIDER_HTTP_504"):
+        check(reason=reason)
     for kwargs in [
         {"reason": "PROVIDER_HTTP_429"},
         {"status": "COMPLETE"},
