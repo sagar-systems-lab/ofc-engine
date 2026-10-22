@@ -60,9 +60,11 @@ def test_gemini_narration_marks_output_truncation_without_retry():
     class TruncatingTransport:
         def __init__(self):
             self.calls = []
+            self.timeouts = []
 
         def post(self, url, headers, data, *, timeout, max_bytes):
             self.calls.append(json.loads(data))
+            self.timeouts.append(timeout)
             envelope = {"candidates": [{"finishReason": "MAX_TOKENS"}]}
             return JSONReply(status=200, body=json.dumps(envelope).encode())
 
@@ -72,6 +74,7 @@ def test_gemini_narration_marks_output_truncation_without_retry():
     with pytest.raises(LLMUnavailable, match="MODEL_OUTPUT_TRUNCATED"):
         model.narrate_arm(pair, prompt=prompt, mode="off")
     assert len(fake.calls) == 1
+    assert fake.timeouts == [20.0]
     config = fake.calls[0]["generationConfig"]
     assert config["thinkingConfig"]["thinkingLevel"] == "minimal"
     assert config["maxOutputTokens"] == 2048
