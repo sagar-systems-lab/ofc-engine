@@ -729,8 +729,8 @@ def qualify_selection(origin: str) -> dict:
 def qualify_confirmed_intake(origin: str) -> dict:
     results = []
     for width, height, outage in (
-        (1440, 900, "PROVIDER_HTTP_503"),
-        (390, 844, "PROVIDER_HTTP_503"),
+        (1440, 900, "MODEL_PROVIDER_UNAVAILABLE"),
+        (390, 844, "MODEL_PROVIDER_UNAVAILABLE"),
         (1440, 900, "MODEL_NETWORK_UNAVAILABLE"),
         (390, 844, "MODEL_TIMEOUT"),
     ):
