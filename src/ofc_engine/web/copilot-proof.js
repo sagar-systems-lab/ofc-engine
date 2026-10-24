@@ -485,7 +485,11 @@
     const body=assistant.querySelector(".message-copy") || assistant;
     const advisory=advisoryPanel(run,pair,mode);
     if(advisory)body.append(advisory);
-    body.append(decisionBrief(run,pair,mode));
+    const narrative=make("section","narrative-section");
+    narrative.append(make("h3","","Model explanation · not independently verified"),
+      make("p","",readable.trim()?readable:
+        "The saved model explanation is unavailable. Use the evidence and controls above."));
+    body.append(narrative,decisionBrief(run,pair,mode));
     const flow=decisionFlow(run,pair,mode);
     if(flow)body.append(flow);
     if(pair){
@@ -524,11 +528,6 @@
     section.append(footer,make("p","result-legal",
       "Saved cultural review · further checks required · external action withheld"));
     assistant.append(section);
-    const narrative=make("section","narrative-section");
-    narrative.append(make("h3","","Model explanation · not independently verified"),
-      make("p","",readable.trim()?readable:
-        "The saved model explanation is unavailable. Use the evidence and controls above."));
-    assistant.append(narrative);
     return assistant;
   };
   const syncProof=run=>{
