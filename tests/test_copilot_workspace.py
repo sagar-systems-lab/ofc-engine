@@ -199,7 +199,7 @@ def test_decision_advisory_is_saved_evidence_only():
     assert 'if(!pair)return null;' in js
     assert "const ranked=rankedEvidence(pair);" in js
     assert 'reviewed.ofc_reason==="QLOO_RANK_RECHECK_MATCHED"' in js
-    assert "mode===\\"OFF\\"?\\"Starting choice: \\"+choice" in js
+    assert 'mode==="OFF"?"Starting choice: "+choice' in js
     assert "No qualified brand recommendation yet" in js
     assert "No deal, booking or payment is authorized" in js
     assert "advisoryPanel(run,pair,mode)" in js
