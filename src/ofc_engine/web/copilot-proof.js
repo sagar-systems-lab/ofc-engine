@@ -382,6 +382,92 @@
     return panel;
   };
 
+  const advisoryPanel=(run,pair,mode)=>{
+    if(!pair)return null;
+    const brands=[...pair.before].filter(([,choice])=>choice.domain==="brand");
+    if(!brands.length)return null;
+    const panel=make("section","answer-advisory");
+    panel.setAttribute("aria-label","Evidence-grounded recommendation and next actions");
+    panel.append(make("p","advisory-eyebrow",
+      mode==="ON"?"OFC decision advisory · saved evidence":"Original decision · OFC controls not applied"));
+    const ranked=rankedEvidence(pair);
+    const requirements=new Map([
+      ["budget_feasibility","Confirm negotiated cost, fees and budget fit"],
+      ["contract_rights","Verify partnership rights and required approvals"],
+      ["local_audience","Validate the actual target audience and geography"],
+      ["venue_availability","Verify venue or campaign availability"],
+    ]);
+    for(const [key,old] of brands.slice(0,3)){
+      const reviewed=pair.after.get(key);
+      const choice=mode==="ON"?reviewed.candidate_id:old.candidate_id;
+      const rank=ranked.find(item=>item.decision_id===key);
+      const qualified=Boolean(rank?.rank_recheck_matched &&
+        rank.ranked_candidates[0]===reviewed.candidate_id &&
+        reviewed.ofc_verdict==="PASS" &&
+        reviewed.ofc_reason==="QLOO_RANK_RECHECK_MATCHED");
+      const changed=reviewed.candidate_id!==old.candidate_id;
+      const artist=name(run.plan?.artist_name);
+      const item=make("article","advisory-decision");
+      item.append(make("span","advisory-context",
+        (artist?artist+" · ":"")+"Brand decision"));
+      const headline=mode==="OFF"?"Starting choice: "+choice
+        :qualified?(changed?"Revise choice to ":"Keep original choice: ")+choice
+          :"No qualified brand recommendation yet";
+      item.append(make("h2","advisory-title",headline));
+      const basis=mode==="OFF"
+        ?"This is the unmodified proposal, not an OFC endorsement. The Qloo candidate ranking below is shared with the reviewed view."
+        :qualified
+          ?"The saved OFC verdict agrees with two matching Qloo rank observations for the declared shortlist. "+
+            "This is a relative cultural ranking from one provider—not audience conversion, commercial availability or a confidence percentage."
+          :"The saved control record does not establish a matching qualified top-ranked brand for this decision. Do not present the choice as verified.";
+      item.append(make("p","advisory-basis",basis));
+      const evidence=make("div","advisory-evidence");
+      evidence.append(make("strong","advisory-label","Observed Qloo shortlist"));
+      if(rank){
+        const ordered=make("ol","advisory-ranking");
+        for(const candidate of rank.ranked_candidates.slice(0,5)){
+          const li=make("li","advisory-rank-item",candidate);
+          ordered.append(li);
+        }
+        evidence.append(ordered);
+        evidence.append(make("p","advisory-footnote",rank.rank_recheck_matched
+          ?"Two scoped ranking observations matched · same Qloo provider"
+          :"Repeat ranking was not qualified as matching"));
+      }else evidence.append(make("p","advisory-footnote",
+        "No qualified repeated ranking is available for this decision."));
+      item.append(evidence);
+      const insights=make("div","advisory-insights");
+      const insight=(heading,copy)=>{
+        const cell=make("div","advisory-insight");
+        cell.append(make("h3","",heading),make("p","",copy));
+        insights.append(cell);
+      };
+      insight("What the comparison means",
+        rank?.rank_recheck_matched
+          ?"Within this named shortlist, "+rank.ranked_candidates[0]+
+            " ranked first. Other brands could still win on price, rights or campaign goals not checked by this ranking."
+          :"The current saved evidence does not justify a reliable cultural winner. Unverified alternatives remain open.");
+      insight("When to reconsider",
+        "Reassess if the candidate pool, artist or audience target changes, a fresh scoped rank conflicts, "+
+        "or independently checked commercial terms favour a different option.");
+      const missing=run.business_verification?.missing_requirements?.[key];
+      const checks=Array.isArray(missing)
+        ? [...new Set(missing.filter(x=>requirements.has(x)))].map(x=>requirements.get(x))
+        : [];
+      const next=checks.length?checks.join("; "):
+        "Verify contract rights, full campaign cost and audience-market fit";
+      insight("Before committing",next+
+        ". No deal, booking or payment is authorized by this review.");
+      item.append(insights);
+      panel.append(item);
+    }
+    if(brands.length>3)panel.append(make("p","advisory-footnote",
+      "Showing 3 brand decisions; use the decision map and proof for the full recorded plan."));
+    panel.append(make("p","advisory-disclaimer",
+      "Advice derived from the saved decision record. Rankings do not prove real-world partnership success."));
+    return panel;
+  };
+
   const renderRun=(run,mode,makeMessage)=>{
     if(run.status!=="REVIEW_REQUIRED")return false;
     const answer=mode==="ON"?run.ofc_answer:run.original_answer;
@@ -397,6 +483,8 @@
     section.append(heading);
     const pair=pairing(run);
     const body=assistant.querySelector(".message-copy") || assistant;
+    const advisory=advisoryPanel(run,pair,mode);
+    if(advisory)body.append(advisory);
     body.append(decisionBrief(run,pair,mode));
     const flow=decisionFlow(run,pair,mode);
     if(flow)body.append(flow);
