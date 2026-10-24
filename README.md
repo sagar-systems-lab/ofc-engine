@@ -1,6 +1,6 @@
 # OFC Engine
 
-**Pre-execution decision control for AI agents.** OFC freezes a proposed plan, checks bounded evidence, repairs only an allowed choice, records the revision, and refuses to release an inadequately verified action.
+**Can an AI agent explain why it chose a brand—and know when not to act?** OFC Engine reviews an agent's proposed cultural decision against scoped Qloo evidence before anything is approved. It can preserve the original choice, selectively revise a supported choice, or withhold a decision when the evidence is insufficient. Every outcome is saved for inspection.
 
 **Live Copilot:** https://ofc-fixture-preview.onrender.com/
 
@@ -11,6 +11,14 @@ The hosted Copilot accepts the visitor's own natural-language cultural decision 
 The Copilot also retains structured multi-city and dependent choices. Non-brand or locality evidence is **not policy-qualified**: such decisions remain unverified, never receive a fabricated PASS, and may be skipped when conserving daily provider capacity. Business readiness, bookings and other external actions remain withheld. Use the on-screen scope guide and synthetic scenarios to explore without spending provider quota.
 
 A separate **recorded tour** at [the legacy Studio](https://ofc-fixture-preview.onrender.com/studio.html#plan) displays one historical Qloo observation. It is read-only and must not be confused with the newly submitted live Copilot or its independent rank recheck.
+
+## One decision, two outcomes
+
+Imagine a team has already picked Brand A for an artist partnership but wants to evaluate Brand B. The Copilot freezes that original choice, uses Qloo to resolve the named entities and compare the fixed shortlist, and checks the brand ranking twice. **OFF** shows the unchanged starting decision with the same Qloo observations; **ON** shows whether OFC preserved or revised that single eligible choice. The decision map and proof export show the observed ranking, what changed, and what remains unresolved.
+
+If the repeated rank supports Brand A, preserving it is a successful review. If a qualified rank supports Brand B instead, OFC may revise that choice. Missing, conflicting or unsupported evidence must not become an invented endorsement. Either way, a cultural-rank verdict does **not** clear contract rights, fees, availability or other business conditions. This is a scoped decision-control demonstration, not an estimate of real campaign outcomes.
+
+**Try it:** [Open the live Copilot](https://ofc-fixture-preview.onrender.com/) or [use the provider-free evaluation path](docs/JUDGE_GUIDE.md). The latter labels synthetic and historical evidence separately.
 
 ## Recorded tour — historical evidence
 
