@@ -30,7 +30,7 @@ The public showcase can remain readable after its original browser ticket expire
 - Run the repository CI and browser qualification at the exact deployed SHA; confirm the real website shows the observed Qloo repair and all blocked/uncertain decisions. Verify cold restart, 320px layout, no private values in public responses and no second Qloo call.
 - Review the full Git history and all files for secrets, private raw provider captures, credential-bearing URLs and third-party data publication restrictions.
 - Make the GitHub repository public only after the operator authorizes the reviewed source. Confirm the MIT LICENSE and all setup instructions are visible.
-- Submit `https://ofc-fixture-preview.onrender.com` and the public repository to the official Qloo Agentic Hackathon at `https://qloo.devpost.com/`. The judging period is November 2–16, 2026; keep the website usable throughout.
+- Submit `https://ofc-fixture-preview.onrender.com` and the public repository to the official Qloo Agentic Hackathon at `https://qloo.devpost.com/`. The official judging period is November 2–5, 2026; keep the website usable throughout the period.
 - Include a truthful English project description and save the actual Devpost submission receipt. A working hosted preview or passing tests alone are **not** a submission.
 
 Neither the one-query result nor a blocked handoff should be presented as independent verification of every tour choice.
