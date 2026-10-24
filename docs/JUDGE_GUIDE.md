@@ -4,13 +4,19 @@
 
 OFC Engine is a pre-execution **cultural decision reviewer**, not a replacement for a general-purpose conversational model. It grounds one bounded proposed action in Qloo observations, selectively revises the supported mutable choice and records what remained unverified.
 
+## What the product actually demonstrates
+
+A fluent assistant can argue for either brand. OFC instead keeps the proposed choice and candidate pool fixed, checks Qloo's relative cultural ranking inside that pool, independently repeats that scoped ranking, and shows the **same-evidence** comparison before and after OFC's policy decision. A preserved choice is as meaningful as a supported revision. The saved proof also explains why a culturally preferred candidate is **not** automatically approved for a commercial partnership.
+
+The observable result is a reviewable *decision boundary*, not a claim that a brand partnership is available, affordable or likely to succeed.
+
 ## First look (no provider spend)
 
-1. Open the [hosted application](https://ofc-fixture-preview.onrender.com/) and read its supported-scope notice.
+1. Open the [hosted application](https://ofc-fixture-preview.onrender.com/) and read its supported-scope notice. The core live demonstration is **artist → two to five named brands → original brand choice**.
 2. Open the flask icon's explicitly **synthetic** scenarios to see how OFC handles a repair, preservation or withheld decision. These scenarios are fixtures, not live Qloo responses.
 3. For a real historical Qloo observation, visit the [recorded Studio tour](https://ofc-fixture-preview.onrender.com/studio.html#plan). Its one saved ranking is distinct from the live Copilot's two-observation check.
 
-To evaluate a **new live request**, supply a named artist, two to five named brand candidates and your original choice. Confirm the provider usage before Send; ambiguous entity names may require selection. The Copilot's live result includes a decision brief, a graph of the **saved review stages** (not synthetic plan dependencies), OFF/ON comparison and downloadable proof. Neither OFF/ON switching nor viewing saved history calls Qloo again.
+To evaluate a **new live request**, supply a named artist, two to five named brand candidates and your original choice. For example, an ordinary question is: *"We're weighing Brand A against Brand B for Artist X; our team currently prefers A. Which choice is supported by the available cultural evidence, and what should we still verify before signing anything?"* Replace these placeholders with real names when running a live query. Confirm the provider usage before Send; ambiguous entity names may require selection. The Copilot's live result includes a decision brief, a graph of the **saved review stages** (not synthetic plan dependencies), OFF/ON comparison and downloadable proof. Neither OFF/ON switching nor viewing saved history calls Qloo again.
 
 The application runs on a free Render instance. Hosting and external model/Qloo calls can take 2–3 minutes or longer; that is **not a completion-time guarantee**. Keep the request tab open while exploring Plan Review or Lab in a separate tab. Global provider quotas are shared across visitors. If capacity is exhausted, use the synthetic exploration path rather than resubmitting the same request.
 
