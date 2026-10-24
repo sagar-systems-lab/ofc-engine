@@ -203,6 +203,7 @@ def test_decision_advisory_is_saved_evidence_only():
     assert "No qualified brand recommendation yet" in js
     assert "No deal, booking or payment is authorized" in js
     assert "advisoryPanel(run,pair,mode)" in js
+    assert js.index("body.append(narrative,decisionBrief(run,pair,mode))") < js.index("const flow=decisionFlow(run,pair,mode);")
     assert ".advisory-insights{" in css
     assert "@media(max-width:900px)" in css
 
