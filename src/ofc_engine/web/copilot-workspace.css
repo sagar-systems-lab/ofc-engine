@@ -324,6 +324,36 @@ a{text-decoration:none;color:inherit}
 
 
 
+
+/* Saved-record recommendation, always subordinate to evidence qualification. */
+.answer-advisory{margin:4px 0 16px;padding:18px;border:1px solid #bfd7f2;border-radius:18px;
+  background:#fff;box-shadow:0 9px 26px rgba(28,72,135,.07);white-space:normal}
+.advisory-eyebrow{margin:0 0 13px!important;font-size:10px!important;font-weight:780;letter-spacing:.06em;
+  text-transform:uppercase;color:#477cae!important}
+.advisory-decision+.advisory-decision{border-top:1px solid #e2ecf7;margin-top:18px;padding-top:17px}
+.advisory-context{font-size:11px;color:#5277a2;font-weight:650}
+.advisory-title{font-size:clamp(18px,2vw,22px);line-height:1.28;letter-spacing:-.025em;
+  color:#102f55;margin:5px 0 10px;overflow-wrap:anywhere}
+.advisory-basis{font-size:13px!important;line-height:1.7!important;color:#345475!important;margin:0 0 14px!important}
+.advisory-evidence{background:#f5f9ff;border:1px solid #e0ebf9;border-radius:12px;padding:13px 14px}
+.advisory-label{display:block;font-size:11px;color:#3d6795;margin-bottom:9px}
+.advisory-ranking{list-style:none;counter-reset:ofc-rank;display:flex;flex-wrap:wrap;gap:7px;margin:0;padding:0}
+.advisory-rank-item{counter-increment:ofc-rank;display:flex;align-items:center;gap:7px;
+  padding:6px 10px;border:1px solid #ccddf2;border-radius:9px;background:#fff;
+  color:#1e456f;font-size:12px;font-weight:650;overflow-wrap:anywhere}
+.advisory-rank-item::before{content:counter(ofc-rank);border-radius:50%;background:#e6f0fc;
+  color:#376ca4;font-size:10px;display:grid;place-items:center;width:18px;height:18px;flex-shrink:0}
+.advisory-footnote{font-size:10px!important;line-height:1.55!important;color:#667f9d!important;
+  margin:8px 0 0!important}
+.advisory-insights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:11px}
+.advisory-insight{border:1px solid #e4edf7;border-radius:11px;padding:12px;background:#fff}
+.advisory-insight h3{font-size:11px;font-weight:750;color:#245580;margin:0 0 7px}
+.advisory-insight p{margin:0!important;color:#47617e!important;font-size:12px!important;
+  line-height:1.55!important;overflow-wrap:anywhere}
+.advisory-disclaimer{font-size:10px!important;color:#637a96!important;
+  line-height:1.55!important;margin:11px 0 0!important}
+@media(max-width:900px){.advisory-insights{grid-template-columns:1fr}.answer-advisory{padding:14px}}
+
 .decision-brief{margin:3px 0 14px;padding:16px;border:1px solid #d4e4f7;
   border-radius:15px;background:#f8fbff;white-space:normal}
 .brief-heading{font-size:15px;color:#173657;letter-spacing:-.02em;margin:0 0 11px}
