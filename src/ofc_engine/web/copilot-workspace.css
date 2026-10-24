@@ -363,8 +363,8 @@ a{text-decoration:none;color:inherit}
 .brief-detail{font-size:12px;line-height:1.62;color:#233e61;margin:0;overflow-wrap:anywhere}
 .narrative-section{border-top:1px solid #e4edf7;padding:13px 3px 0;margin:16px 0 20px}
 .narrative-section h3{font-size:12px;font-weight:700;color:#516f90;margin:0 0 9px}
-.narrative-section p{font-size:13px;line-height:1.65;white-space:pre-wrap;
-  color:#36516d;overflow-wrap:anywhere;margin:0}
+.narrative-section p{font-size:14px;line-height:1.75;white-space:pre-wrap;
+  color:#284967;overflow-wrap:anywhere;margin:0}
 @media(max-width:520px){.brief-row{grid-template-columns:1fr;gap:2px}}
 
 
