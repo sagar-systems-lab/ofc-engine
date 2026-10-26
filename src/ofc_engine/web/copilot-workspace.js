@@ -212,6 +212,27 @@
 
   const selectedRun = () => state.runs.find(x => x.run_id === state.selected) || null;
 
+  const displayPrompt = value => {
+    const original = String(value || "");
+    if (!original.startsWith(
+          "NEW USER REQUEST: Discover alternative mountain destinations inspired by my existing cultural taste reference.") ||
+        !original.includes("Target Qloo discovery category: place.") ||
+        !original.includes("No bookings or external actions.")) return original;
+    const seed = /^Named taste seed: (.+?)\. Taste seed category: place\.$/m.exec(original)?.[1];
+    const style = /^Travel style: (.+?)\. Crowd preference: (.+?)\. Spending preference: (.+?)\.$/m.exec(original);
+    if (!seed || !style) return original;
+    const month = /^Travel month: (\d{4}-(?:0[1-9]|1[0-2]))\.$/m.exec(original)?.[1];
+    const region = /^Preferred destination region: (.+?)\.$/m.exec(original)?.[1];
+    const lines = [
+      "Find alternative places inspired by " + seed,
+      "Experience: " + style[1] + " · Crowd: " + style[2],
+      "Budget preference: " + style[3],
+    ];
+    if (month) lines.push("Travel month: " + month);
+    if (region) lines.push("Destination region: " + region);
+    return lines.join("\n");
+  };
+
   const renderHistory = () => {
     const list = el("conversation-list");
     list.replaceChildren();
@@ -227,9 +248,9 @@
     for (const run of runs) {
       const button = node("button", "conversation-row" + (state.selected === run.run_id ? " active" : ""));
       button.type = "button";
-      button.title = String(run.prompt || "Saved review");
+      button.title = displayPrompt(run.prompt || "Saved review");
       button.setAttribute("aria-current", state.selected === run.run_id ? "true" : "false");
-      button.append(node("span", "", String(run.prompt || "Saved review")));
+      button.append(node("span", "", displayPrompt(run.prompt || "Saved review").split("\n")[0]));
       button.append(node("time", "", String(run.status || "SAVED").replaceAll("_", " ")));
       button.addEventListener("click", () => {
         state.selected = run.run_id;
@@ -623,7 +644,7 @@
   const renderRun = (run) => {
     const box = el("chat-transcript");
     box.replaceChildren();
-    const text = String(run.prompt || state.pendingPrompt || "");
+    const text = displayPrompt(run.prompt || state.pendingPrompt || "");
     if (text) box.append(message("user", text));
     if (run.status === "PROCESSING") {
       const waiting = message("assistant", "");
