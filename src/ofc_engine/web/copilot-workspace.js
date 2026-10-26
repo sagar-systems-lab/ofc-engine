@@ -804,7 +804,7 @@
     el("chat-transcript").hidden = !visible;
     if (state.localNotice) {
       el("chat-transcript").replaceChildren(
-        message("user", state.localNotice.prompt),
+        message("user", displayPrompt(state.localNotice.prompt)),
         message("assistant", state.localNotice.detail)
       );
     } else if (run) renderRun(run);
@@ -812,7 +812,7 @@
       const box = el("chat-transcript");
       const waiting = message("assistant", "");
       waiting.querySelector(".message-copy").replaceWith(pendingPanel(null));
-      box.replaceChildren(message("user", state.pendingPrompt), waiting);
+      box.replaceChildren(message("user", displayPrompt(state.pendingPrompt)), waiting);
     } else {
       el("chat-transcript").replaceChildren();
     }
