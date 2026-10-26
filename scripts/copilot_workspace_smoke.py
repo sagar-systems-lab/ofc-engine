@@ -434,6 +434,17 @@ def qualify(origin: str) -> dict:
                     state="visible",
                 )
                 page.locator(".decision-brief").wait_for(state="visible")
+                # Read-only capability refresh must not replace the visible result.
+                page.evaluate("""() => {
+                    window.__stableDecisionBrief = document.querySelector(".decision-brief");
+                }""")
+                page.locator("#status-toggle").click()
+                page.locator("#status-rows .status-row").first.wait_for(state="visible")
+                page.wait_for_timeout(150)
+                assert page.evaluate(
+                    "document.querySelector('.decision-brief') === window.__stableDecisionBrief"
+                ), "Unchanged capability GET re-mounted the result panel"
+                page.locator("#status-close").click()
                 decision_brief = page.locator(".decision-brief").inner_text()
                 assert "Qloo observation" in decision_brief
                 assert "OFC intervention" in decision_brief
