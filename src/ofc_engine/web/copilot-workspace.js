@@ -859,6 +859,7 @@
       state.activeRequestId = null;
       state.pendingBaselineIds = null;
       setBusy(false);
+      render(); // Rebuild result actions after the response is no longer busy.
       monitor(); // Continue only if the saved run is still processing.
     }
   };
