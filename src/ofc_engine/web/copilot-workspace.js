@@ -459,6 +459,82 @@
     return true;
   };
 
+  const requestTasteAlternatives=(run,profile)=>{
+    if(state.busy || state.runs.length>=state.sessionMessageLimit){
+      statusText("Visitor session limit or active review prevents a new request. No provider call made.");
+      return false;
+    }
+    if(!run?._sessionReadConfirmed || run.status!=="REVIEW_REQUIRED" ||
+       !/^cp-run-[a-f0-9]{32}$/.test(run.run_id||"") ||
+       !run.on?.decisions?.some(d=>String(d.domain).toLowerCase()==="place" &&
+         (d.ofc_verdict!=="PASS" || d.ofc_reason!=="QLOO_RANK_RECHECK_MATCHED")))
+      return false;
+    const moods={
+      quiet_nature:"quiet mountain nature and peaceful scenery",
+      snow_views:"snow scenery and mountain views",
+      adventure:"hiking, adventure and outdoor activities",
+      cafes_culture:"local culture, food and cafés",
+      family_relaxation:"relaxed family-friendly travel",
+    };
+    const crowds={
+      avoid_crowds:"prefer quieter destinations",
+      balanced:"moderate activity is fine",
+      lively:"enjoy lively popular destinations",
+    };
+    const budgets={budget:"budget conscious",midrange:"mid-range",flexible:"flexible budget"};
+    if(!profile || typeof profile.seed!=="string" ||
+       !profile.seed.trim() || profile.seed.length>120 ||
+       /[\u0000-\u001f]/.test(profile.seed) ||
+       typeof profile.origin!=="string" || profile.origin.length>80 ||
+       /[\u0000-\u001f]/.test(profile.origin) ||
+       !Object.hasOwn(moods,profile.mood) ||
+       !Object.hasOwn(crowds,profile.crowds) ||
+       !Object.hasOwn(budgets,profile.budget) ||
+       (profile.month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(profile.month))){
+      statusText("Please correct your taste preferences. No request submitted.");
+      return false;
+    }
+    const remaining=state.capability?.capacity;
+    if(Number.isInteger(remaining?.qloo_requests_remaining) &&
+       remaining.qloo_requests_remaining<5){
+      statusText("At least 5 remaining Qloo requests required. No new review submitted.");
+      return false;
+    }
+    if(Number.isInteger(remaining?.llm_requests_remaining) &&
+       remaining.llm_requests_remaining<3){
+      statusText("At least 3 remaining model requests required. No new review submitted.");
+      return false;
+    }
+    const prompt=[
+      "NEW USER REQUEST: Discover alternative mountain destinations inspired by my existing cultural taste reference.",
+      "This is NOT approval of my previous place choice. I am seeking a NEW list of alternatives, not a comparison of previous choices.",
+      "Named taste seed: "+profile.seed.trim()+". Taste seed category: place.",
+      "Target Qloo discovery category: place. Extract discovery_category='place' and choices=[]; do not inherit the previous selected place as a fixed candidate.",
+      "Travel style: "+moods[profile.mood]+". Crowd preference: "+crowds[profile.crowds]+". Spending preference: "+budgets[profile.budget]+".",
+      profile.month?"Travel month: "+profile.month+".":"",
+      profile.origin?"Preferred destination region: "+profile.origin.trim()+".":"No destination region specified.",
+      "Use Qloo for scoped cultural discovery only. Show 2-5 observed candidates if returned, with provenance and uncertainty. Do not treat a hotel, café or guest house as a verified hill station.",
+      "Do not invent local attractions, budgets, weather, route time, pricing, audience scores, availability, lodging suitability or partnership approvals.",
+      "If Qloo results are not hill-station destinations or cannot be qualified, say so clearly and suggest how to refine the taste seed or region. No bookings or external actions."
+    ].filter(Boolean).join("\n");
+    if(prompt.length>4000){
+      statusText("Taste profile exceeds 4,000 characters. Shorten the reference/region.");return false;
+    }
+    state.pendingPrompt=prompt;
+    state.pendingSelection={parent_run_id:run.run_id};
+    el("run-confirm-budget").textContent=
+      "Taste Explorer: a NEW linked Qloo/model review, not a free retry. " +
+      "This may use up to 5 Qloo and 3 model requests and one visitor-session slot. " +
+      "Remaining Qloo: " +
+      (Number.isInteger(remaining?.qloo_requests_remaining)?remaining.qloo_requests_remaining:"unknown") +
+      ", model: " +
+      (Number.isInteger(remaining?.llm_requests_remaining)?remaining.llm_requests_remaining:"unknown") +
+      ". Nothing is spent unless you approve. Cultural place matches may include hotels or cafés; " +
+      "OFC cannot certify hill stations, travel conditions or the objectively best destination.";
+    if(!el("run-confirm").open)el("run-confirm").showModal();
+    return true;
+  };
+
   const clarificationPanel = run => {
     if (run.status !== "CLARIFICATION_REQUIRED" ||
         !["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code) ||
@@ -540,7 +616,7 @@
       waiting.querySelector(".message-copy").replaceWith(pendingPanel(run));
       box.append(waiting);
     } else if (run.status === "REVIEW_REQUIRED") {
-      const rendered = window.OFCResults?.renderRun(run, state.mode, message);
+      const rendered = window.OFCResults?.renderRun(run, state.mode, message, requestTasteAlternatives);
       if (rendered) box.append(rendered);
       else box.append(message("assistant", safeStatus("REVIEW_REQUIRED")));
     } else {
