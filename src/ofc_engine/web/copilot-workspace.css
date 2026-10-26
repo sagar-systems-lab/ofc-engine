@@ -354,6 +354,23 @@ a{text-decoration:none;color:inherit}
   line-height:1.55!important;margin:11px 0 0!important}
 @media(max-width:900px){.advisory-insights{grid-template-columns:1fr}.answer-advisory{padding:14px}}
 
+/* User-owned missing-detail continuation; no request until explicit confirmation. */
+.clarification-panel{margin:15px 0 9px;padding:16px;border:1px solid #cbdffa;
+  border-radius:15px;background:#f7fbff;white-space:normal}
+.clarification-heading{margin:0 0 7px;color:#173e70;font-size:15px}
+.clarification-help{margin:0 0 13px;color:#4e6788;font-size:12px;line-height:1.6}
+.clarification-field{display:flex;flex-direction:column;gap:6px;margin:10px 0;
+  font-size:11px;font-weight:700;color:#2d5482}
+.clarification-input,.clarification-type{width:100%;min-height:39px;
+  border:1px solid #bfd5ef;border-radius:9px;background:#fff;color:#1e406a;
+  font:inherit;font-size:13px;padding:9px 11px;outline-offset:2px}
+.clarification-input:focus-visible,.clarification-type:focus-visible{outline:2px solid #2279eb}
+.clarification-feedback{font-size:11px;color:#8b3c35;min-height:0;margin:5px 0}
+.clarification-continue{margin-top:6px;min-height:40px}
+.clarification-foot{margin:10px 0 0;font-size:11px;line-height:1.55;color:#617e9e}
+@media(max-width:570px){.clarification-panel{padding:13px}
+  .clarification-continue{width:100%}}
+
 .decision-brief{margin:3px 0 14px;padding:16px;border:1px solid #d4e4f7;
   border-radius:15px;background:#f8fbff;white-space:normal}
 .brief-heading{font-size:15px;color:#173657;letter-spacing:-.02em;margin:0 0 11px}
