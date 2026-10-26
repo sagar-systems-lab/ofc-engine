@@ -102,6 +102,11 @@
     el("attachment-remove").disabled = busy;
     el("chat-send").disabled = busy || state.runs.length >= state.sessionMessageLimit ||
       !composedPrompt() || composedPrompt().length > 4000;
+    const followUps = el("chat-transcript")?.querySelectorAll(
+      ".clarification-continue, .intake-recovery > .result-action, .message.assistant > .result-action"
+    );
+    for (const button of followUps || [])
+      button.disabled = busy || state.runs.length >= state.sessionMessageLimit;
     if (!busy) resizeComposer();
   };
 
@@ -382,6 +387,133 @@
     if (!el("run-confirm").open) el("run-confirm").showModal();
   };
 
+  const requestClarification = (run, detail, category) => {
+    if (state.busy || state.runs.length >= state.sessionMessageLimit) {
+      statusText("Session limit reached. No new provider request made.");
+      return false;
+    }
+    if (!/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
+        run.status !== "CLARIFICATION_REQUIRED" ||
+        !["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code) ||
+        typeof run.prompt !== "string" || !run.prompt.trim()) return false;
+    if (typeof detail !== "string" || !detail.trim() || detail.length > 240 ||
+        /[\u0000-\u001f]/.test(detail)) {
+      statusText("Enter the requested detail (up to 240 characters). Nothing submitted.");
+      return false;
+    }
+    const isSeed = run.reason_code !== "DECISIONS_MISSING";
+    if (isSeed && !["place", "artist", "brand", "movie"].includes(category)) return false;
+    const addition = isSeed
+      ? "\n\n--- USER-SUPPLIED CLARIFICATION ---\n" +
+        "Taste seed name: " + detail.trim() + "\n" +
+        "Taste seed category: " + category + "\n" +
+        "This is a user-provided cultural reference, not Qloo verification. " +
+        "Keep my original request and target category. If cultural discovery is unsupported, say so; " +
+        "do not invent travel, business or venue facts.\n--- END CLARIFICATION ---"
+      : "\n\n--- USER-SUPPLIED CLARIFICATION ---\n" +
+        detail.trim() + "\nContinue my original request without inventing evidence.\n" +
+        "--- END CLARIFICATION ---";
+    const prompt = run.prompt.trim() + addition;
+    if (prompt.length > 4000) {
+      statusText("Original request plus clarification exceeds 4,000 characters. Use a shorter detail or new request.");
+      return false;
+    }
+    const remaining = state.capability?.capacity;
+    if (Number.isInteger(remaining?.qloo_requests_remaining) &&
+        remaining.qloo_requests_remaining < 5) {
+      statusText("At least 5 Qloo requests must remain. No request submitted.");
+      return false;
+    }
+    if (Number.isInteger(remaining?.llm_requests_remaining) &&
+        remaining.llm_requests_remaining < 3) {
+      statusText("At least 3 model requests must remain. No request submitted.");
+      return false;
+    }
+    state.pendingPrompt = prompt;
+    state.pendingSelection = {parent_run_id: run.run_id};
+    el("run-confirm-budget").textContent =
+      "Continue this saved question with your provided detail. This is a NEW linked review, " +
+      "not an automatic retry. It may use up to 5 Qloo and 3 model requests. " +
+      "Current remaining: Qloo " +
+      (Number.isInteger(remaining?.qloo_requests_remaining) ? remaining.qloo_requests_remaining : "unknown") +
+      ", model " + (Number.isInteger(remaining?.llm_requests_remaining) ? remaining.llm_requests_remaining : "unknown") +
+      ". No provider request occurs until you confirm. Place discovery is cultural only: " +
+      "it cannot verify weather, transport, availability or the objectively best destination.";
+    if (!el("run-confirm").open) el("run-confirm").showModal();
+    return true;
+  };
+
+  const clarificationPanel = run => {
+    if (run.status !== "CLARIFICATION_REQUIRED" ||
+        !["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code) ||
+        !/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
+        typeof run.prompt !== "string") return null;
+    const isSeed = run.reason_code !== "DECISIONS_MISSING";
+    const panel = node("section", "clarification-panel");
+    panel.setAttribute("aria-label", "Provide missing details");
+    const title = node("h3", "clarification-heading",
+      isSeed ? "One detail needed to continue" : "What should OFC compare?");
+    const explanation = node("p", "clarification-help", isSeed
+      ? "What existing place, artist, movie or brand has the style you like? " +
+        "For a hill-station idea, enter a real place you already know. " +
+        "OFC can explore cultural similarity only; this is not a verified travel ranking."
+      : "Describe the specific candidates or choices you want reviewed. " +
+        "OFC will keep your original request.");
+    panel.append(title, explanation);
+    const field = node("label", "clarification-field");
+    field.append(node("span", "", isSeed ? "Known cultural reference" : "Additional choice details"));
+    const input = node(isSeed ? "input" : "textarea", "clarification-input");
+    if (isSeed) {
+      input.type = "text";
+      input.maxLength = 160;
+      input.placeholder = "e.g., a place you have enjoyed";
+    } else {
+      input.maxLength = 240;
+      input.rows = 3;
+      input.placeholder = "Which options should be compared?";
+    }
+    input.autocomplete = "off";
+    field.append(input);
+    panel.append(field);
+    let category = null;
+    if (isSeed) {
+      const kindLabel = node("label", "clarification-field");
+      kindLabel.append(node("span", "", "Reference type"));
+      category = node("select", "clarification-type");
+      for (const [value, label] of [
+        ["place", "Place"], ["artist", "Artist"], ["movie", "Movie"], ["brand", "Brand"]
+      ]) {
+        const option = node("option", "", label);
+        option.value = value;
+        category.append(option);
+      }
+      kindLabel.append(category);
+      panel.append(kindLabel);
+    }
+    const feedback = node("p", "clarification-feedback", "");
+    feedback.setAttribute("role", "status");
+    panel.append(feedback);
+    const button = node("button", "result-action clarification-continue", "Continue review");
+    button.type = "button";
+    button.disabled = state.busy || state.runs.length >= state.sessionMessageLimit;
+    button.addEventListener("click", () => {
+      const detail = input.value.trim();
+      if (!detail) {
+        feedback.textContent = "This detail is required. No request was sent.";
+        input.focus();
+        return;
+      }
+      if (!requestClarification(run, detail, category?.value || null)) {
+        feedback.textContent = el("composer-status").textContent;
+      } else {
+        feedback.textContent = "";
+      }
+    });
+    panel.append(button, node("p", "clarification-foot",
+      "Editing these fields is free. Only Continue → Confirm sends a new request and consumes a visitor slot."));
+    return panel;
+  };
+
   const renderRun = (run) => {
     const box = el("chat-transcript");
     box.replaceChildren();
@@ -396,8 +528,12 @@
       if (rendered) box.append(rendered);
       else box.append(message("assistant", safeStatus("REVIEW_REQUIRED")));
     } else {
-      const info = run.question && typeof run.question === "string"
-        ? run.question + "\n\n" + safeReason(run) : safeReason(run);
+      const promptedClarification = run.status === "CLARIFICATION_REQUIRED" &&
+        ["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code);
+      const info = promptedClarification
+        ? "I can continue with your original question. Please fill in the missing detail below."
+        : run.question && typeof run.question === "string"
+          ? run.question + "\n\n" + safeReason(run) : safeReason(run);
       const assistant = message("assistant", info);
       const tag = node("span", "message-state" + (run.status === "BLOCKED" ? " blocked" : ""),
         String(run.status || "UNKNOWN").replaceAll("_", " "));
@@ -488,6 +624,8 @@
         recovery.append(continueButton);
         assistant.append(recovery);
       }
+      const missingDetail = clarificationPanel(run);
+      if (missingDetail) assistant.append(missingDetail);
       if (run.status === "CLARIFICATION_REQUIRED" &&
           Array.isArray(run.suggestions) && run.suggestions.length) {
         const panel = node("div", "qloo-selection");
@@ -725,7 +863,7 @@
       state.pendingSelection = null;
       state.activeRequestId = null;
       state.pendingBaselineIds = null;
-      setBusy(false);
+      setBusy(false); // Re-enable saved follow-ups without clearing typed details.
       monitor(); // Continue only if the saved run is still processing.
     }
   };

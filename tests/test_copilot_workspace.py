@@ -207,3 +207,24 @@ def test_decision_advisory_is_saved_evidence_only():
     assert ".advisory-insights{" in css
     assert "@media(max-width:900px)" in css
 
+
+
+def test_missing_detail_continuation_is_scoped_and_confirmed():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    js = web.joinpath("copilot-workspace.js").read_text()
+    css = web.joinpath("copilot-workspace.css").read_text()
+    assert 'const clarificationPanel = run =>' in js
+    assert 'const requestClarification = (run, detail, category) =>' in js
+    assert '"TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"' in js
+    assert 'state.pendingSelection = {parent_run_id: run.run_id}' in js
+    assert 'run.prompt.trim() + addition' in js
+    assert 'if (prompt.length > 4000)' in js
+    assert 'No provider request occurs until you confirm.' in js
+    assert 'const missingDetail = clarificationPanel(run);' in js
+    assert 'if (missingDetail) assistant.append(missingDetail)' in js
+    assert '.clarification-panel{' in css
+    assert '.clarification-field{' in css
+    assert 'for (const button of followUps || [])' in js
+    assert 'button.disabled = busy || state.runs.length >= state.sessionMessageLimit' in js
+    assert 'setBusy(false); // Re-enable saved follow-ups without clearing typed details.' in js
