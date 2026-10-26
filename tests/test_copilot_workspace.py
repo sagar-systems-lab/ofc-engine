@@ -293,7 +293,8 @@ def test_saved_status_reconciliation_preserves_visible_dom():
     js = web.joinpath("copilot-workspace.js").read_text()
     css = web.joinpath("copilot-workspace.css").read_text()
     assert 'const contentChanged = JSON.stringify(nextRuns) !== JSON.stringify(state.runs)' in js
-    assert 'if (contentChanged || previousSelected !== state.selected)' in js
+    assert 'if (contentChanged || previousSelected !== state.selected ||' in js
+    assert 'previousLimit !== state.sessionMessageLimit)' in js
     assert 'if (priorLimit !== state.sessionMessageLimit) render()' in js
     assert '}, 8000);' in js
     assert 'AbortSignal.timeout(20000)' in js
