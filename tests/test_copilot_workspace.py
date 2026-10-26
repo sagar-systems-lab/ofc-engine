@@ -252,3 +252,35 @@ def test_unqualified_place_never_displays_unverified_narration():
     assert 'A discovered cafe, guest house or hotel is not necessarily a hill station' in js
     assert 'placeOnly?"Venue / commercial readiness":"Partnership readiness"' in js
     assert 'qualified repeated rank not established' in activity
+
+
+def test_taste_explorer_follows_saved_place_and_requires_user_approval():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    proof = web.joinpath("copilot-proof.js").read_text()
+    workspace = web.joinpath("copilot-workspace.js").read_text()
+    css = web.joinpath("copilot-workspace.css").read_text()
+    assert 'const tasteExplorer=(run,pair,mode,onTaste)=>' in proof
+    assert 'if(mode!=="ON" || !pair || !run._sessionReadConfirmed' in proof
+    assert 'No verified place winner — recommendation withheld' in proof
+    assert 'Find alternatives for my taste' in proof
+    assert 'Existing Qloo discovery · destination screening' in proof
+    assert "These are saved Qloo place entities, not qualified hill-station alternatives" in proof
+    assert "excluded from the destination shortlist" in proof
+    assert 'const requestTasteAlternatives=(run,profile)=>' in workspace
+    assert 'state.pendingSelection={parent_run_id:run.run_id}' in workspace
+    assert 'if(!el("run-confirm").open)el("run-confirm").showModal()' in workspace
+    assert 'window.OFCResults?.renderRun(run, state.mode, message, requestTasteAlternatives)' in workspace
+    assert 'No bookings or external actions.' in workspace
+    assert '.taste-form[hidden]{display:none}' in css
+    assert '@media(max-width:650px)' in css
+
+
+def test_new_taste_discovery_overrides_parent_choice_in_intake_guidance():
+    from pathlib import Path
+    instructions = (
+        Path(__file__).resolve().parents[1] / "src" / "ofc_engine" / "copilot_llm.py"
+    ).read_text()
+    assert "latest request explicitly asks to discover NEW alternatives" in instructions
+    assert "treat previous selections as history" in instructions
+    assert "Never present the taste seed as the chosen destination" in instructions
