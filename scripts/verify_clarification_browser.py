@@ -101,6 +101,13 @@ def check(base_url):
                 assert not posted
                 page.locator("#run-approve").click()
                 page.locator(".clarification-panel").wait_for(state="visible")
+                # A saved response may render before the request's finally block.
+                # Continue must become enabled once submission settles.
+                page.locator(".clarification-continue").wait_for(state="visible")
+                page.wait_for_function(
+                    "() => document.querySelector('.clarification-continue')?.disabled === false",
+                    timeout=10000,
+                )
                 assert len(posted) == 1
                 assert page.locator(".clarification-field").count() >= 1
                 assert page.locator(".clarification-feedback").count() == 1
