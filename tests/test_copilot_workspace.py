@@ -225,3 +225,4 @@ def test_missing_detail_continuation_is_scoped_and_confirmed():
     assert 'if (missingDetail) assistant.append(missingDetail)' in js
     assert '.clarification-panel{' in css
     assert '.clarification-field{' in css
+    assert 'setBusy(false);\n      render(); // Rebuild result actions after the response is no longer busy.' in js
