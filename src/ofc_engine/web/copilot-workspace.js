@@ -883,6 +883,8 @@
       // Identical saved GETs must not discard inputs, scroll or animate the chat.
       if (contentChanged || previousSelected !== state.selected)
         render();
+      if (el("composer-status").textContent.startsWith("Saved status read timed out"))
+        statusText("Saved session status recovered. No provider request was retried.");
     } catch (err) {
       if (err.message === "ACCESS_DENIED") {
         state.sessionId = null;
