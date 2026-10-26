@@ -150,6 +150,17 @@ def qualify(base_url):
                 page.locator(".taste-open").click()
                 page.locator(".taste-form").wait_for(state="visible")
                 assert page.locator(".taste-input").first.input_value() == "Manali Hills"
+                # A provider-status read must not remount an open, edited questionnaire.
+                page.locator(".taste-input").first.fill("Chamonix")
+                page.evaluate("window.__tastePanel = document.querySelector('.taste-explorer')")
+                with page.expect_response(lambda r: "/api/capabilities" in r.url):
+                    page.locator("#status-toggle").click()
+                assert page.evaluate(
+                    "document.querySelector('.taste-explorer') === window.__tastePanel"
+                ), "Capability refresh discarded the open Taste Explorer"
+                assert page.locator(".taste-input").first.input_value() == "Chamonix"
+                page.locator("#status-close").click()
+                page.locator(".taste-input").first.fill("Manali Hills")
                 assert len(posted) == 1
                 page.locator(".taste-select").nth(0).select_option("snow_views")
                 page.locator(".taste-select").nth(1).select_option("avoid_crowds")
