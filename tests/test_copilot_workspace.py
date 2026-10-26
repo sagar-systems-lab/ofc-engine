@@ -234,7 +234,7 @@ def test_processing_resync_is_read_only_and_bounded():
     from importlib.resources import files
     web = files("ofc_engine").joinpath("web")
     js = web.joinpath("copilot-workspace.js").read_text()
-    assert 'if (payload === undefined) opts.signal = AbortSignal.timeout(12000)' in js
+    assert 'if (payload === undefined) opts.signal = AbortSignal.timeout(20000)' in js
     assert 'state.syncing = true' in js and 'state.syncing = false' in js
     assert 'Check saved result' in js
     assert 'try { await restore(); } finally {' in js
