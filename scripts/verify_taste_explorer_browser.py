@@ -28,7 +28,7 @@ def parent_run():
         "taste_seed_category": "place", "cities": [],
         "choices": [{"decision_id": "taste_recommendation", "domain": "place",
                      "selected_name": "Karma Guest House", "candidate_names": [
-                         "Karma Guest House", "Hotel Cherry Manali", "Hotel Seraj"],
+                         "Karma Guest House", "Hotel Cherry Manali", "Hotel Seraj", "Shimla"],
                      "depends_on": []}],
     }
     native = {
@@ -36,7 +36,7 @@ def parent_run():
         "source_mode": "LIVE_HTTP_UNVERIFIED",
         "candidates": [{"name": "Karma Guest House"},
                        {"name": "Hotel Cherry Manali"},
-                       {"name": "Hotel Seraj"}],
+                       {"name": "Hotel Seraj"}, {"name": "Shimla"}],
         "policy_qualified": False,
         "business_verified": False,
     }
@@ -45,7 +45,7 @@ def parent_run():
     original = {
         "decision_id": "taste_recommendation", "domain": "place",
         "candidate_id": "Karma Guest House", "candidate_pool": [
-            "Karma Guest House", "Hotel Cherry Manali", "Hotel Seraj"],
+            "Karma Guest House", "Hotel Cherry Manali", "Hotel Seraj", "Shimla"],
         "cultural_rank_observed": False,
     }
     run["off"] = {
@@ -142,8 +142,10 @@ def qualify(base_url):
                 assert len(posted) == 1
                 assert "No verified place winner" in page.locator(".answer-advisory").inner_text()
                 assert "0.9789" not in page.locator("#chat-transcript").inner_text()
-                assert "Hotel Cherry Manali" in page.locator(".taste-observed").inner_text()
+                assert "Shimla" in page.locator(".taste-observed").inner_text()
+                assert "Hotel Cherry Manali" not in page.locator(".taste-observed").inner_text()
                 assert "not qualified hill-station alternatives" in page.locator(".taste-observed").inner_text()
+                assert "2 place result(s)" in page.locator(".taste-observed").inner_text()
                 assert page.locator(".taste-form").is_hidden()
                 page.locator(".taste-open").click()
                 page.locator(".taste-form").wait_for(state="visible")
