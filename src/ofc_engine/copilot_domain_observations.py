@@ -157,8 +157,27 @@ class HostedDomainObservations:
         try:
             capture = self.reviewer.client.probe(spec)
             result = normalize_discovery(capture, spec)
-        except (QlooProbeError, TasteEvidenceError):
-            return {"status": "UNCERTAIN", "reason_code": "QLOO_DISCOVERY_UNAVAILABLE"}
+        except QlooProbeError as exc:
+            if exc.code == "HTTP_429":
+                reason = "QLOO_DISCOVERY_PROVIDER_RATE_LIMITED"
+            elif exc.code in {"HTTP_401", "HTTP_403"}:
+                reason = "QLOO_DISCOVERY_PROVIDER_AUTH_REJECTED"
+            elif exc.code.startswith("HTTP_5"):
+                reason = "QLOO_DISCOVERY_PROVIDER_UNAVAILABLE"
+            elif exc.code in {"NETWORK_ERROR", "TRANSPORT_ERROR"}:
+                reason = "QLOO_DISCOVERY_PROVIDER_NETWORK_UNAVAILABLE"
+            else:
+                reason = "QLOO_DISCOVERY_PROVIDER_REJECTED"
+            return {"status": "UNCERTAIN", "reason_code": reason}
+        except TasteEvidenceError as exc:
+            reason = str(exc)
+            if reason not in {
+                "QLOO_DISCOVERY_INSUFFICIENT_RESULTS",
+                "QLOO_DISCOVERY_AFFINITY_MISSING",
+                "QLOO_DISCOVERY_RANK_AMBIGUOUS",
+            }:
+                reason = "QLOO_DISCOVERY_EVIDENCE_UNQUALIFIED"
+            return {"status": "UNCERTAIN", "reason_code": reason}
         with store._connect() as db:
             updated = db.execute(
                 "update ofc_private.copilot_discoveries "
