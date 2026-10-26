@@ -189,3 +189,21 @@ def test_network_failure_has_manual_recovery_without_automatic_submit():
     assert 'MODEL_TIMEOUT' in js
     assert 'Prepare a new attempt' in js
     assert 'el("chat-input").value = run.prompt' in js
+
+def test_decision_advisory_is_saved_evidence_only():
+    from pathlib import Path
+    web = Path(__file__).resolve().parents[1] / "src" / "ofc_engine" / "web"
+    js = web.joinpath("copilot-proof.js").read_text()
+    css = web.joinpath("copilot-workspace.css").read_text()
+    assert "const advisoryPanel=(run,pair,mode)=>" in js
+    assert 'if(!pair)return null;' in js
+    assert "const ranked=rankedEvidence(pair);" in js
+    assert 'reviewed.ofc_reason==="QLOO_RANK_RECHECK_MATCHED"' in js
+    assert 'mode==="OFF"?"Starting choice: "+choice' in js
+    assert "No qualified brand recommendation yet" in js
+    assert "No deal, booking or payment is authorized" in js
+    assert "advisoryPanel(run,pair,mode)" in js
+    assert js.index("body.append(narrative,decisionBrief(run,pair,mode))") < js.index("const flow=decisionFlow(run,pair,mode);")
+    assert ".advisory-insights{" in css
+    assert "@media(max-width:900px)" in css
+
