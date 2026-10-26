@@ -676,6 +676,11 @@
     }else section.append(make("p","result-caveat",
       "Saved evidence-bound OFF/ON comparison is unavailable. No improvement is inferred."));
     const footer=make("div","result-actions");
+    if(explorer)footer.append(action("Find alternatives for my taste",()=>{
+      const trigger=explorer.querySelector(".taste-open");
+      if(explorer.querySelector(".taste-form")?.hidden)trigger?.click();
+      explorer.scrollIntoView({block:"center"});
+    }));
     footer.append(action("View decision map",mapView,!Array.isArray(run.plan?.choices)||
       !run.plan.choices.length),
       action("Download proof (.json)",downloadJSON,!recorded(run)),
