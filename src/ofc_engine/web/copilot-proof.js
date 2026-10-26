@@ -492,6 +492,7 @@
        discovery?.source_mode==="LIVE_HTTP_UNVERIFIED" &&
        Array.isArray(discovery.candidates)){
       const names=new Set(), options=[];
+      let excluded=0;
       const selected=[...pair.before].filter(([,d])=>d.domain==="place")
         .map(([,d])=>String(d.candidate_id||"").toLowerCase());
       for(const raw of discovery.candidates.slice(0,5)){
@@ -500,18 +501,27 @@
            candidate.length>160 || names.has(candidate.toLowerCase()) ||
            selected.includes(candidate.toLowerCase()))continue;
         names.add(candidate.toLowerCase());
+        // Qloo 'place' can include lodging/food businesses. A name heuristic
+        // can exclude obvious mismatches but cannot certify destinations.
+        if(/\b(hotel|guest\s*house|guesthouse|cafe|café|resort|hostel|homestay|home\s*stay|lodge|restaurant|motel|villa)\b/i.test(candidate)){
+          excluded++;continue;
+        }
         options.push(candidate.trim());
       }
+      const observed=make("div","taste-observed");
+      observed.append(make("strong","","Existing Qloo discovery · destination screening"));
       if(options.length){
-        const observed=make("div","taste-observed");
-        observed.append(make("strong","","Existing Qloo discovery · exploratory matches"));
         const list=make("ol","taste-observed-list");
         for(const candidate of options)list.append(make("li","",candidate));
         observed.append(list,make("p","taste-small",
           "These are saved Qloo place entities, not qualified hill-station alternatives. " +
-          "Some may be hotels, cafés or businesses. No availability, amenities or travel suitability verified."));
-        card.append(observed);
-      }
+          "Destination type, travel suitability and availability remain unverified."));
+      }else observed.append(make("p","taste-small",
+        "No destination-level alternative was established by this saved Qloo discovery. " +
+        "Answer the taste questions to start a narrower exploration."));
+      if(excluded)observed.append(make("p","taste-small",
+        excluded+" place result(s) looked like lodging or food businesses and were excluded from the destination shortlist."));
+      card.append(observed);
     }
     const open=make("button","result-action taste-open","Find alternatives for my taste");
     open.type="button";
