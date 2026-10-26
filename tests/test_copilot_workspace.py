@@ -277,9 +277,10 @@ def test_taste_explorer_follows_saved_place_and_requires_user_approval():
 
 
 def test_new_taste_discovery_overrides_parent_choice_in_intake_guidance():
-    from inspect import getsource
-    from ofc_engine.copilot_llm import CopilotLLM
-    instructions = getsource(CopilotLLM.extract)
+    from pathlib import Path
+    instructions = (
+        Path(__file__).resolve().parents[1] / "src" / "ofc_engine" / "copilot_llm.py"
+    ).read_text()
     assert "latest request explicitly asks to discover NEW alternatives" in instructions
     assert "treat previous selections as history" in instructions
     assert "Never present the taste seed as the chosen destination" in instructions
