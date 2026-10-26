@@ -388,8 +388,8 @@ def qualify(origin: str) -> dict:
                     ).click()
                 explore.value.close()
                 assert page.locator(".processing-panel").is_visible()
-                assert page.locator(".processing-sync").is_visible()
-                page.locator(".processing-sync").click()
+                # No saved run_id exists during the local pre-admission phase.
+                assert page.locator(".processing-sync").count() == 0
                 assert calls["message"] == 0 and calls["provider"] == 0
                 page.evaluate("""() => {
                   document.querySelector(".processing-elapsed").dataset.startedAt =
@@ -406,8 +406,12 @@ def qualify(origin: str) -> dict:
                 page.locator(".conversation-row").first.wait_for(state="attached", timeout=10_000)
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert "Previous saved comparison" not in page.locator("#chat-transcript").inner_text()
-                page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
+                page.get_by_text("Qloo observation saved. Checking final review and whether ranking qualifies.").wait_for(
                     state="visible", timeout=15_000)
+                # Only a persisted PROCESSING run may offer manual GET-only reconciliation.
+                page.locator(".processing-sync").wait_for(state="visible")
+                page.locator(".processing-sync").click()
+                assert calls["message"] == 0 and calls["provider"] == 0
                 assert "Stage details are based on saved server evidence" in page.locator(".processing-proof").inner_text()
                 assert page.locator(".processing-elapsed").is_visible()
                 assert page.locator("#activity-steps").inner_text().count("Qloo evidence") == 1
