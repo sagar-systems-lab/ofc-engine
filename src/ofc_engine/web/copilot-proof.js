@@ -297,8 +297,11 @@
         ? [...new Set(required.filter(x=>labels.has(x)).map(x=>labels.get(x)))].slice(0,4) : [];
       const complete=run.business_verification?.business_evidence_satisfied===true &&
         run.value_receipt?.business_evidence_satisfied===true;
-      const artist=typeof run.plan?.artist_name==="string" &&
-        run.plan.artist_name.trim() ? name(run.plan.artist_name) : "Artist not recorded";
+      const place=String(original.domain || "").toLowerCase()==="place";
+      const artist=place
+        ? "Place reference · no artist required"
+        : typeof run.plan?.artist_name==="string" && run.plan.artist_name.trim()
+          ? name(run.plan.artist_name) : "Artist not recorded";
       const ranked=rank ? rank.ranked_candidates.join(" → ") : "Repeatable rank unavailable";
       const choice=mode==="OFF"
         ? "Original: "+name(original.candidate_id)+" · OFC not applied"
@@ -310,7 +313,7 @@
       const item=make("div","graph-decision");
       item.append(make("p","graph-decision-name",name(original.domain)+" · "+id(decisionId)));
       item.append(stages([
-        ["Artist / scope",artist,"source"],
+        [place?"Taste reference / scope":"Artist / scope",artist,"source"],
         ["Qloo cultural rank",ranked,rank?"observed":"unverified"],
         [mode==="ON"?"OFC review":"Original choice",choice,"choice"],
         ["Business gate",gate,complete?"withheld":"hold"],
@@ -370,7 +373,9 @@
               missing.push(available.get(requirement));
     const complete=run.business_verification?.business_evidence_satisfied===true &&
       run.value_receipt?.business_evidence_satisfied===true;
-    row("Partnership readiness",complete
+    const placeOnly=[...pair.before].length>0 &&
+      [...pair.before].every(([,decision])=>String(decision.domain).toLowerCase()==="place");
+    row(placeOnly?"Venue / commercial readiness":"Partnership readiness",complete
       ? "Business evidence gate satisfied. External action remains unauthorized."
       : "HOLD — commercial evidence incomplete."+
         (missing.length ? " Missing: "+missing.join(", ")+"." :
@@ -485,10 +490,34 @@
     const body=assistant.querySelector(".message-copy") || assistant;
     const advisory=advisoryPanel(run,pair,mode);
     if(advisory)body.append(advisory);
+    const unqualifiedPlace=Boolean(pair && [...pair.before].some(([key,original]) =>
+      String(original.domain).toLowerCase()==="place" &&
+      (pair.after.get(key)?.ofc_verdict!=="PASS" || !pair.after.get(key)?.rank_recheck_completed)));
+    if(unqualifiedPlace && mode==="ON"){
+      const boundary=make("section","answer-advisory");
+      boundary.append(
+        make("p","advisory-eyebrow","OFC safety outcome · saved evidence"),
+        make("h2","advisory-title","No verified place winner — recommendation withheld"),
+        make("p","advisory-basis",
+          "Qloo cultural discovery produced a candidate, but OFC found no qualified repeated ranking for this place decision. "+
+          "The original choice was preserved, not endorsed. No destination, lodging availability or booking is approved."),
+        make("p","advisory-disclaimer",
+          "OFC contributed a documented uncertainty gate here, not a better destination or a selection revision.")
+      );
+      body.append(boundary);
+    }
     const narrative=make("section","narrative-section");
-    narrative.append(make("h3","","Model explanation · not independently verified"),
-      make("p","",readable.trim()?readable:
-        "The saved model explanation is unavailable. Use the evidence and controls above."));
+    const placeSummary=unqualifiedPlace
+      ? "The saved Qloo discovery identified a place candidate, but the OFC verdict is uncertain and the proof contains no qualified repeated rank. "+
+        "The original choice remained unchanged. A discovered cafe, guest house or hotel is not necessarily a hill station. "+
+        "Model-described affinity scores or shortlist positions are not verified by the exported proof, so they are not presented as factual recommendations. "+
+        "Travel distance, weather, amenities, budget, availability and suitability still need independent verification."
+      : readable.trim()?readable:
+        "The saved model explanation is unavailable. Use the evidence and controls below.";
+    narrative.append(make("h3","",unqualifiedPlace
+      ? "Evidence-limited place review · unverified model claims withheld"
+      : "Model explanation · not independently verified"),
+      make("p","",placeSummary));
     body.append(narrative,decisionBrief(run,pair,mode));
     const flow=decisionFlow(run,pair,mode);
     if(flow)body.append(flow);

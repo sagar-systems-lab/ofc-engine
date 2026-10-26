@@ -228,3 +228,27 @@ def test_missing_detail_continuation_is_scoped_and_confirmed():
     assert 'for (const button of followUps || [])' in js
     assert 'button.disabled = busy || state.runs.length >= state.sessionMessageLimit' in js
     assert 'setBusy(false); // Re-enable saved follow-ups without clearing typed details.' in js
+
+
+def test_processing_resync_is_read_only_and_bounded():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    js = web.joinpath("copilot-workspace.js").read_text()
+    assert 'if (payload === undefined) opts.signal = AbortSignal.timeout(12000)' in js
+    assert 'state.syncing = true' in js and 'state.syncing = false' in js
+    assert 'Check saved result' in js
+    assert 'try { await restore(); } finally {' in js
+    assert 'document.addEventListener("visibilitychange"' in js
+    assert 'Do not resend or refresh to retry.' in js
+
+def test_unqualified_place_never_displays_unverified_narration():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    js = web.joinpath("copilot-proof.js").read_text()
+    activity = web.joinpath("copilot-activity.js").read_text()
+    assert 'const unqualifiedPlace=Boolean(pair' in js
+    assert 'No verified place winner — recommendation withheld' in js
+    assert 'Evidence-limited place review · unverified model claims withheld' in js
+    assert 'A discovered cafe, guest house or hotel is not necessarily a hill station' in js
+    assert 'placeOnly?"Venue / commercial readiness":"Partnership readiness"' in js
+    assert 'qualified repeated rank not established' in activity

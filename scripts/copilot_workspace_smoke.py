@@ -388,6 +388,8 @@ def qualify(origin: str) -> dict:
                     ).click()
                 explore.value.close()
                 assert page.locator(".processing-panel").is_visible()
+                # No saved run_id exists during the local pre-admission phase.
+                assert page.locator(".processing-sync").count() == 0
                 assert calls["message"] == 0 and calls["provider"] == 0
                 page.evaluate("""() => {
                   document.querySelector(".processing-elapsed").dataset.startedAt =
@@ -404,8 +406,13 @@ def qualify(origin: str) -> dict:
                 page.locator(".conversation-row").first.wait_for(state="attached", timeout=10_000)
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert "Previous saved comparison" not in page.locator("#chat-transcript").inner_text()
-                page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
-                    state="visible", timeout=15_000)
+                # The second history GET admits a PROCESSING run with SEARCH_ONLY;
+                # wait for the saved-run action, not a brittle progress sentence.
+                page.locator(".processing-sync").wait_for(state="visible", timeout=15_000)
+                stage = page.locator(".processing-stage").inner_text()
+                assert "entity search" in stage and "rank saved" not in stage, stage
+                page.locator(".processing-sync").click()
+                assert calls["message"] == 0 and calls["provider"] == 0
                 assert "Stage details are based on saved server evidence" in page.locator(".processing-proof").inner_text()
                 assert page.locator(".processing-elapsed").is_visible()
                 assert page.locator("#activity-steps").inner_text().count("Qloo evidence") == 1
@@ -550,7 +557,12 @@ def qualify(origin: str) -> dict:
                 if width <= 1180:
                     page.locator("#activity-open").click()
                 page.locator("#activity-rail").wait_for(state="visible")
-                assert "Saved rank observations present" in page.locator("#activity-steps").inner_text()
+                # The fixture saves a Qloo attempt but has no qualified rank recheck.
+                # Do not turn a completed provider call into verified cultural evidence.
+                activity_text = page.locator("#activity-steps").inner_text()
+                assert "Qloo observation saved; qualified repeated rank not established" in activity_text, activity_text
+                assert "Saved rank observations present" not in activity_text
+                assert "No qualified repeated rank established" in page.locator("#activity-honesty").inner_text()
                 page.locator("#plan-expand").click()
                 assert "Example Artist" in page.locator("#plan-content").inner_text()
                 assert "Agent proposal" in page.locator("#plan-content").inner_text()

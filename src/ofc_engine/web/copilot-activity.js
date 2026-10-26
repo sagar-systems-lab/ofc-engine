@@ -27,7 +27,13 @@
       const evidence = activity.qloo_evidence;
       const requests = activity.requests || {};
       const count = Number.isInteger(requests.search_complete) ? requests.search_complete : 0;
-      if (evidence === "RANK_OBSERVED") return ["observed", "Saved rank observations present"];
+      if (evidence === "RANK_OBSERVED") {
+        const qualified=run.on?.decisions?.some(d =>
+          d.rank_recheck_completed===true && d.ofc_reason==="QLOO_RANK_RECHECK_MATCHED");
+        return ["observed", run.status==="REVIEW_REQUIRED" && !qualified
+          ? "Qloo observation saved; qualified repeated rank not established"
+          : "Saved rank observations present"];
+      }
       if (evidence === "PARTIAL") return ["partial", "Some ranks saved; more still reserved"];
       if (evidence === "RANK_PENDING_OR_INTERRUPTED")
         return ["partial", "Search completed; rank attempt unresolved"];
@@ -150,8 +156,13 @@
       const q = run.activity.requests || {};
       const completed = Number.isInteger(q.rank_complete) ? q.rank_complete : 0;
       const reserved = Number.isInteger(q.rank_reserved) ? q.rank_reserved : 0;
-      note.textContent = "Saved activity · rank completed " + completed + ", unresolved " + reserved +
-        ". Request reservations are not proof of valid Qloo evidence.";
+      const qualified=run.on?.decisions?.some(d =>
+        d.rank_recheck_completed===true && d.ofc_reason==="QLOO_RANK_RECHECK_MATCHED");
+      note.textContent = run.status==="REVIEW_REQUIRED" && !qualified
+        ? "Saved Qloo attempt(s) · completed " + completed + ", unresolved " + reserved +
+          ". No qualified repeated rank established for this decision."
+        : "Saved activity · rank completed " + completed + ", unresolved " + reserved +
+          ". Request reservations are not proof of valid Qloo evidence.";
     }
     renderPlan(run);
     renderMap(run);
