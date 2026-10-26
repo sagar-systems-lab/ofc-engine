@@ -557,7 +557,12 @@ def qualify(origin: str) -> dict:
                 if width <= 1180:
                     page.locator("#activity-open").click()
                 page.locator("#activity-rail").wait_for(state="visible")
-                assert "Saved rank observations present" in page.locator("#activity-steps").inner_text()
+                # The fixture saves a Qloo attempt but has no qualified rank recheck.
+                # Do not turn a completed provider call into verified cultural evidence.
+                activity_text = page.locator("#activity-steps").inner_text()
+                assert "Qloo observation saved; qualified repeated rank not established" in activity_text, activity_text
+                assert "Saved rank observations present" not in activity_text
+                assert "No qualified repeated rank established" in page.locator("#activity-honesty").inner_text()
                 page.locator("#plan-expand").click()
                 assert "Example Artist" in page.locator("#plan-content").inner_text()
                 assert "Agent proposal" in page.locator("#plan-content").inner_text()
