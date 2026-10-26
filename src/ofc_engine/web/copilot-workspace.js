@@ -392,21 +392,21 @@
         !["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code) ||
         typeof run.prompt !== "string" || !run.prompt.trim()) return false;
     if (typeof detail !== "string" || !detail.trim() || detail.length > 240 ||
-        /[\\u0000-\\u001f]/.test(detail)) {
+        /[\u0000-\u001f]/.test(detail)) {
       statusText("Enter the requested detail (up to 240 characters). Nothing submitted.");
       return false;
     }
     const isSeed = run.reason_code !== "DECISIONS_MISSING";
     if (isSeed && !["place", "artist", "brand", "movie"].includes(category)) return false;
     const addition = isSeed
-      ? "\\n\\n--- USER-SUPPLIED CLARIFICATION ---\\n" +
-        "Existing taste reference: " + detail.trim() + "\\n" +
-        "Reference category: " + category + "\\n" +
+      ? "\n\n--- USER-SUPPLIED CLARIFICATION ---\n" +
+        "Taste seed name: " + detail.trim() + "\n" +
+        "Taste seed category: " + category + "\n" +
         "This is a user-provided cultural reference, not Qloo verification. " +
         "Keep my original request and target category. If cultural discovery is unsupported, say so; " +
-        "do not invent travel, business or venue facts.\\n--- END CLARIFICATION ---"
-      : "\\n\\n--- USER-SUPPLIED CLARIFICATION ---\\n" +
-        detail.trim() + "\\nContinue my original request without inventing evidence.\\n" +
+        "do not invent travel, business or venue facts.\n--- END CLARIFICATION ---"
+      : "\n\n--- USER-SUPPLIED CLARIFICATION ---\n" +
+        detail.trim() + "\nContinue my original request without inventing evidence.\n" +
         "--- END CLARIFICATION ---";
     const prompt = run.prompt.trim() + addition;
     if (prompt.length > 4000) {
