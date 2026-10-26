@@ -561,7 +561,7 @@
     const month=make("input","taste-input");
     month.type="month";monthField.append(month);form.append(monthField);
     const originField=make("label","taste-field taste-wide");
-    originField.append(make("span","","Starting city / preferred region (optional)"));
+    originField.append(make("span","","Preferred destination region (optional)"));
     const origin=make("input","taste-input");origin.type="text";origin.maxLength=80;
     origin.autocomplete="off";origin.placeholder="e.g., Delhi, or Himachal Pradesh";
     originField.append(origin);form.append(originField);
