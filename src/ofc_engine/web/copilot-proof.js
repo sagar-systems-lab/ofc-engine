@@ -473,7 +473,131 @@
     return panel;
   };
 
-  const renderRun=(run,mode,makeMessage)=>{
+  // A discovery result is provider-observed, not an OFC-qualified destination.
+  const tasteExplorer=(run,pair,mode,onTaste)=>{
+    if(mode!=="ON" || !pair || !run._sessionReadConfirmed ||
+       typeof onTaste!=="function" || !/^cp-run-[a-f0-9]{32}$/.test(run.run_id||"") ||
+       ![...pair.before].some(([key,d])=>String(d.domain).toLowerCase()==="place" &&
+         (pair.after.get(key)?.ofc_verdict!=="PASS" ||
+          pair.after.get(key)?.ofc_reason!=="QLOO_RANK_RECHECK_MATCHED")))return null;
+    const card=make("section","taste-explorer");
+    card.setAttribute("aria-label","Discover alternatives based on your taste");
+    card.append(make("p","taste-kicker","YOUR NEXT STEP · TASTE EXPLORER"),
+      make("h2","taste-title","Want alternatives that fit your taste?"),
+      make("p","taste-intro",
+        "Answer a few questions. OFC can request a fresh, linked Qloo cultural exploration, " +
+        "then show what was actually observed and what remains unverified. No request is sent while you explore."));
+    const discovery=run.off?.qloo?.native_discovery;
+    if(discovery?.status==="CULTURAL_CANDIDATES_OBSERVED" &&
+       discovery?.source_mode==="LIVE_HTTP_UNVERIFIED" &&
+       Array.isArray(discovery.candidates)){
+      const names=new Set(), options=[];
+      const selected=[...pair.before].filter(([,d])=>d.domain==="place")
+        .map(([,d])=>String(d.candidate_id||"").toLowerCase());
+      for(const raw of discovery.candidates.slice(0,5)){
+        const candidate=raw?.name;
+        if(typeof candidate!=="string" || !candidate.trim() ||
+           candidate.length>160 || names.has(candidate.toLowerCase()) ||
+           selected.includes(candidate.toLowerCase()))continue;
+        names.add(candidate.toLowerCase());
+        options.push(candidate.trim());
+      }
+      if(options.length){
+        const observed=make("div","taste-observed");
+        observed.append(make("strong","","Existing Qloo discovery · exploratory matches"));
+        const list=make("ol","taste-observed-list");
+        for(const candidate of options)list.append(make("li","",candidate));
+        observed.append(list,make("p","taste-small",
+          "These are saved Qloo place entities, not qualified hill-station alternatives. " +
+          "Some may be hotels, cafés or businesses. No availability, amenities or travel suitability verified."));
+        card.append(observed);
+      }
+    }
+    const open=make("button","result-action taste-open","Find alternatives for my taste");
+    open.type="button";
+    open.setAttribute("aria-expanded","false");
+    const form=make("div","taste-form");
+    form.hidden=true;
+    form.setAttribute("role","group");
+    form.setAttribute("aria-label","Your travel taste profile");
+    const field=(title,values)=>{
+      const wrapper=make("label","taste-field");
+      wrapper.append(make("span","",title));
+      const select=make("select","taste-select");
+      for(const [value,label] of values){
+        const option=make("option","",label);
+        option.value=value;
+        select.append(option);
+      }
+      wrapper.append(select);
+      form.append(wrapper);
+      return select;
+    };
+    const seedField=make("label","taste-field taste-wide");
+    seedField.append(make("span","","A place whose atmosphere you like"));
+    const seed=make("input","taste-input");
+    seed.type="text";seed.maxLength=120;seed.autocomplete="off";
+    const savedSeed=run.plan?.taste_seed_name;
+    seed.value=typeof savedSeed==="string"&&savedSeed.length<=120?savedSeed:"";
+    seed.placeholder="e.g., Manali";
+    seedField.append(seed);form.append(seedField);
+    const mood=field("What experience do you want?",[
+      ["quiet_nature","Quiet mountains & nature"],
+      ["snow_views","Snowy scenery"],
+      ["adventure","Adventure & hiking"],
+      ["cafes_culture","Cafés & local culture"],
+      ["family_relaxation","Relaxed family trip"],
+    ]);
+    const crowds=field("Crowd preference",[
+      ["avoid_crowds","Quiet / fewer crowds"],["balanced","Some activity is fine"],
+      ["lively","Lively places"],
+    ]);
+    const budget=field("Spending preference",[
+      ["budget","Budget conscious"],["midrange","Mid-range"],
+      ["flexible","Flexible budget"],
+    ]);
+    const monthField=make("label","taste-field");
+    monthField.append(make("span","","Travel month (optional)"));
+    const month=make("input","taste-input");
+    month.type="month";monthField.append(month);form.append(monthField);
+    const originField=make("label","taste-field taste-wide");
+    originField.append(make("span","","Starting city / preferred region (optional)"));
+    const origin=make("input","taste-input");origin.type="text";origin.maxLength=80;
+    origin.autocomplete="off";origin.placeholder="e.g., Delhi, or Himachal Pradesh";
+    originField.append(origin);form.append(originField);
+    const feedback=make("p","taste-feedback","");
+    feedback.setAttribute("role","status");form.append(feedback);
+    const submit=make("button","result-action taste-submit","Review my alternative options");
+    submit.type="button";
+    submit.addEventListener("click",()=>{
+      const profile={
+        seed:seed.value.trim(),mood:mood.value,crowds:crowds.value,
+        budget:budget.value,month:month.value,origin:origin.value.trim()
+      };
+      if(!profile.seed || profile.seed.length>120 ||
+         /[\u0000-\u001f]/.test(profile.seed) ||
+         profile.origin.length>80 || /[\u0000-\u001f]/.test(profile.origin)){
+        feedback.textContent="Enter a known place reference (maximum 120 characters). No request sent.";
+        seed.focus();return;
+      }
+      feedback.textContent=onTaste(run,profile)
+        ?"Review your provider-usage confirmation to continue. No request has been sent yet."
+        :"Unable to prepare this review. Check the message near the chat box.";
+    });
+    form.append(submit,make("p","taste-small",
+      "Qloo supports a taste-seed discovery, not verified budget, weather, crowds or lodging filters. " +
+      "Preferences guide the review, but alternatives are never labeled 'best' without supporting evidence. " +
+      "Only the separate confirmation can start provider calls."));
+    open.addEventListener("click",()=>{
+      form.hidden=!form.hidden;
+      open.setAttribute("aria-expanded",String(!form.hidden));
+      if(!form.hidden)seed.focus();
+    });
+    card.append(open,form);
+    return card;
+  };
+
+  const renderRun=(run,mode,makeMessage,onTaste)=>{
     if(run.status!=="REVIEW_REQUIRED")return false;
     const answer=mode==="ON"?run.ofc_answer:run.original_answer;
     // Historical model narration may contain Qloo UUIDs; proof stays unchanged.
@@ -518,6 +642,8 @@
       ? "Evidence-limited place review · unverified model claims withheld"
       : "Model explanation · not independently verified"),
       make("p","",placeSummary));
+    const explorer=tasteExplorer(run,pair,mode,onTaste);
+    if(explorer)body.append(explorer);
     body.append(narrative,decisionBrief(run,pair,mode));
     const flow=decisionFlow(run,pair,mode);
     if(flow)body.append(flow);
