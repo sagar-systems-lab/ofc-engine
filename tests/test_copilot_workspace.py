@@ -314,3 +314,5 @@ def test_copilot_discovery_failure_is_explained_without_provider_leakage():
     ):
         assert code in js
     assert "No automatic retry was made" in js
+    assert 'message("user", displayPrompt(state.pendingPrompt))' in js
+    assert 'message("user", displayPrompt(state.localNotice.prompt))' in js
