@@ -51,7 +51,11 @@ class CopilotHTTPMixin:
         if cookie is not None:
             self.send_header("Set-Cookie", cookie)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client abandoned a read; durable server-side state is unchanged.
+            pass
 
     def _copilot_origin_ok(self):
         host = self.headers.get("Host", "")
