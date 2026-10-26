@@ -264,8 +264,9 @@ def test_taste_explorer_follows_saved_place_and_requires_user_approval():
     assert 'if(mode!=="ON" || !pair || !run._sessionReadConfirmed' in proof
     assert 'No verified place winner — recommendation withheld' in proof
     assert 'Find alternatives for my taste' in proof
-    assert 'Existing Qloo discovery · exploratory matches' in proof
+    assert 'Existing Qloo discovery · destination screening' in proof
     assert "These are saved Qloo place entities, not qualified hill-station alternatives" in proof
+    assert "excluded from the destination shortlist" in proof
     assert 'const requestTasteAlternatives=(run,profile)=>' in workspace
     assert 'state.pendingSelection={parent_run_id:run.run_id}' in workspace
     assert 'if(!el("run-confirm").open)el("run-confirm").showModal()' in workspace
