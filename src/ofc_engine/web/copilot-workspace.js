@@ -60,7 +60,7 @@
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(payload);
     }
-    if (payload === undefined) opts.signal = AbortSignal.timeout(12000);
+    if (payload === undefined) opts.signal = AbortSignal.timeout(20000);
     const res = await fetch(path, opts);
     let data;
     try {
@@ -78,6 +78,15 @@
       CLARIFICATION_REQUIRED: "I need one detail before I can review this cultural decision.",
       CAPABILITY_UNAVAILABLE: "This request is outside the currently qualified cultural decision scope.",
       BLOCKED: "The review could not complete. The saved record may contain partial provider usage.",
+      QLOO_DISCOVERY_PROVIDER_RATE_LIMITED: "Qloo rejected the discovery request as rate limited. No valid shortlist was recorded.",
+      QLOO_DISCOVERY_PROVIDER_AUTH_REJECTED: "Qloo rejected provider authorization. The operator must check API access.",
+      QLOO_DISCOVERY_PROVIDER_UNAVAILABLE: "Qloo returned a server-side failure. No valid shortlist was recorded.",
+      QLOO_DISCOVERY_PROVIDER_NETWORK_UNAVAILABLE: "Qloo did not respond reliably. No qualified shortlist was recorded.",
+      QLOO_DISCOVERY_PROVIDER_REJECTED: "Qloo could not complete this discovery request.",
+      QLOO_DISCOVERY_INSUFFICIENT_RESULTS: "The observed discovery did not contain the required 2–5 qualifying candidates.",
+      QLOO_DISCOVERY_AFFINITY_MISSING: "Required affinity evidence was missing from a discovery candidate.",
+      QLOO_DISCOVERY_RANK_AMBIGUOUS: "Discovery ranking could not be uniquely verified.",
+      QLOO_DISCOVERY_EVIDENCE_UNQUALIFIED: "Qloo responded, but its discovery evidence did not satisfy the validation contract.",
       PROCESSING: "The server is processing your request. This view does not automatically retry inference.",
       NOT_CONFIGURED: "Provider configuration is incomplete.",
       CHECK_REQUIRED: "Previous provider checks are older than 30 minutes. This does not mean disconnected.",
@@ -93,7 +102,8 @@
   };
 
   const statusText = label => {
-    el("composer-status").textContent = label;
+    const target = el("composer-status");
+    if (target.textContent !== label) target.textContent = label;
   };
 
   const setBusy = busy => {
@@ -261,6 +271,10 @@
         " The review was saved as blocked, and no automatic retry was attempted. " +
         "You can prepare a new attempt after checking quota; a new model request may consume capacity.";
     }
+    const discoveryReason = code.startsWith("QLOO_DISCOVERY_") && code !== "QLOO_DISCOVERY_UNAVAILABLE"
+      ? safeStatus(code) : null;
+    if (discoveryReason) return discoveryReason +
+      " No automatic retry was made. The original saved run is available in history.";
     const reason = code ? " Reason: " + code.slice(0, 80) + "." : "";
     return safeStatus(status) + reason;
   };
@@ -797,10 +811,11 @@
     try {
       const caps = await jsonRequest("/api/capabilities");
       state.capability = caps;
+      const priorLimit = state.sessionMessageLimit;
       if (Number.isInteger(caps.session_message_limit) &&
           caps.session_message_limit >= 1 && caps.session_message_limit <= 12)
         state.sessionMessageLimit = caps.session_message_limit;
-      render();
+      if (priorLimit !== state.sessionMessageLimit) render();
       const raw = String(caps.product || "UNKNOWN");
       const dot = el("status-dot");
       dot.className = "status-dot " +
@@ -846,8 +861,11 @@
       if (Number.isInteger(saved.session_message_limit) &&
           saved.session_message_limit >= 1 && saved.session_message_limit <= 12)
         state.sessionMessageLimit = saved.session_message_limit;
-      state.runs = Array.isArray(saved.messages)
+      const nextRuns = Array.isArray(saved.messages)
         ? saved.messages.map(item => ({...item, _sessionReadConfirmed: true})) : [];
+      const contentChanged = JSON.stringify(nextRuns) !== JSON.stringify(state.runs);
+      if (contentChanged) state.runs = nextRuns;
+      const previousSelected = state.selected;
       if (!state.selected && state.busy && state.pendingPrompt) {
         const admitted = [...state.runs].reverse().find(run =>
           run.prompt === state.pendingPrompt &&
@@ -862,7 +880,9 @@
         state.activeRequestId = null;
         stopPolling();
       }
-      render();
+      // Identical saved GETs must not discard inputs, scroll or animate the chat.
+      if (contentChanged || previousSelected !== state.selected)
+        render();
     } catch (err) {
       if (err.message === "ACCESS_DENIED") {
         state.sessionId = null;
@@ -891,7 +911,7 @@
       } finally {
         monitor();
       }
-    }, 3000);
+    }, 8000);
   };
 
   const ensureSession = async () => {
