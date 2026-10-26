@@ -102,6 +102,11 @@
     el("attachment-remove").disabled = busy;
     el("chat-send").disabled = busy || state.runs.length >= state.sessionMessageLimit ||
       !composedPrompt() || composedPrompt().length > 4000;
+    const followUps = el("chat-transcript")?.querySelectorAll(
+      ".clarification-continue, .intake-recovery > .result-action, .message.assistant > .result-action"
+    );
+    for (const button of followUps || [])
+      button.disabled = busy || state.runs.length >= state.sessionMessageLimit;
     if (!busy) resizeComposer();
   };
 
@@ -858,8 +863,7 @@
       state.pendingSelection = null;
       state.activeRequestId = null;
       state.pendingBaselineIds = null;
-      setBusy(false);
-      render(); // Rebuild result actions after the response is no longer busy.
+      setBusy(false); // Re-enable saved follow-ups without clearing typed details.
       monitor(); // Continue only if the saved run is still processing.
     }
   };
