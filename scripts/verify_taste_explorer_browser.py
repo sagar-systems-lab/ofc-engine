@@ -155,6 +155,7 @@ def qualify(base_url):
                 page.evaluate("window.__tastePanel = document.querySelector('.taste-explorer')")
                 with page.expect_response(lambda r: "/api/capabilities" in r.url):
                     page.locator("#status-toggle").click()
+                page.wait_for_timeout(150)
                 assert page.evaluate(
                     "document.querySelector('.taste-explorer') === window.__tastePanel"
                 ), "Capability refresh discarded the open Taste Explorer"
