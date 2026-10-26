@@ -388,6 +388,8 @@ def qualify(origin: str) -> dict:
                     ).click()
                 explore.value.close()
                 assert page.locator(".processing-panel").is_visible()
+                assert page.locator(".processing-sync").is_visible()
+                page.locator(".processing-sync").click()
                 assert calls["message"] == 0 and calls["provider"] == 0
                 page.evaluate("""() => {
                   document.querySelector(".processing-elapsed").dataset.startedAt =
