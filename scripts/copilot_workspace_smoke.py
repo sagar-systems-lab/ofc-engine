@@ -406,8 +406,10 @@ def qualify(origin: str) -> dict:
                 page.locator(".conversation-row").first.wait_for(state="attached", timeout=10_000)
                 assert "confidential planning context" in page.locator(".message.user").inner_text()
                 assert "Previous saved comparison" not in page.locator("#chat-transcript").inner_text()
-                page.get_by_text("Qloo observation saved. Checking final review and whether ranking qualifies.").wait_for(
+                page.get_by_text("Qloo entity search saved. Ranking evidence not yet observed.").wait_for(
                     state="visible", timeout=15_000)
+                # The mock records SEARCH_ONLY, never a completed Qloo rank.
+                assert "entity search" in page.locator(".processing-stage").inner_text()
                 # Only a persisted PROCESSING run may offer manual GET-only reconciliation.
                 page.locator(".processing-sync").wait_for(state="visible")
                 page.locator(".processing-sync").click()
