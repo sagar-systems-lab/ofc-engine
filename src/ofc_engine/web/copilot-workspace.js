@@ -6,7 +6,7 @@
   const shell = document.querySelector("body.copilot-page > .shell");
   const storageKey = "ofc.copilot.visitor.session.v1";
   const state = {
-    sessionId: null, runs: [], selected: null, mode: "ON", busy: false,
+    sessionId: null, runs: [], selected: null, mode: "ON", busy: false, syncing: false,
     pendingPrompt: "", localNotice: null, sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, sessionMessageLimit: 4, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
     attachment: null, attachmentVersion: 0, pendingStartedAt: null, elapsedTimer: null,
@@ -60,6 +60,7 @@
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(payload);
     }
+    if (payload === undefined) opts.signal = AbortSignal.timeout(12000);
     const res = await fetch(path, opts);
     let data;
     try {
@@ -277,7 +278,7 @@
     if (evidence === "RANK_PENDING_OR_INTERRUPTED")
       return "Qloo search completed; ranking request reserved, result not yet validated.";
     if (evidence === "RANK_OBSERVED")
-      return "Qloo rank saved. Waiting for the final review and saved explanations.";
+      return "Qloo observation saved. Checking final review and whether ranking qualifies.";
     if (evidence === "PARTIAL")
       return "Some Qloo observations saved; unresolved provider attempts remain.";
     if (evidence === "SEARCH_PENDING_OR_INTERRUPTED")
@@ -325,6 +326,21 @@
     const warning = node("p", "processing-longwait");
     warning.hidden = true;
     panel.append(warning);
+    if (run && /^cp-run-[a-f0-9]{32}$/.test(run.run_id || "")) {
+      const sync = node("button", "result-action processing-sync", "Check saved result");
+      sync.type = "button";
+      sync.setAttribute("aria-label", "Read the saved review status without submitting again");
+      sync.addEventListener("click", async () => {
+        if (sync.disabled || state.syncing) return;
+        sync.disabled = true;
+        statusText("Checking saved session history only. No provider retry or quota spend.");
+        try { await restore(); } finally {
+          if (sync.isConnected) sync.disabled = false;
+          monitor();
+        }
+      });
+      panel.append(sync);
+    }
     return panel;
   };
 
@@ -342,7 +358,7 @@
     if (!warning) return;
     warning.hidden = seconds < 60;
     if (seconds >= 120)
-      warning.textContent = "Longer than usual. We are checking the saved request; a timeout may leave it blocked. Do not resend or refresh to retry.";
+      warning.textContent = "The original response may have disconnected even if the server saved the result. Use Check saved result to resync read-only. Do not resend or refresh to retry.";
     else if (seconds >= 60)
       warning.textContent = "Still waiting for a confirmed result. Some provider reviews take longer; no retry has been sent.";
   };
@@ -747,7 +763,8 @@
   };
 
   const restore = async () => {
-    if (!state.sessionId) return;
+    if (!state.sessionId || state.syncing) return;
+    state.syncing = true;
     try {
       const saved = await jsonRequest("/api/copilot/sessions/" + state.sessionId);
       if (Number.isInteger(saved.session_message_limit) &&
@@ -779,7 +796,11 @@
         stopPolling();
         statusText("This private session has expired. Start a new chat to continue.");
         render();
+      } else if (err.name === "TimeoutError" || err.name === "AbortError") {
+        statusText("Saved status read timed out; no new review was submitted. Check saved result again.");
       } else statusText(safeStatus(err.message));
+    } finally {
+      state.syncing = false;
     }
   };
 
@@ -789,8 +810,11 @@
     if (!state.sessionId || (!requestPending &&
         (!state.selected || selectedRun()?.status !== "PROCESSING"))) return;
     state.pollTimer = window.setTimeout(async () => {
-      if (document.visibilityState !== "hidden") await restore();
-      monitor();
+      try {
+        if (document.visibilityState !== "hidden") await restore();
+      } finally {
+        monitor();
+      }
     }, 3000);
   };
 
@@ -962,6 +986,12 @@
   el("sidebar-bottom-toggle").addEventListener("click", () => setSidebar(!state.sidebarOpen));
   el("sidebar-backdrop").addEventListener("click", () => setSidebar(false));
   window.addEventListener("resize", updateShell);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" &&
+        state.sessionId && (selectedRun()?.status === "PROCESSING" || state.busy)) {
+      void restore().finally(monitor); // Read-only reconciliation; never POST again.
+    }
+  });
 
   el("mode-toggle").addEventListener("click", () => {
     state.mode = state.mode === "ON" ? "OFF" : "ON";
