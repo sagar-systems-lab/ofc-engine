@@ -78,6 +78,7 @@
       CLARIFICATION_REQUIRED: "I need one detail before I can review this cultural decision.",
       CAPABILITY_UNAVAILABLE: "This request is outside the currently qualified cultural decision scope.",
       BLOCKED: "The review could not complete. The saved record may contain partial provider usage.",
+      QLOO_DISCOVERY_UNAVAILABLE: "Earlier saved discovery failed; the original record does not distinguish provider failure from invalid shortlist evidence.",
       QLOO_DISCOVERY_PROVIDER_RATE_LIMITED: "Qloo rejected the discovery request as rate limited. No valid shortlist was recorded.",
       QLOO_DISCOVERY_PROVIDER_AUTH_REJECTED: "Qloo rejected provider authorization. The operator must check API access.",
       QLOO_DISCOVERY_PROVIDER_UNAVAILABLE: "Qloo returned a server-side failure. No valid shortlist was recorded.",
@@ -292,7 +293,7 @@
         " The review was saved as blocked, and no automatic retry was attempted. " +
         "You can prepare a new attempt after checking quota; a new model request may consume capacity.";
     }
-    const discoveryReason = code.startsWith("QLOO_DISCOVERY_") && code !== "QLOO_DISCOVERY_UNAVAILABLE"
+    const discoveryReason = code.startsWith("QLOO_DISCOVERY_")
       ? safeStatus(code) : null;
     if (discoveryReason) return discoveryReason +
       " No automatic retry was made. The original saved run is available in history.";
@@ -879,6 +880,7 @@
     state.syncing = true;
     try {
       const saved = await jsonRequest("/api/copilot/sessions/" + state.sessionId);
+      const previousLimit = state.sessionMessageLimit;
       if (Number.isInteger(saved.session_message_limit) &&
           saved.session_message_limit >= 1 && saved.session_message_limit <= 12)
         state.sessionMessageLimit = saved.session_message_limit;
@@ -902,7 +904,8 @@
         stopPolling();
       }
       // Identical saved GETs must not discard inputs, scroll or animate the chat.
-      if (contentChanged || previousSelected !== state.selected)
+      if (contentChanged || previousSelected !== state.selected ||
+          previousLimit !== state.sessionMessageLimit)
         render();
       if (el("composer-status").textContent.startsWith("Saved status read timed out"))
         statusText("Saved session status recovered. No provider request was retried.");
