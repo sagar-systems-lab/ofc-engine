@@ -225,4 +225,6 @@ def test_missing_detail_continuation_is_scoped_and_confirmed():
     assert 'if (missingDetail) assistant.append(missingDetail)' in js
     assert '.clarification-panel{' in css
     assert '.clarification-field{' in css
-    assert 'setBusy(false);\n      render(); // Rebuild result actions after the response is no longer busy.' in js
+    assert 'for (const button of followUps || [])' in js
+    assert 'button.disabled = busy || state.runs.length >= state.sessionMessageLimit' in js
+    assert 'setBusy(false); // Re-enable saved follow-ups without clearing typed details.' in js
