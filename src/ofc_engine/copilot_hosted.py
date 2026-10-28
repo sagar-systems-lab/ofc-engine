@@ -969,11 +969,15 @@ class HostedCopilot:
             self._validate_entity_selection(
                 session_id, parent_run_id, entity_selection_ref,
             )
+        saved_draft = (
+            self._resume_clarification(prior_plan, prompt, entity_selection_ref)
+            if typed_confirmation is None else None
+        )
         # A qualified artist/brand review needs artist + two brand lookups
         # and two independent rank observations. Do not spend a model call
         # or consume a visitor slot when the shared Qloo gate cannot fit it.
         # Exact plan cost is checked again after model extraction.
-        self._capacity(required_llm=2 if typed_confirmation is not None else 3,
+        self._capacity(required_llm=2 if typed_confirmation is not None or saved_draft is not None else 3,
                        required_qloo=5)
         run_id, cached = self._admit_message(
             session_id, request_id, digest, model.model, prompt, parent_run_id,
@@ -990,13 +994,20 @@ class HostedCopilot:
             started = monotonic()
             if typed_confirmation is not None:
                 draft = typed_confirmation
+            elif saved_draft is not None:
+                draft = self._explicit_brand_scope(saved_draft, prompt)
+                _log.info("COPILOT_STAGE stage=signed_plan_continuation")
             else:
                 self._capacity(required_llm=3)
                 reserve_model_call(
                     self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
                 )
+                public_prior = (
+                    {k: v for k, v in prior_plan.items() if k != "_saved_continuation"}
+                    if prior_plan is not None else None
+                )
                 draft = self._explicit_brand_scope(
-                    model.extract(prompt, prior_plan=prior_plan), prompt,
+                    model.extract(prompt, prior_plan=public_prior), prompt,
                 )
             _log.info("COPILOT_STAGE stage=plan_extraction duration_ms=%d",
                       round((monotonic() - started) * 1000))
