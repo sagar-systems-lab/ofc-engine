@@ -945,6 +945,7 @@ class HostedCopilot:
             catalog_skip_reasons = {}
             place_city_scopes = {}
             context = None
+            seed_selection_consumed = False
             seed_name = draft.taste_seed_name or draft.artist_name
             seed_category = draft.taste_seed_category or "artist"
             if not draft.choices and draft.discovery_category:
@@ -1003,6 +1004,7 @@ class HostedCopilot:
                             "A named reference is not a verified travel recommendation."
                         ),
                     )
+                seed_selection_consumed = resolver.selection_consumed
                 native_discovery = HostedDomainObservations(reviewer).discover(
                     run_id=run_id, context=context, seed_id=seed.entity_id,
                 )
@@ -1172,7 +1174,9 @@ class HostedCopilot:
                 catalog_identities[choice.decision_id] = (
                     choice, category, entities,
                 )
-            if entity_selection_ref is not None and not resolver.selection_consumed:
+            if entity_selection_ref is not None and not (
+                resolver.selection_consumed or seed_selection_consumed
+            ):
                 raise EntityResolutionRequired("QLOO_SELECTION_SCOPE_MISMATCH")
             proposal = draft_plan(
                 draft, run_id=run_id, request_id=request_id,
