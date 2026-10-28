@@ -60,7 +60,7 @@
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(payload);
     }
-    if (payload === undefined) opts.signal = AbortSignal.timeout(12000);
+    if (payload === undefined) opts.signal = AbortSignal.timeout(20000);
     const res = await fetch(path, opts);
     let data;
     try {
@@ -78,6 +78,16 @@
       CLARIFICATION_REQUIRED: "I need one detail before I can review this cultural decision.",
       CAPABILITY_UNAVAILABLE: "This request is outside the currently qualified cultural decision scope.",
       BLOCKED: "The review could not complete. The saved record may contain partial provider usage.",
+      QLOO_DISCOVERY_UNAVAILABLE: "Earlier saved discovery failed; the original record does not distinguish provider failure from invalid shortlist evidence.",
+      QLOO_DISCOVERY_PROVIDER_RATE_LIMITED: "Qloo rejected the discovery request as rate limited. No valid shortlist was recorded.",
+      QLOO_DISCOVERY_PROVIDER_AUTH_REJECTED: "Qloo rejected provider authorization. The operator must check API access.",
+      QLOO_DISCOVERY_PROVIDER_UNAVAILABLE: "Qloo returned a server-side failure. No valid shortlist was recorded.",
+      QLOO_DISCOVERY_PROVIDER_NETWORK_UNAVAILABLE: "Qloo did not respond reliably. No qualified shortlist was recorded.",
+      QLOO_DISCOVERY_PROVIDER_REJECTED: "Qloo could not complete this discovery request.",
+      QLOO_DISCOVERY_INSUFFICIENT_RESULTS: "The observed discovery did not contain the required 2–5 qualifying candidates.",
+      QLOO_DISCOVERY_AFFINITY_MISSING: "Required affinity evidence was missing from a discovery candidate.",
+      QLOO_DISCOVERY_RANK_AMBIGUOUS: "Discovery ranking could not be uniquely verified.",
+      QLOO_DISCOVERY_EVIDENCE_UNQUALIFIED: "Qloo responded, but its discovery evidence did not satisfy the validation contract.",
       PROCESSING: "The server is processing your request. This view does not automatically retry inference.",
       NOT_CONFIGURED: "Provider configuration is incomplete.",
       CHECK_REQUIRED: "Previous provider checks are older than 30 minutes. This does not mean disconnected.",
@@ -93,7 +103,8 @@
   };
 
   const statusText = label => {
-    el("composer-status").textContent = label;
+    const target = el("composer-status");
+    if (target.textContent !== label) target.textContent = label;
   };
 
   const setBusy = busy => {
@@ -202,6 +213,27 @@
 
   const selectedRun = () => state.runs.find(x => x.run_id === state.selected) || null;
 
+  const displayPrompt = value => {
+    const original = String(value || "");
+    if (!original.startsWith(
+          "NEW USER REQUEST: Discover alternative mountain destinations inspired by my existing cultural taste reference.") ||
+        !original.includes("Target Qloo discovery category: place.") ||
+        !original.includes("No bookings or external actions.")) return original;
+    const seed = /^Named taste seed: (.+?)\. Taste seed category: place\.$/m.exec(original)?.[1];
+    const style = /^Travel style: (.+?)\. Crowd preference: (.+?)\. Spending preference: (.+?)\.$/m.exec(original);
+    if (!seed || !style) return original;
+    const month = /^Travel month: (\d{4}-(?:0[1-9]|1[0-2]))\.$/m.exec(original)?.[1];
+    const region = /^Preferred destination region: (.+?)\.$/m.exec(original)?.[1];
+    const lines = [
+      "Find alternative places inspired by " + seed,
+      "Experience: " + style[1] + " · Crowd: " + style[2],
+      "Budget preference: " + style[3],
+    ];
+    if (month) lines.push("Travel month: " + month);
+    if (region) lines.push("Destination region: " + region);
+    return lines.join("\n");
+  };
+
   const renderHistory = () => {
     const list = el("conversation-list");
     list.replaceChildren();
@@ -217,9 +249,9 @@
     for (const run of runs) {
       const button = node("button", "conversation-row" + (state.selected === run.run_id ? " active" : ""));
       button.type = "button";
-      button.title = String(run.prompt || "Saved review");
+      button.title = displayPrompt(run.prompt || "Saved review");
       button.setAttribute("aria-current", state.selected === run.run_id ? "true" : "false");
-      button.append(node("span", "", String(run.prompt || "Saved review")));
+      button.append(node("span", "", displayPrompt(run.prompt || "Saved review").split("\n")[0]));
       button.append(node("time", "", String(run.status || "SAVED").replaceAll("_", " ")));
       button.addEventListener("click", () => {
         state.selected = run.run_id;
@@ -261,6 +293,10 @@
         " The review was saved as blocked, and no automatic retry was attempted. " +
         "You can prepare a new attempt after checking quota; a new model request may consume capacity.";
     }
+    const discoveryReason = code.startsWith("QLOO_DISCOVERY_")
+      ? safeStatus(code) : null;
+    if (discoveryReason) return discoveryReason +
+      " No automatic retry was made. The original saved run is available in history.";
     const reason = code ? " Reason: " + code.slice(0, 80) + "." : "";
     return safeStatus(status) + reason;
   };
@@ -609,7 +645,7 @@
   const renderRun = (run) => {
     const box = el("chat-transcript");
     box.replaceChildren();
-    const text = String(run.prompt || state.pendingPrompt || "");
+    const text = displayPrompt(run.prompt || state.pendingPrompt || "");
     if (text) box.append(message("user", text));
     if (run.status === "PROCESSING") {
       const waiting = message("assistant", "");
@@ -768,7 +804,7 @@
     el("chat-transcript").hidden = !visible;
     if (state.localNotice) {
       el("chat-transcript").replaceChildren(
-        message("user", state.localNotice.prompt),
+        message("user", displayPrompt(state.localNotice.prompt)),
         message("assistant", state.localNotice.detail)
       );
     } else if (run) renderRun(run);
@@ -776,7 +812,7 @@
       const box = el("chat-transcript");
       const waiting = message("assistant", "");
       waiting.querySelector(".message-copy").replaceWith(pendingPanel(null));
-      box.replaceChildren(message("user", state.pendingPrompt), waiting);
+      box.replaceChildren(message("user", displayPrompt(state.pendingPrompt)), waiting);
     } else {
       el("chat-transcript").replaceChildren();
     }
@@ -797,10 +833,11 @@
     try {
       const caps = await jsonRequest("/api/capabilities");
       state.capability = caps;
+      const priorLimit = state.sessionMessageLimit;
       if (Number.isInteger(caps.session_message_limit) &&
           caps.session_message_limit >= 1 && caps.session_message_limit <= 12)
         state.sessionMessageLimit = caps.session_message_limit;
-      render();
+      if (priorLimit !== state.sessionMessageLimit) render();
       const raw = String(caps.product || "UNKNOWN");
       const dot = el("status-dot");
       dot.className = "status-dot " +
@@ -843,11 +880,15 @@
     state.syncing = true;
     try {
       const saved = await jsonRequest("/api/copilot/sessions/" + state.sessionId);
+      const previousLimit = state.sessionMessageLimit;
       if (Number.isInteger(saved.session_message_limit) &&
           saved.session_message_limit >= 1 && saved.session_message_limit <= 12)
         state.sessionMessageLimit = saved.session_message_limit;
-      state.runs = Array.isArray(saved.messages)
+      const nextRuns = Array.isArray(saved.messages)
         ? saved.messages.map(item => ({...item, _sessionReadConfirmed: true})) : [];
+      const contentChanged = JSON.stringify(nextRuns) !== JSON.stringify(state.runs);
+      if (contentChanged) state.runs = nextRuns;
+      const previousSelected = state.selected;
       if (!state.selected && state.busy && state.pendingPrompt) {
         const admitted = [...state.runs].reverse().find(run =>
           run.prompt === state.pendingPrompt &&
@@ -862,7 +903,12 @@
         state.activeRequestId = null;
         stopPolling();
       }
-      render();
+      // Identical saved GETs must not discard inputs, scroll or animate the chat.
+      if (contentChanged || previousSelected !== state.selected ||
+          previousLimit !== state.sessionMessageLimit)
+        render();
+      if (el("composer-status").textContent.startsWith("Saved status read timed out"))
+        statusText("Saved session status recovered. No provider request was retried.");
     } catch (err) {
       if (err.message === "ACCESS_DENIED") {
         state.sessionId = null;
@@ -891,7 +937,7 @@
       } finally {
         monitor();
       }
-    }, 3000);
+    }, 8000);
   };
 
   const ensureSession = async () => {

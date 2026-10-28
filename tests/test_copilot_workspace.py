@@ -234,7 +234,7 @@ def test_processing_resync_is_read_only_and_bounded():
     from importlib.resources import files
     web = files("ofc_engine").joinpath("web")
     js = web.joinpath("copilot-workspace.js").read_text()
-    assert 'if (payload === undefined) opts.signal = AbortSignal.timeout(12000)' in js
+    assert 'if (payload === undefined) opts.signal = AbortSignal.timeout(20000)' in js
     assert 'state.syncing = true' in js and 'state.syncing = false' in js
     assert 'Check saved result' in js
     assert 'try { await restore(); } finally {' in js
@@ -284,3 +284,35 @@ def test_new_taste_discovery_overrides_parent_choice_in_intake_guidance():
     assert "latest request explicitly asks to discover NEW alternatives" in instructions
     assert "treat previous selections as history" in instructions
     assert "Never present the taste seed as the chosen destination" in instructions
+
+
+
+def test_saved_status_reconciliation_preserves_visible_dom():
+    from importlib.resources import files
+    web = files("ofc_engine").joinpath("web")
+    js = web.joinpath("copilot-workspace.js").read_text()
+    css = web.joinpath("copilot-workspace.css").read_text()
+    assert 'const contentChanged = JSON.stringify(nextRuns) !== JSON.stringify(state.runs)' in js
+    assert 'if (contentChanged || previousSelected !== state.selected ||' in js
+    assert 'previousLimit !== state.sessionMessageLimit)' in js
+    assert 'if (priorLimit !== state.sessionMessageLimit) render()' in js
+    assert '}, 8000);' in js
+    assert 'AbortSignal.timeout(20000)' in js
+    assert '.message{margin:0 0 23px' in css
+    assert 'animation:message-rise .22s ease both' not in css
+
+
+def test_copilot_discovery_failure_is_explained_without_provider_leakage():
+    from importlib.resources import files
+    js = files("ofc_engine").joinpath("web/copilot-workspace.js").read_text()
+    for code in (
+        "QLOO_DISCOVERY_PROVIDER_RATE_LIMITED",
+        "QLOO_DISCOVERY_PROVIDER_UNAVAILABLE",
+        "QLOO_DISCOVERY_INSUFFICIENT_RESULTS",
+        "QLOO_DISCOVERY_AFFINITY_MISSING",
+        "QLOO_DISCOVERY_RANK_AMBIGUOUS",
+    ):
+        assert code in js
+    assert "No automatic retry was made" in js
+    assert 'message("user", displayPrompt(state.pendingPrompt))' in js
+    assert 'message("user", displayPrompt(state.localNotice.prompt))' in js

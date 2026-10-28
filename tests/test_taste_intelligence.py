@@ -71,3 +71,25 @@ def test_context_location_typed_and_unsupported_policy_constrained():
     assert policy_for("brand")["automatic_repair"] == "ARTIST_BRAND_TWO_MATCHING_RANKS_ONLY"
     assert policy_for("movie")["automatic_repair"] == "NOT_QUALIFIED"
     assert all(policy_for(k)["release_authorized"] is False for k in ("brand", "movie", "place"))
+
+
+
+def test_discovery_error_codes_distinguish_provider_from_evidence():
+    from ofc_engine.copilot_domain_observations import (
+        _discovery_provider_reason,
+        _discovery_evidence_reason,
+    )
+    assert _discovery_provider_reason("HTTP_429") == "QLOO_DISCOVERY_PROVIDER_RATE_LIMITED"
+    assert _discovery_provider_reason("HTTP_401") == "QLOO_DISCOVERY_PROVIDER_AUTH_REJECTED"
+    assert _discovery_provider_reason("HTTP_503") == "QLOO_DISCOVERY_PROVIDER_UNAVAILABLE"
+    assert _discovery_provider_reason("NETWORK_ERROR") == "QLOO_DISCOVERY_PROVIDER_NETWORK_UNAVAILABLE"
+    assert _discovery_provider_reason("HTTP_400") == "QLOO_DISCOVERY_PROVIDER_REJECTED"
+    assert _discovery_evidence_reason(
+        "QLOO_DISCOVERY_INSUFFICIENT_RESULTS"
+    ) == "QLOO_DISCOVERY_INSUFFICIENT_RESULTS"
+    assert _discovery_evidence_reason(
+        "QLOO_DISCOVERY_RANK_AMBIGUOUS"
+    ) == "QLOO_DISCOVERY_RANK_AMBIGUOUS"
+    assert _discovery_evidence_reason(
+        "QLOO_DISCOVERY_PROVENANCE_MISMATCH"
+    ) == "QLOO_DISCOVERY_EVIDENCE_UNQUALIFIED"

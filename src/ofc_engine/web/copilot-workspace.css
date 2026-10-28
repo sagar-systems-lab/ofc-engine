@@ -114,7 +114,7 @@ a{text-decoration:none;color:inherit}
 .chat-empty p{font-size:14px;color:#667c9b;line-height:1.65;max-width:520px;margin:0}
 .chat-transcript{width:min(100%,840px);flex:1;min-height:0;overflow-y:auto;padding:25px 30px 30px;
   scrollbar-gutter:stable}
-.message{margin:0 0 23px;font-size:14px;line-height:1.62;color:#233753;animation:message-rise .22s ease both}
+.message{margin:0 0 23px;font-size:14px;line-height:1.62;color:#233753}
 .message.user{max-width:87%;margin-left:auto;background:#eaf3ff;border:1px solid #dbeaff;
   padding:14px 17px;border-radius:17px 17px 4px 17px}
 .message .message-meta{display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:11px;color:#7689a5}

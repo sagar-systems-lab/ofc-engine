@@ -15,6 +15,27 @@ from .revisions import digest_obj
 from .taste_intelligence import TasteContext, discovery_spec, normalize_discovery, TasteEvidenceError
 
 
+def _discovery_provider_reason(code: str) -> str:
+    if code == "HTTP_429":
+        return "QLOO_DISCOVERY_PROVIDER_RATE_LIMITED"
+    if code in {"HTTP_401", "HTTP_403"}:
+        return "QLOO_DISCOVERY_PROVIDER_AUTH_REJECTED"
+    if code.startswith("HTTP_5"):
+        return "QLOO_DISCOVERY_PROVIDER_UNAVAILABLE"
+    if code in {"NETWORK_ERROR", "TRANSPORT_ERROR"}:
+        return "QLOO_DISCOVERY_PROVIDER_NETWORK_UNAVAILABLE"
+    return "QLOO_DISCOVERY_PROVIDER_REJECTED"
+
+
+def _discovery_evidence_reason(code: str) -> str:
+    qualified = {
+        "QLOO_DISCOVERY_INSUFFICIENT_RESULTS",
+        "QLOO_DISCOVERY_AFFINITY_MISSING",
+        "QLOO_DISCOVERY_RANK_AMBIGUOUS",
+    }
+    return code if code in qualified else "QLOO_DISCOVERY_EVIDENCE_UNQUALIFIED"
+
+
 class HostedDomainObservations:
     def __init__(self, reviewer: PostgresDynamicQlooReview):
         if not isinstance(reviewer, PostgresDynamicQlooReview):
@@ -157,8 +178,16 @@ class HostedDomainObservations:
         try:
             capture = self.reviewer.client.probe(spec)
             result = normalize_discovery(capture, spec)
-        except (QlooProbeError, TasteEvidenceError):
-            return {"status": "UNCERTAIN", "reason_code": "QLOO_DISCOVERY_UNAVAILABLE"}
+        except QlooProbeError as exc:
+            return {
+                "status": "UNCERTAIN",
+                "reason_code": _discovery_provider_reason(exc.code),
+            }
+        except TasteEvidenceError as exc:
+            return {
+                "status": "UNCERTAIN",
+                "reason_code": _discovery_evidence_reason(str(exc)),
+            }
         with store._connect() as db:
             updated = db.execute(
                 "update ofc_private.copilot_discoveries "
