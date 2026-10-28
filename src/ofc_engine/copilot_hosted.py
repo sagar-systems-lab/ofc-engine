@@ -967,10 +967,29 @@ class HostedCopilot:
                 )
                 reviewer = self._reviewer(trace=source_trace) if source_trace is not None else self._reviewer()
                 resolver = HostedQlooResolver(reviewer)
-                seed = resolver.resolve(
-                    run_id=run_id, name=seed_name, kind=seed_category,
-                    selection_ref=entity_selection_ref,
-                )
+                try:
+                    seed = resolver.resolve(
+                        run_id=run_id, name=seed_name, kind=seed_category,
+                        selection_ref=entity_selection_ref,
+                    )
+                except EntityResolutionRequired as exc:
+                    if str(exc) != "SEARCH_EXACT_NAME_NOT_FOUND":
+                        raise
+                    _log.info(
+                        "COPILOT_SEED_NEEDS_CORRECTION run_id=%s stage=%s",
+                        run_id, stage,
+                    )
+                    return self._needs_input(
+                        run_id, draft, model.model,
+                        status="CLARIFICATION_REQUIRED",
+                        reason="TASTE_SEED_NOT_FOUND",
+                        question=(
+                            "I could not find that exact cultural reference in Qloo. "
+                            "Enter the name of one existing place, artist, movie or brand "
+                            "rather than describing the atmosphere you want. "
+                            "A named reference is not a verified travel recommendation."
+                        ),
+                    )
                 native_discovery = HostedDomainObservations(reviewer).discover(
                     run_id=run_id, context=context, seed_id=seed.entity_id,
                 )
