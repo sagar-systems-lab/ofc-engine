@@ -460,6 +460,57 @@ class HostedCopilot:
             }
         return plan
 
+    @staticmethod
+    def _resume_clarification(prior_plan: dict | None, prompt: str,
+                              selection_ref: str | None) -> CopilotDraft | None:
+        if not isinstance(prior_plan, dict):
+            return None
+        saved = prior_plan.get("_saved_continuation")
+        if not isinstance(saved, dict) or not isinstance(saved.get("draft"), dict):
+            return None
+        original = saved.get("prompt")
+        if not isinstance(original, str) or not original:
+            return None
+        reason = saved.get("reason")
+        if selection_ref is not None:
+            if reason not in ("SEARCH_SELECTION_REQUIRED", "SEARCH_AMBIGUOUS_ENTITY"):
+                return None
+            if prompt.strip() != original.strip():
+                return None
+            return CopilotDraft.model_validate(saved["draft"])
+        if reason not in ("TASTE_SEED_REQUIRED", "TASTE_SEED_NOT_FOUND", "ARTIST_NAME_REQUIRED"):
+            return None
+        if not prompt.startswith(original.strip()):
+            return None
+        suffix = prompt[len(original.strip()):]
+        matched = re.fullmatch(
+            r"\n\n--- USER-SUPPLIED CLARIFICATION ---\n"
+            r"Taste seed name: ([^\r\n]{2,160})\n"
+            r"Taste seed category: (place|artist|brand|movie)\n"
+            r"Use this latest named taste seed instead of any previous descriptive or unresolvable seed\. "
+            r"This is a user-provided cultural reference, not Qloo verification\. "
+            r"Keep my original request and target category\. "
+            r"If cultural discovery is unsupported, say so; "
+            r"do not invent travel, business or venue facts\.\n"
+            r"--- END CLARIFICATION ---",
+            suffix,
+        )
+        if matched is None:
+            return None
+        name, category = matched.groups()
+        if name != name.strip() or re.search(
+            r"\b(something|somewhere|anything|whatever|i want|would like|kind of|sort of)\b",
+            name, flags=re.IGNORECASE,
+        ):
+            return None
+        original_draft = CopilotDraft.model_validate(saved["draft"])
+        fields = original_draft.model_dump()
+        fields["taste_seed_name"] = name
+        fields["taste_seed_category"] = category
+        if category == "artist" and fields["artist_name"] is not None:
+            fields["artist_name"] = name
+        return CopilotDraft.model_validate(fields)
+
     def _cached_message(self, session_id: str, request_id: str,
                         prompt_digest: str, parent_run_id: str | None):
         """Previously saved answers remain readable even after key revocation."""
