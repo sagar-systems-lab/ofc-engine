@@ -300,12 +300,12 @@ class HostedCopilot:
         with self.store._connect() as db:
             rows = db.execute(
                 "select run_id,request_id,status,result,result_digest,"
-                "prompt_ciphertext,created_at,result_ciphertext from "
+                "prompt_ciphertext,created_at,result_ciphertext,parent_run_id from "
                 "ofc_private.copilot_messages where session_id=%s "
                 "order by created_at,run_id", (session_id,),
             ).fetchall()
         outputs = []
-        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at, encrypted_result in rows:
+        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at, encrypted_result, parent_run_id in rows:
             try:
                 prompt = self.vault.cipher.decrypt(
                     bytes(encrypted_prompt)
@@ -320,7 +320,7 @@ class HostedCopilot:
                     raise StorageIntegrityError("saved Copilot projection corrupted")
             with self.store._connect() as db:
                 activity = activity_projection(db, run_id, result)
-            outputs.append({"prompt": prompt, **result, "activity": activity})
+            outputs.append({"prompt": prompt, **result, "parent_run_id": parent_run_id, "activity": activity})
         return {"session_id": session_id, "messages": outputs,
                 "session_message_limit": self.session_message_limit}
 
@@ -431,7 +431,7 @@ class HostedCopilot:
             raise SessionDenied("INVALID_CONVERSATION_PARENT")
         with self.store._connect() as db:
             row = db.execute(
-                "select status,result,result_digest,result_ciphertext from "
+                "select status,result,result_digest,result_ciphertext,prompt_ciphertext from "
                 "ofc_private.copilot_messages where run_id=%s and session_id=%s",
                 (parent_run_id, session_id),
             ).fetchone()
@@ -447,7 +447,69 @@ class HostedCopilot:
             ) or not isinstance(prior.get("plan"), dict)
         ):
             raise StorageIntegrityError("parent plan provenance invalid")
-        return prior["plan"]
+        plan = dict(prior["plan"])
+        if isinstance(prior.get("continuation_draft"), dict):
+            try:
+                source_prompt = self.vault.cipher.decrypt(bytes(row[4])).decode("utf-8")
+            except (InvalidToken, ValueError, UnicodeError) as exc:
+                raise StorageIntegrityError("parent prompt unreadable") from exc
+            plan["_saved_continuation"] = {
+                "draft": prior["continuation_draft"],
+                "reason": prior.get("reason_code"),
+                "prompt": source_prompt,
+            }
+        return plan
+
+    @staticmethod
+    def _resume_clarification(prior_plan: dict | None, prompt: str,
+                              selection_ref: str | None) -> CopilotDraft | None:
+        if not isinstance(prior_plan, dict):
+            return None
+        saved = prior_plan.get("_saved_continuation")
+        if not isinstance(saved, dict) or not isinstance(saved.get("draft"), dict):
+            return None
+        original = saved.get("prompt")
+        if not isinstance(original, str) or not original:
+            return None
+        reason = saved.get("reason")
+        if selection_ref is not None:
+            if reason not in ("SEARCH_SELECTION_REQUIRED", "SEARCH_AMBIGUOUS_ENTITY"):
+                return None
+            if prompt.strip() != original.strip():
+                return None
+            return CopilotDraft.model_validate(saved["draft"])
+        if reason not in ("TASTE_SEED_REQUIRED", "TASTE_SEED_NOT_FOUND", "ARTIST_NAME_REQUIRED"):
+            return None
+        if not prompt.startswith(original.strip()):
+            return None
+        suffix = prompt[len(original.strip()):]
+        matched = re.fullmatch(
+            r"\n\n--- USER-SUPPLIED CLARIFICATION ---\n"
+            r"Taste seed name: ([^\r\n]{2,160})\n"
+            r"Taste seed category: (place|artist|brand|movie)\n"
+            r"Use this latest named taste seed instead of any previous descriptive or unresolvable seed\. "
+            r"This is a user-provided cultural reference, not Qloo verification\. "
+            r"Keep my original request and target category\. "
+            r"If cultural discovery is unsupported, say so; "
+            r"do not invent travel, business or venue facts\.\n"
+            r"--- END CLARIFICATION ---",
+            suffix,
+        )
+        if matched is None:
+            return None
+        name, category = matched.groups()
+        if name != name.strip() or re.search(
+            r"\b(something|somewhere|anything|whatever|i want|would like|kind of|sort of)\b",
+            name, flags=re.IGNORECASE,
+        ):
+            return None
+        original_draft = CopilotDraft.model_validate(saved["draft"])
+        fields = original_draft.model_dump()
+        fields["taste_seed_name"] = name
+        fields["taste_seed_category"] = category
+        if category == "artist" and fields["artist_name"] is not None:
+            fields["artist_name"] = name
+        return CopilotDraft.model_validate(fields)
 
     def _cached_message(self, session_id: str, request_id: str,
                         prompt_digest: str, parent_run_id: str | None):
@@ -734,6 +796,7 @@ class HostedCopilot:
             "reason_code": reason,
             "question": question,
             "plan": self._draft_plan_projection(draft),
+            "continuation_draft": draft.model_dump(),
             "model_id": model_id,
             "qloo_status": qloo_status,
             "ofc_review_completed": False,
@@ -906,11 +969,15 @@ class HostedCopilot:
             self._validate_entity_selection(
                 session_id, parent_run_id, entity_selection_ref,
             )
+        saved_draft = (
+            self._resume_clarification(prior_plan, prompt, entity_selection_ref)
+            if typed_confirmation is None else None
+        )
         # A qualified artist/brand review needs artist + two brand lookups
         # and two independent rank observations. Do not spend a model call
         # or consume a visitor slot when the shared Qloo gate cannot fit it.
         # Exact plan cost is checked again after model extraction.
-        self._capacity(required_llm=2 if typed_confirmation is not None else 3,
+        self._capacity(required_llm=2 if typed_confirmation is not None or saved_draft is not None else 3,
                        required_qloo=5)
         run_id, cached = self._admit_message(
             session_id, request_id, digest, model.model, prompt, parent_run_id,
@@ -927,13 +994,20 @@ class HostedCopilot:
             started = monotonic()
             if typed_confirmation is not None:
                 draft = typed_confirmation
+            elif saved_draft is not None:
+                draft = self._explicit_brand_scope(saved_draft, prompt)
+                _log.info("COPILOT_STAGE stage=signed_plan_continuation")
             else:
                 self._capacity(required_llm=3)
                 reserve_model_call(
                     self.store, daily_limit=self.llm_daily_limit, run_id=run_id,
                 )
+                public_prior = (
+                    {k: v for k, v in prior_plan.items() if k != "_saved_continuation"}
+                    if prior_plan is not None else None
+                )
                 draft = self._explicit_brand_scope(
-                    model.extract(prompt, prior_plan=prior_plan), prompt,
+                    model.extract(prompt, prior_plan=public_prior), prompt,
                 )
             _log.info("COPILOT_STAGE stage=plan_extraction duration_ms=%d",
                       round((monotonic() - started) * 1000))
@@ -945,6 +1019,7 @@ class HostedCopilot:
             catalog_skip_reasons = {}
             place_city_scopes = {}
             context = None
+            seed_selection_consumed = False
             seed_name = draft.taste_seed_name or draft.artist_name
             seed_category = draft.taste_seed_category or "artist"
             if not draft.choices and draft.discovery_category:
@@ -1003,6 +1078,7 @@ class HostedCopilot:
                             "A named reference is not a verified travel recommendation."
                         ),
                     )
+                seed_selection_consumed = resolver.selection_consumed
                 native_discovery = HostedDomainObservations(reviewer).discover(
                     run_id=run_id, context=context, seed_id=seed.entity_id,
                 )
@@ -1172,7 +1248,9 @@ class HostedCopilot:
                 catalog_identities[choice.decision_id] = (
                     choice, category, entities,
                 )
-            if entity_selection_ref is not None and not resolver.selection_consumed:
+            if entity_selection_ref is not None and not (
+                resolver.selection_consumed or seed_selection_consumed
+            ):
                 raise EntityResolutionRequired("QLOO_SELECTION_SCOPE_MISMATCH")
             proposal = draft_plan(
                 draft, run_id=run_id, request_id=request_id,
@@ -1410,6 +1488,7 @@ class HostedCopilot:
                 "suggestions": exc.suggestions,
                 "entity_request": {"name": exc.requested_name, "category": exc.category},
                 "plan": self._draft_plan_projection(draft),
+                "continuation_draft": draft.model_dump(),
                 "qloo_status": "ENTITY_RESOLUTION_PENDING",
                 "model_id": model.model,
                 "release_authorized": False,
@@ -1432,7 +1511,8 @@ class HostedCopilot:
                 "QLOO_DAILY_QUOTA_EXHAUSTED", "LLM_DAILY_QUOTA_EXHAUSTED",
                 "ARTIST_NAME_REQUIRED", "QLOO_ARTIST_RESOLUTION_REQUIRED",
                 "QLOO_BRAND_RESOLUTION_REQUIRED", "SEARCH_AMBIGUOUS_ENTITY",
-                "SEARCH_EXACT_NAME_NOT_FOUND", "QLOO_NOT_CONFIGURED",
+                "SEARCH_EXACT_NAME_NOT_FOUND", "QLOO_SELECTION_SCOPE_MISMATCH",
+                "QLOO_NOT_CONFIGURED",
                 "LLM_NOT_CONFIGURED", "MODEL_DRAFT_INVALID",
                 "MODEL_NARRATION_INVALID", "PROVIDER_HTTP_429",
                 "MODEL_RESPONSE_MISSING", "MODEL_OUTPUT_TRUNCATED",
