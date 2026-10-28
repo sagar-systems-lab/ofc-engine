@@ -8,15 +8,15 @@ if [[ ! -f .venv/bin/activate ]]; then
 fi
 source .venv/bin/activate
 
-echo "[1/5] Full keyless Python regression"
+echo "[1/6] Full keyless Python regression"
 NODE_OPTIONS=--experimental-default-type=module python -m pytest -q
 
-echo "[2/5] Frontend syntax and saved-advisory contracts"
+echo "[2/6] Frontend syntax and saved-advisory contracts"
 node --check src/ofc_engine/web/copilot-workspace.js
 node --check src/ofc_engine/web/copilot-proof.js
 node scripts/verify_copilot_advisory.mjs
 
-echo "[3/5] Start isolated localhost preview; no Qloo/model credentials needed"
+echo "[3/6] Start isolated localhost preview; no Qloo/model credentials needed"
 python -m ofc_engine.hosted_preview \
   --bind 127.0.0.1 --port 18080 > /tmp/ofc-final-stability-browser.log 2>&1 &
 SERVER_PID=$!
@@ -35,12 +35,16 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
-echo "[4/5] Taste Explorer desktop/mobile and no-redraw browser checks"
+echo "[4/6] Taste Explorer desktop/mobile and no-redraw browser checks"
 python scripts/verify_taste_explorer_browser.py \
   --base-url http://127.0.0.1:18080
 
-echo "[5/5] Full Copilot desktop/mobile, recovery, replay, quota safety"
+echo "[5/6] Full Copilot desktop/mobile, recovery, replay, quota safety"
 python scripts/copilot_workspace_smoke.py \
   --base-url http://127.0.0.1:18080
 
-echo "FINAL_STABILIZATION_LOCAL_PASS (mocked browser responses; zero Qloo/Gemini requests)"
+echo "[6/6] Exact named-seed clarification and historic blocked recovery"
+python scripts/verify_clarification_browser.py \
+  --base-url http://127.0.0.1:18080
+
+echo "EXACT_SEED_RELEASE_LOCAL_PASS (mocked browser responses; zero Qloo/Gemini requests)"
