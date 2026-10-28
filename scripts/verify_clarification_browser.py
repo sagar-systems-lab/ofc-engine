@@ -16,6 +16,8 @@ def check(base_url):
         (1440, "TASTE_SEED_REQUIRED"),
         (390, "TASTE_SEED_REQUIRED"),
         (390, "DECISIONS_MISSING"),
+        (1440, "TASTE_SEED_NOT_FOUND"),
+        (390, "SEARCH_EXACT_NAME_NOT_FOUND"),
     ):
         with sync_playwright() as engine:
             browser = engine.chromium.launch(headless=True)
@@ -55,7 +57,7 @@ def check(base_url):
                         assert data["prompt"] == ORIGINAL
                         result = {
                             "run_id": PARENT, "prompt": ORIGINAL,
-                            "status": "CLARIFICATION_REQUIRED",
+                            "status": "BLOCKED" if reason == "SEARCH_EXACT_NAME_NOT_FOUND" else "CLARIFICATION_REQUIRED",
                             "reason_code": reason,
                             "question": "Please provide a cultural reference.",
                             "plan": {"objective": ORIGINAL, "choices": [], "cities": []},
@@ -66,11 +68,15 @@ def check(base_url):
                         }
                     else:
                         assert len(posted) == 2
-                        assert data["parent_run_id"] == PARENT
+                        if reason == "SEARCH_EXACT_NAME_NOT_FOUND":
+                            assert "parent_run_id" not in data
+                        else:
+                            assert data["parent_run_id"] == PARENT
                         assert data["prompt"].startswith(ORIGINAL + "\n\n")
-                        if reason == "TASTE_SEED_REQUIRED":
-                            assert "Taste seed name: Manali" in data["prompt"]
+                        if reason != "DECISIONS_MISSING":
+                            assert "Taste seed name: " in data["prompt"]
                             assert "Taste seed category: place" in data["prompt"]
+                            assert "Use this latest named taste seed" in data["prompt"]
                         else:
                             assert "Shimla versus Mussoorie" in data["prompt"]
                         result = {
@@ -115,9 +121,16 @@ def check(base_url):
                 page.locator(".clarification-continue").click()
                 assert "required" in page.locator(".clarification-feedback").inner_text()
                 assert len(posted) == 1
-                value = "Manali" if reason == "TASTE_SEED_REQUIRED" else "Shimla versus Mussoorie"
+                if reason != "DECISIONS_MISSING":
+                    page.locator(".clarification-input").fill(
+                        "Something beach side or something like glowing city beach side and chill"
+                    )
+                    page.locator(".clarification-continue").click()
+                    assert "named place or entity" in page.locator(".clarification-feedback").inner_text()
+                    assert len(posted) == 1
+                value = "Shimla versus Mussoorie" if reason == "DECISIONS_MISSING" else "Baga Beach"
                 page.locator(".clarification-input").fill(value)
-                if reason == "TASTE_SEED_REQUIRED":
+                if reason != "DECISIONS_MISSING":
                     page.locator(".clarification-type").select_option("place")
                 page.locator(".clarification-continue").click()
                 page.locator("#run-confirm").wait_for(state="visible")
@@ -136,7 +149,9 @@ def check(base_url):
                 results.append({
                     "viewport": width, "reason": reason,
                     "inline_required": True, "cancel_no_spend": True,
-                    "linked_parent": True, "provider_network_calls": 0,
+                    "linked_parent": reason != "SEARCH_EXACT_NAME_NOT_FOUND",
+                    "descriptive_seed_rejected": reason != "DECISIONS_MISSING",
+                    "provider_network_calls": 0,
                 })
             finally:
                 context.close()

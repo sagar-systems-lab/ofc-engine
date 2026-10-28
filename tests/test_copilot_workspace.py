@@ -216,8 +216,11 @@ def test_missing_detail_continuation_is_scoped_and_confirmed():
     css = web.joinpath("copilot-workspace.css").read_text()
     assert 'const clarificationPanel = run =>' in js
     assert 'const requestClarification = (run, detail, category) =>' in js
-    assert '"TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"' in js
-    assert 'state.pendingSelection = {parent_run_id: run.run_id}' in js
+    assert '"TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING", "TASTE_SEED_NOT_FOUND"' in js
+    # Ordinary clarifications retain a same-session parent; historic BLOCKED
+    # runs need a fresh independent request because BLOCKED is not a valid parent.
+    assert 'state.pendingSelection = historicSeedFailure ? null : {parent_run_id: run.run_id}' in js
+    assert 'const historicSeedFailure = run.status === "BLOCKED"' in js
     assert 'run.prompt.trim() + addition' in js
     assert 'if (prompt.length > 4000)' in js
     assert 'No provider request occurs until you confirm.' in js
@@ -316,3 +319,19 @@ def test_copilot_discovery_failure_is_explained_without_provider_leakage():
     assert "No automatic retry was made" in js
     assert 'message("user", displayPrompt(state.pendingPrompt))' in js
     assert 'message("user", displayPrompt(state.localNotice.prompt))' in js
+
+
+def test_exact_seed_failure_is_a_recoverable_clarification_not_an_automatic_retry():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "src" / "ofc_engine").resolve()
+    hosted = (src / "copilot_hosted.py").read_text()
+    workspace = (src / "web" / "copilot-workspace.js").read_text()
+    assert 'except EntityResolutionRequired as exc:' in hosted
+    assert 'if str(exc) != "SEARCH_EXACT_NAME_NOT_FOUND":' in hosted
+    assert 'reason="TASTE_SEED_NOT_FOUND"' in hosted
+    assert 'status="CLARIFICATION_REQUIRED"' in hosted
+    assert 'const isNamedReference = value =>' in workspace
+    assert 'historicSeedFailure ? null : {parent_run_id: run.run_id}' in workspace
+    assert 'run.status === "BLOCKED" && run.reason_code === "SEARCH_EXACT_NAME_NOT_FOUND"' in workspace
+    assert 'No request submitted.' in workspace
+    assert 'Use this latest named taste seed' in workspace

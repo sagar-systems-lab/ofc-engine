@@ -725,7 +725,8 @@ class HostedCopilot:
         }
 
     def _needs_input(self, run_id: str, draft, model_id: str, *,
-                     status: str, reason: str, question: str) -> dict:
+                     status: str, reason: str, question: str,
+                     qloo_status: str = "NOT_QUERIED") -> dict:
         result = {
             "schema_version": "copilot.v1",
             "run_id": run_id,
@@ -734,7 +735,7 @@ class HostedCopilot:
             "question": question,
             "plan": self._draft_plan_projection(draft),
             "model_id": model_id,
-            "qloo_status": "NOT_QUERIED",
+            "qloo_status": qloo_status,
             "ofc_review_completed": False,
             "release_authorized": False,
             "external_action_executed": False,
@@ -947,6 +948,17 @@ class HostedCopilot:
             seed_name = draft.taste_seed_name or draft.artist_name
             seed_category = draft.taste_seed_category or "artist"
             if not draft.choices and draft.discovery_category:
+                # A descriptive wish is not a Qloo entity identifier.
+                if seed_name and re.search(
+                    r"\b(something|somewhere|anything|whatever|i want|would like|kind of|sort of)\b",
+                    seed_name, flags=re.IGNORECASE,
+                ):
+                    return self._needs_input(
+                        run_id, draft, model.model,
+                        status="CLARIFICATION_REQUIRED",
+                        reason="TASTE_SEED_REQUIRED",
+                        question="Enter the name of one existing place, artist, brand or movie, not a description of the atmosphere.",
+                    )
                 if not seed_name:
                     return self._needs_input(
                         run_id, draft, model.model,
@@ -967,10 +979,30 @@ class HostedCopilot:
                 )
                 reviewer = self._reviewer(trace=source_trace) if source_trace is not None else self._reviewer()
                 resolver = HostedQlooResolver(reviewer)
-                seed = resolver.resolve(
-                    run_id=run_id, name=seed_name, kind=seed_category,
-                    selection_ref=entity_selection_ref,
-                )
+                try:
+                    seed = resolver.resolve(
+                        run_id=run_id, name=seed_name, kind=seed_category,
+                        selection_ref=entity_selection_ref,
+                    )
+                except EntityResolutionRequired as exc:
+                    if str(exc) != "SEARCH_EXACT_NAME_NOT_FOUND":
+                        raise
+                    _log.info(
+                        "COPILOT_SEED_NEEDS_CORRECTION run_id=%s stage=%s",
+                        run_id, stage,
+                    )
+                    return self._needs_input(
+                        run_id, draft, model.model,
+                        status="CLARIFICATION_REQUIRED",
+                        reason="TASTE_SEED_NOT_FOUND",
+                        qloo_status="ENTITY_SEARCH_NO_EXACT_MATCH",
+                        question=(
+                            "I could not find that exact cultural reference in Qloo. "
+                            "Enter the name of one existing place, artist, movie or brand "
+                            "rather than describing the atmosphere you want. "
+                            "A named reference is not a verified travel recommendation."
+                        ),
+                    )
                 native_discovery = HostedDomainObservations(reviewer).discover(
                     run_id=run_id, context=context, seed_id=seed.entity_id,
                 )
