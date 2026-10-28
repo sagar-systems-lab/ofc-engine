@@ -300,12 +300,12 @@ class HostedCopilot:
         with self.store._connect() as db:
             rows = db.execute(
                 "select run_id,request_id,status,result,result_digest,"
-                "prompt_ciphertext,created_at,result_ciphertext from "
+                "prompt_ciphertext,created_at,result_ciphertext,parent_run_id from "
                 "ofc_private.copilot_messages where session_id=%s "
                 "order by created_at,run_id", (session_id,),
             ).fetchall()
         outputs = []
-        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at, encrypted_result in rows:
+        for run_id, request_id, status, raw, digest, encrypted_prompt, created_at, encrypted_result, parent_run_id in rows:
             try:
                 prompt = self.vault.cipher.decrypt(
                     bytes(encrypted_prompt)
@@ -320,7 +320,7 @@ class HostedCopilot:
                     raise StorageIntegrityError("saved Copilot projection corrupted")
             with self.store._connect() as db:
                 activity = activity_projection(db, run_id, result)
-            outputs.append({"prompt": prompt, **result, "activity": activity})
+            outputs.append({"prompt": prompt, **result, "parent_run_id": parent_run_id, "activity": activity})
         return {"session_id": session_id, "messages": outputs,
                 "session_message_limit": self.session_message_limit}
 
