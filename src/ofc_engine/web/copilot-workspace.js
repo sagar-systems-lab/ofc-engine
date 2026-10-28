@@ -439,14 +439,26 @@
     if (!el("run-confirm").open) el("run-confirm").showModal();
   };
 
+  const isNamedReference = value => {
+    const name = String(value || "").trim();
+    // A taste seed is a named entity, never an unconstrained wish description.
+    return name.length >= 2 && name.length <= 160 &&
+      name.split(/\s+/).length <= 8 &&
+      !/\b(something|somewhere|anything|whatever|wish|i want|would like|kind of|sort of)\b/i.test(name) &&
+      !/[\r\n]/.test(name);
+  };
+
   const requestClarification = (run, detail, category) => {
     if (state.busy || state.runs.length >= state.sessionMessageLimit) {
       statusText("Session limit reached. No new provider request made.");
       return false;
     }
-    if (!/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
-        run.status !== "CLARIFICATION_REQUIRED" ||
-        !["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code) ||
+    const historicSeedFailure = run.status === "BLOCKED" &&
+      run.reason_code === "SEARCH_EXACT_NAME_NOT_FOUND";
+    if (!run._sessionReadConfirmed ||
+        !/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
+        !(historicSeedFailure || (run.status === "CLARIFICATION_REQUIRED" &&
+          ["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING", "TASTE_SEED_NOT_FOUND"].includes(run.reason_code))) ||
         typeof run.prompt !== "string" || !run.prompt.trim()) return false;
     if (typeof detail !== "string" || !detail.trim() || detail.length > 240 ||
         /[\u0000-\u001f]/.test(detail)) {
@@ -455,10 +467,15 @@
     }
     const isSeed = run.reason_code !== "DECISIONS_MISSING";
     if (isSeed && !["place", "artist", "brand", "movie"].includes(category)) return false;
+    if (isSeed && !isNamedReference(detail)) {
+      statusText("Enter one specific named place, artist, brand or movie—not a description of the atmosphere. For example: Baga Beach. No request submitted.");
+      return false;
+    }
     const addition = isSeed
       ? "\n\n--- USER-SUPPLIED CLARIFICATION ---\n" +
         "Taste seed name: " + detail.trim() + "\n" +
         "Taste seed category: " + category + "\n" +
+        "Use this latest named taste seed instead of any previous descriptive or unresolvable seed. " +
         "This is a user-provided cultural reference, not Qloo verification. " +
         "Keep my original request and target category. If cultural discovery is unsupported, say so; " +
         "do not invent travel, business or venue facts.\n--- END CLARIFICATION ---"
@@ -482,10 +499,14 @@
       return false;
     }
     state.pendingPrompt = prompt;
-    state.pendingSelection = {parent_run_id: run.run_id};
+    // Failed BLOCKED records do not carry a usable parent plan. Start a fresh
+    // confirmed request while retaining the user's question in the prompt.
+    state.pendingSelection = historicSeedFailure ? null : {parent_run_id: run.run_id};
     el("run-confirm-budget").textContent =
-      "Continue this saved question with your provided detail. This is a NEW linked review, " +
-      "not an automatic retry. It may use up to 5 Qloo and 3 model requests. " +
+      (historicSeedFailure
+        ? "This saved run was blocked; the correction starts a NEW independent review. "
+        : "Continue this saved question with your corrected detail as a NEW linked review. ") +
+      "It is not an automatic retry. It may use up to 5 Qloo and 3 model requests. " +
       "Current remaining: Qloo " +
       (Number.isInteger(remaining?.qloo_requests_remaining) ? remaining.qloo_requests_remaining : "unknown") +
       ", model " + (Number.isInteger(remaining?.llm_requests_remaining) ? remaining.llm_requests_remaining : "unknown") +
@@ -572,29 +593,34 @@
   };
 
   const clarificationPanel = run => {
-    if (run.status !== "CLARIFICATION_REQUIRED" ||
-        !["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code) ||
+    const historicSeedFailure = run.status === "BLOCKED" &&
+      run.reason_code === "SEARCH_EXACT_NAME_NOT_FOUND";
+    if (!(historicSeedFailure || (run.status === "CLARIFICATION_REQUIRED" &&
+          ["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING", "TASTE_SEED_NOT_FOUND"].includes(run.reason_code))) ||
         !/^cp-run-[a-f0-9]{32}$/.test(run.run_id || "") ||
-        typeof run.prompt !== "string") return null;
+        !run._sessionReadConfirmed || typeof run.prompt !== "string") return null;
     const isSeed = run.reason_code !== "DECISIONS_MISSING";
     const panel = node("section", "clarification-panel");
     panel.setAttribute("aria-label", "Provide missing details");
     const title = node("h3", "clarification-heading",
       isSeed ? "One detail needed to continue" : "What should OFC compare?");
     const explanation = node("p", "clarification-help", isSeed
-      ? "What existing place, artist, movie or brand has the style you like? " +
-        "For a hill-station idea, enter a real place you already know. " +
-        "OFC can explore cultural similarity only; this is not a verified travel ranking."
+      ? (historicSeedFailure || run.reason_code === "TASTE_SEED_NOT_FOUND"
+          ? "That exact name was not found in Qloo. Enter ONE recognizable named place, not a description such as 'somewhere glowing and chill'. "
+          : "Enter ONE existing place, artist, movie or brand whose style you like. ") +
+        "For Goa, examples of named places are Baga Beach or Candolim Beach (Qloo availability is not guaranteed). " +
+        "You can describe the atmosphere in your original request; this box only identifies the taste reference. " +
+        "OFC cannot verify hotel availability or travel suitability."
       : "Describe the specific candidates or choices you want reviewed. " +
         "OFC will keep your original request.");
     panel.append(title, explanation);
     const field = node("label", "clarification-field");
-    field.append(node("span", "", isSeed ? "Known cultural reference" : "Additional choice details"));
+    field.append(node("span", "", isSeed ? "Name of one existing reference (not a description)" : "Additional choice details"));
     const input = node(isSeed ? "input" : "textarea", "clarification-input");
     if (isSeed) {
       input.type = "text";
       input.maxLength = 160;
-      input.placeholder = "e.g., a place you have enjoyed";
+      input.placeholder = "e.g., Baga Beach (specific named place)";
     } else {
       input.maxLength = 240;
       input.rows = 3;
@@ -631,6 +657,11 @@
         input.focus();
         return;
       }
+      if (isSeed && !isNamedReference(detail)) {
+        feedback.textContent = "Use one named place or entity, not a description. No provider request sent.";
+        input.focus();
+        return;
+      }
       if (!requestClarification(run, detail, category?.value || null)) {
         feedback.textContent = el("composer-status").textContent;
       } else {
@@ -656,10 +687,11 @@
       if (rendered) box.append(rendered);
       else box.append(message("assistant", safeStatus("REVIEW_REQUIRED")));
     } else {
-      const promptedClarification = run.status === "CLARIFICATION_REQUIRED" &&
-        ["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING"].includes(run.reason_code);
+      const promptedClarification = (run.status === "CLARIFICATION_REQUIRED" &&
+        ["TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING", "TASTE_SEED_NOT_FOUND"].includes(run.reason_code)) ||
+        (run.status === "BLOCKED" && run.reason_code === "SEARCH_EXACT_NAME_NOT_FOUND");
       const info = promptedClarification
-        ? "I can continue with your original question. Please fill in the missing detail below."
+        ? "I could not verify the taste reference. The request stopped safely. You can enter one specific named reference below to prepare a new review; nothing is submitted automatically."
         : run.question && typeof run.question === "string"
           ? run.question + "\n\n" + safeReason(run) : safeReason(run);
       const assistant = message("assistant", info);
