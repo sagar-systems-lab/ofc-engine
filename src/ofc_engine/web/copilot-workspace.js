@@ -234,25 +234,75 @@
     return lines.join("\n");
   };
 
+  const threadRootId = run => {
+    const seen = new Set();
+    let current = run;
+    for (let depth = 0; depth < 12 && current && !seen.has(current.run_id); depth++) {
+      seen.add(current.run_id);
+      const parent = state.runs.find(item => item.run_id === current.parent_run_id);
+      if (parent) { current = parent; continue; }
+      // Legacy blocked records could not be parents. A server-authenticated
+      // prompt prefix links their explicitly confirmed corrected follow-up.
+      const marker = "\n\n--- USER-SUPPLIED CLARIFICATION ---\n";
+      const text = String(current.prompt || "");
+      if (!current.parent_run_id && text.includes(marker)) {
+        const original = text.split(marker)[0].trim();
+        const predecessor = state.runs.find(item =>
+          item.run_id !== current.run_id && String(item.prompt || "").trim() === original);
+        if (predecessor) { current = predecessor; continue; }
+      }
+      break;
+    }
+    return current?.run_id || run.run_id;
+  };
+
+  const threadRuns = run => {
+    const root = threadRootId(run);
+    return state.runs.filter(item => threadRootId(item) === root);
+  };
+
+  const clarificationLabel = run => {
+    const prompt = String(run.prompt || "");
+    const blocks = prompt.split("\n\n--- USER-SUPPLIED CLARIFICATION ---\n");
+    if (blocks.length > 1) {
+      const last = blocks.at(-1);
+      const name = /^Taste seed name: (.+)$/m.exec(last)?.[1];
+      return name ? "Clarification: " + name : "Additional clarification supplied";
+    }
+    return run.parent_run_id ? "Selected a Qloo match / continued review" : displayPrompt(prompt);
+  };
+
   const renderHistory = () => {
     const list = el("conversation-list");
     list.replaceChildren();
-    const runs = [...state.runs].reverse().filter(run =>
-      String(run.prompt || run.question || "Untitled review").toLowerCase().includes(state.search));
-    if (!runs.length) {
+    const grouped = new Map();
+    for (const run of state.runs) {
+      const root = threadRootId(run);
+      const current = grouped.get(root) || [];
+      current.push(run);
+      grouped.set(root, current);
+    }
+    const threads = [...grouped.entries()].reverse().filter(([, runs]) =>
+      runs.some(run =>
+        String(run.prompt || run.question || "Untitled review").toLowerCase().includes(state.search)));
+    if (!threads.length) {
       list.append(node("p", "history-empty",
         state.search ? "No matching conversation in this session." :
           "Saved conversations in this private session will appear here."));
       return;
     }
     list.append(node("p", "history-group-heading", "This private session"));
-    for (const run of runs) {
-      const button = node("button", "conversation-row" + (state.selected === run.run_id ? " active" : ""));
+    for (const [, runs] of threads) {
+      const run = runs.at(-1);
+      const first = runs[0];
+      const button = node("button", "conversation-row" +
+        (selectedRun() && threadRootId(selectedRun()) === threadRootId(run) ? " active" : ""));
       button.type = "button";
-      button.title = displayPrompt(run.prompt || "Saved review");
+      button.title = displayPrompt(first.prompt || "Saved review");
       button.setAttribute("aria-current", state.selected === run.run_id ? "true" : "false");
-      button.append(node("span", "", displayPrompt(run.prompt || "Saved review").split("\n")[0]));
-      button.append(node("time", "", String(run.status || "SAVED").replaceAll("_", " ")));
+      button.append(node("span", "", displayPrompt(first.prompt || "Saved review").split("\n")[0]));
+      button.append(node("time", "", String(run.status || "SAVED").replaceAll("_", " ") +
+        (runs.length > 1 ? " · " + runs.length + " steps" : "")));
       button.addEventListener("click", () => {
         state.selected = run.run_id;
         state.localNotice = null;
@@ -673,10 +723,11 @@
     return panel;
   };
 
-  const renderRun = (run) => {
+  const renderRun = (run, append = false) => {
     const box = el("chat-transcript");
-    box.replaceChildren();
-    const text = displayPrompt(run.prompt || state.pendingPrompt || "");
+    if (!append) box.replaceChildren();
+    const text = append ? clarificationLabel(run) :
+      displayPrompt(run.prompt || state.pendingPrompt || "");
     if (text) box.append(message("user", text));
     if (run.status === "PROCESSING") {
       const waiting = message("assistant", "");
@@ -839,7 +890,30 @@
         message("user", displayPrompt(state.localNotice.prompt)),
         message("assistant", state.localNotice.detail)
       );
-    } else if (run) renderRun(run);
+    } else if (run) {
+      const thread = threadRuns(run);
+      if (thread.length === 1) renderRun(run);
+      else {
+        const transcript = el("chat-transcript");
+        transcript.replaceChildren();
+        transcript.append(message("user", displayPrompt(thread[0].prompt || "")));
+        for (let i = 0; i < thread.length - 1; i++) {
+          const earlier = thread[i];
+          if (i > 0) transcript.append(message("user", clarificationLabel(earlier)));
+          const status = String(earlier.status || "SAVED").replaceAll("_", " ");
+          const summary = earlier.status === "CLARIFICATION_REQUIRED"
+            ? "Clarification requested. " + String(earlier.question || "").slice(0, 260)
+            : earlier.status === "BLOCKED"
+            ? "Earlier review stopped: " + String(earlier.reason_code || "UNAVAILABLE").slice(0, 80)
+            : "Earlier saved review: " + status + ".";
+          const step = message("assistant", summary);
+          step.append(node("small", "thread-run-reference",
+            "Saved run " + String(earlier.run_id || "").slice(-12)));
+          transcript.append(step);
+        }
+        renderRun(thread.at(-1), true);
+      }
+    }
     else if (state.busy && state.pendingPrompt) {
       const box = el("chat-transcript");
       const waiting = message("assistant", "");
