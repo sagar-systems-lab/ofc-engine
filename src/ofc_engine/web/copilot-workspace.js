@@ -10,7 +10,7 @@
     pendingPrompt: "", localNotice: null, sidebarOpen: window.innerWidth > 1180, search: "",
     capability: null, sessionMessageLimit: 4, activeRequestId: null, pendingBaselineIds: null, pollTimer: null,
     attachment: null, attachmentVersion: 0, pendingStartedAt: null, elapsedTimer: null,
-    pendingSelection: null,
+    pendingSelection: null, inspectingRun: null,
   };
 
   const icon = (id, size = 17) => {
@@ -305,6 +305,7 @@
         (runs.length > 1 ? " · " + runs.length + " steps" : "")));
       button.addEventListener("click", () => {
         state.selected = run.run_id;
+        state.inspectingRun = null;
         state.localNotice = null;
         render();
         if (window.innerWidth <= 768) setSidebar(false);
@@ -893,7 +894,17 @@
     } else if (run) {
       const thread = threadRuns(run);
       if (thread.length === 1) renderRun(run);
-      else {
+      else if (state.inspectingRun === run.run_id) {
+        renderRun(run);
+        const back = node("button", "result-action", "Back to conversation");
+        back.type = "button";
+        back.addEventListener("click", () => {
+          state.inspectingRun = null;
+          state.selected = thread.at(-1).run_id;
+          render();
+        });
+        el("chat-transcript").prepend(back);
+      } else {
         const transcript = el("chat-transcript");
         transcript.replaceChildren();
         transcript.append(message("user", displayPrompt(thread[0].prompt || "")));
@@ -909,6 +920,14 @@
           const step = message("assistant", summary);
           step.append(node("small", "thread-run-reference",
             "Saved run " + String(earlier.run_id || "").slice(-12)));
+          const detail = node("button", "result-action thread-inspect", "Inspect saved step");
+          detail.type = "button";
+          detail.addEventListener("click", () => {
+            state.inspectingRun = earlier.run_id;
+            state.selected = earlier.run_id;
+            render();
+          });
+          step.append(detail);
           transcript.append(step);
         }
         renderRun(thread.at(-1), true);
@@ -1066,6 +1085,7 @@
     state.pendingStartedAt = Date.now();
     setBusy(true);
     state.selected = null;
+    state.inspectingRun = null;
     el("chat-input").value = "";
     render();
     statusText("Submitting one bounded request…");
@@ -1192,6 +1212,7 @@
   el("new-chat").addEventListener("click", () => {
     if (state.busy) return;
     state.selected = null;
+    state.inspectingRun = null;
     state.localNotice = null;
     el("chat-input").value = "";
     clearAttachment();
