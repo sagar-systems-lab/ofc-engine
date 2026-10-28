@@ -431,7 +431,7 @@ class HostedCopilot:
             raise SessionDenied("INVALID_CONVERSATION_PARENT")
         with self.store._connect() as db:
             row = db.execute(
-                "select status,result,result_digest,result_ciphertext from "
+                "select status,result,result_digest,result_ciphertext,prompt_ciphertext from "
                 "ofc_private.copilot_messages where run_id=%s and session_id=%s",
                 (parent_run_id, session_id),
             ).fetchone()
@@ -447,7 +447,18 @@ class HostedCopilot:
             ) or not isinstance(prior.get("plan"), dict)
         ):
             raise StorageIntegrityError("parent plan provenance invalid")
-        return prior["plan"]
+        plan = dict(prior["plan"])
+        if isinstance(prior.get("continuation_draft"), dict):
+            try:
+                source_prompt = self.vault.cipher.decrypt(bytes(row[4])).decode("utf-8")
+            except (InvalidToken, ValueError, UnicodeError) as exc:
+                raise StorageIntegrityError("parent prompt unreadable") from exc
+            plan["_saved_continuation"] = {
+                "draft": prior["continuation_draft"],
+                "reason": prior.get("reason_code"),
+                "prompt": source_prompt,
+            }
+        return plan
 
     def _cached_message(self, session_id: str, request_id: str,
                         prompt_digest: str, parent_run_id: str | None):
