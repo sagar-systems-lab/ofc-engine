@@ -217,7 +217,10 @@ def test_missing_detail_continuation_is_scoped_and_confirmed():
     assert 'const clarificationPanel = run =>' in js
     assert 'const requestClarification = (run, detail, category) =>' in js
     assert '"TASTE_SEED_REQUIRED", "ARTIST_NAME_REQUIRED", "DECISIONS_MISSING", "TASTE_SEED_NOT_FOUND"' in js
-    assert 'state.pendingSelection = {parent_run_id: run.run_id}' in js
+    # Ordinary clarifications retain a same-session parent; historic BLOCKED
+    # runs need a fresh independent request because BLOCKED is not a valid parent.
+    assert 'state.pendingSelection = historicSeedFailure ? null : {parent_run_id: run.run_id}' in js
+    assert 'const historicSeedFailure = run.status === "BLOCKED"' in js
     assert 'run.prompt.trim() + addition' in js
     assert 'if (prompt.length > 4000)' in js
     assert 'No provider request occurs until you confirm.' in js
